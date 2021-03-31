@@ -1,0 +1,7 @@
+#!/bin/sh
+
+set -e
+
+cabal build xmonad-abcfg
+cabal install xmonad-abcfg --installdir=$HOME/.xmonad/bin/ --install-method=copy
+mv ./bin/xmonad-abcfg "$1"
