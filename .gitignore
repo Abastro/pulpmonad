@@ -1,2 +1,5 @@
 dist-newstyle/
 bin/
+
+Setup.hs
+*.errors
