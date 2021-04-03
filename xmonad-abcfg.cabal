@@ -23,6 +23,7 @@ executable xmonad-abcfg
   -- other-extensions:
   build-depends:       
       base >=4.14 && <4.15
+    , containers
     , xmonad >=0.13
     , xmonad-contrib >=0.14
   hs-source-dirs:      app

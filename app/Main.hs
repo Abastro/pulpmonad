@@ -1,11 +1,104 @@
-module Main where
+module Main ( main ) where
 
+import Data.List
+import qualified Data.Map as M
 import XMonad
+import qualified XMonad.StackSet as W
 import XMonad.Hooks.DynamicLog
-import XMonad.Hooks.ManageDocks
-import XMonad.Util.Run(spawnPipe)
-import XMonad.Util.EZConfig(additionalKeys)
-import System.IO
+import XMonad.Hooks.ManageDocks ( docks, avoidStruts )
+import XMonad.Hooks.EwmhDesktops ( ewmh, fullscreenEventHook )
+import XMonad.Actions.MouseResize ( mouseResize )
+import XMonad.Actions.SpawnOn ( spawnOn )
+import XMonad.Util.Run ( spawnPipe, safeSpawn, safeSpawnProg )
+import XMonad.Util.EZConfig ( additionalKeys, additionalMouseBindings )
+import XMonad.Config.Gnome ( gnomeConfig )
+import System.IO ( hPutStrLn )
+import Text.Printf ( printf )
+
+mkPath :: [FilePath] -> FilePath
+mkPath = intercalate "/"
+pathCfg, pathAs :: FilePath
+pathCfg = mkPath ["$HOME", ".xmonad", "cfg"]
+pathAs = mkPath ["$HOME", ".xmonad", "asset"]
+
+(<-|) :: String -> [String] -> String
+pr <-| opts = unwords (pr : opts)
+(-:), (--:), (=:) :: String -> String -> String
+opt --: val = printf "--%s %s" opt val
+opt -: val = printf "-%s %s" opt val
+opt =: val = printf "%s=\"%s\"" opt val
+
+background, tray, statBar :: String
+background = "feh" <-| ["bg-scale" --: mkPath [pathAs, "Background.jpg"]]
+tray = "trayer" <-| [
+    "--edge top", "--align right", "--expand true"
+  , "--SetDockType true", "--SetPartialStrut true"
+  , "--transparent true", "--alpha 0", "--tint 0x000000"
+  , "--width 5", "--height 18"
+  ]
+statBar = "xmobar" <-| [ mkPath [pathCfg, ".xmobar"] ]
+
+console, browser, logout :: String
+console = "gnome-terminal"
+browser = "nautilus"
+logout = "gnome-session-quit"
+
+leftClick = button1; rightClick = button3; middleClick = button2;
+altMask = mod1Mask; superMask = mod4Mask
 
 main :: IO ()
-main = xmonad def
+main = do
+  safeSpawn "feh" ["bg-scale" --: mkPath [pathAs, "Background"]]
+  spawn background
+  spawn "killall trayer"; spawn tray
+  -- Maybe status here?
+  xmbar <- spawnPipe statBar
+  -- TODO Perhaps just use gnome-panel?
+  xmonad $ gnomeConfig {
+    focusedBorderColor = "#eeaaaa"
+  , normalBorderColor = "#cccccc"
+  , workspaces = ["main", "code", "term", "4", "pic", "6", "7", "8", "9"]
+  , startupHook = startupHook gnomeConfig >> do
+      spawn $ mkPath ["$HOME", ".xmonad", "xmonad.hook"]
+  , manageHook = composeAll $ [
+      className =? "Gimp" --> doF (W.shift "pic")
+    , (role =? "gimp-toolbox" <||> role =? "gimp-image-window") --> unFloat
+    , className =? "zoom"
+      <&&> (containing [
+        "Chat", "Participants", "Rooms", "Poll", "float"] <$> title) --> doFloat
+    , className =? "Gnome-calculator" --> doFloat
+    , className =? "Eog" --> doFloat
+    ] <> [ manageHook gnomeConfig ]
+  , layoutHook = mouseResize $ layoutHook gnomeConfig
+  , logHook = dynamicLogWithPP xmobarPP {
+      ppOutput = hPutStrLn xmbar
+    , ppTitle  = xmobarColor "#555555" "" . shorten 50
+    }
+  , handleEventHook = handleEventHook gnomeConfig <> fullscreenEventHook
+  , modMask = superMask
+  } `additionalMouseBindings` concat [ mouseMove ]
+    `additionalKeys` concat [ keysUtility, keysBasic, keysScreenshot ]
+  where
+    role = stringProperty "WM_WINDOW_ROLE"
+    unFloat = ask >>= doF . W.sink
+    containing l t = any (`isInfixOf` t) l
+    isFloating = \w -> M.member w . W.floating <$> gets windowset
+
+    mouseMove = [
+        -- Mod(Super) + Left Click: Float & Move around
+        -- Mod(Super) + Right Click: Float & Resize
+        ((controlMask, middleClick), \w -> isFloating w --> (focus w >> kill))
+      ]    
+    keysUtility = [
+        ((superMask .|. altMask, xK_h), spawn $ "xdg-open" <-| [mkPath [pathAs, "Xmbindings.png"]])
+      , ((superMask, xK_d), safeSpawnProg browser)
+      ]
+    keysBasic = [
+        ((superMask, xK_p), spawn "dmenu_run")
+      , ((superMask, xK_Pause), safeSpawnProg logout)
+      ]
+    keysScreenshot = [
+        ((noModMask, xK_Print), spawn "sleep 0.2; gnome-screenshot")
+      , ((controlMask, xK_Print), spawn "sleep 0.2; gnome-screenshot -w")
+      , ((altMask, xK_Print), spawn "gnome-screenshot -i")
+      ]

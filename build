@@ -1,7 +1,11 @@
 #!/bin/sh
+output="$1"
+cfgid="xmonad-abcfg"
 
-set -e
-
-cabal build xmonad-abcfg
-cabal install xmonad-abcfg --installdir=$HOME/.xmonad/bin/ --install-method=copy
-mv ./bin/xmonad-abcfg "$1"
+cabal build "$cfgid"
+cabal install "$cfgid" \
+	--enable-executable-stripping \
+	--enable-optimization=2 \
+    --installdir="./bin/" --install-method=copy \
+    --overwrite-policy=always
+ln -sf "./bin/$cfgid" "$1"
