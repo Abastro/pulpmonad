@@ -1,14 +1,16 @@
-Config { font = "-*-Fixed-Bold-R-Normal-*-18-*-*-*-*-*-*-*"
+Config{
+    font = "xft:Noto Sans:pixlsize=20:bold,Font Awesome 5 Free:style=Solid:pixelsize=20"
   , bgColor = "black"
   , fgColor = "grey"
-  , position = TopW L 95
+  , position = TopW L 90
   , lowerOnStart = True
   , commands = [
-    Run Cpu ["-L","3","-H","50","--normal","grey","--high","yellow"] 10
-    , Run Memory ["-t","Mem: <usedratio>%"] 10
+    Run Cpu ["-t", "\xf2db <total>%", "-p", "2", "-c", "0"
+      , "-L", "10", "-H", "50", "-n", "#cccc77", "-h", "yellow"] 10
+    , Run Memory ["-t", "\xf538 <usedratio>%", "-p", "2", "-c", "0"] 10
     , Run Date "%a, %b %d %H:%M" "date" 10
-    , Run Battery ["-t","Bat: <left>%<acstatus>","--"
-      , "-O", "<fc=green>+</fc>", "-i", "", "-o", "<fc=red>-</fc>", "-h", "green", "-l", "red"] 10
+    , Run Battery ["-t", "\xf5df <left>%<acstatus>", "-p", "3"
+      , "--", "-O", "<fc=green>+</fc>", "-i", "", "-o", "<fc=red>-</fc>"] 10
     , Run StdinReader
     ]
   , sepChar = "%"

@@ -3,7 +3,16 @@ export GTK2_RC_FILES="$HOME/.xmonad/cfg/.gtkrc-2.0"
 # export WINDOW_MANAGER=xmonad
 
 # Load X resources
-# xrdb -merge .Xresources
+xrdb -merge .Xresources
+
+# Starts ibus-daemon
+ibus-daemon -drx &
+
+# Starts gnome-screensaver
+gnome-screensaver &
+
+# Starts xss-lock
+xss-lock -- gnome-screensaver -l &
 
 # exec xmonad
 exec gnome-session --systemd --session=xmonad "$@"

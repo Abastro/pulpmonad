@@ -28,3 +28,4 @@ executable xmonad-abcfg
     , xmonad-contrib >=0.14
   hs-source-dirs:      app
   default-language:    Haskell2010
+  ghc-options:  -W
