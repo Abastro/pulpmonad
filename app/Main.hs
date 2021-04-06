@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 module Main ( main ) where
 
 import Data.List
@@ -48,16 +47,14 @@ altMask = mod1Mask; superMask = mod4Mask
 
 main :: IO ()
 main = do
-  safeSpawn "feh" ["bg-scale" --: mkPath [pathAs, "Background"]]
   spawn background
-  spawn "killall trayer"; spawn tray
-  -- Maybe status here?
+  spawn $ "killall trayer;" <> tray
   xmbar <- spawnPipe statBar
   let config = desktopConfig
   xmonad $ config {
     focusedBorderColor = "#eeaaaa"
   , normalBorderColor = "#cccccc"
-  , workspaces = ["main", "code", "term", "chat", "pic", "6", "7", "8", "9"]
+  , workspaces = ["main", "side", "code", "term", "chat", "pic", "7", "8", "9"]
   , terminal = console
   , startupHook = startupHook config <+> do
       gnomeRegister -- Registers xmonad with gnome
@@ -65,9 +62,10 @@ main = do
   , manageHook = composeAll $ [
       className =? "Gimp" --> doF (W.shift "pic")
     , (role =? "gimp-toolbox" <||> role =? "gimp-image-window") --> unFloat
-    , className =? "zoom"
-      <&&> (containing [
-        "Chat", "Participants", "Rooms", "Poll", "float"] <$> title) --> doFloat
+    --, className =? "zoom"
+    --  <&&> (containing ["Chat", "Participants", "Rooms", "Poll"] <$> title) --> doFloat
+    , className =? "zoom" <&&> (not <$> (
+      title =? "Zoom" <||> title =? "Zoom Meeting")) --> doFloat
     , className =? "Gnome-calculator" --> doFloat
     , className =? "Eog" --> doFloat
     ] <> [ manageHook config ]
@@ -83,6 +81,7 @@ main = do
   where
     role = stringProperty "WM_WINDOW_ROLE"
     unFloat = ask >>= doF . W.sink
+    (_, _) = (leftClick, rightClick)
     containing l t = any (`isInfixOf` t) l
     isFloating = \w -> M.member w . W.floating <$> gets windowset
 
@@ -94,6 +93,7 @@ main = do
     keysUtility = [
         ((superMask .|. altMask, xK_h), spawn $ "xdg-open" <-| [mkPath [pathAs, "Xmbindings.png"]])
       , ((superMask, xK_d), safeSpawnProg browser)
+      , ((superMask .|. altMask, xK_s), spawn "/usr/local/pulse/pulseUi")
       ]
     keysBasic = [
         ((superMask, xK_p), spawn "dmenu_run")
