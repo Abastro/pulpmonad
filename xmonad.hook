@@ -1,5 +1,19 @@
 #!/bin/bash
+# Copy config files at hook
+cp -T $HOME/.xmonad/cfg/.gtkrc-2.0 $GTK2_RC_FILES
+cp -T $HOME/.xmonad/cfg/settings.ini $HOME/.config/gtk-3.0/settings.ini
+
+# Volume tray icon
+if [ -z "$(pgrep pnmixer)" ] ; then
+	pnmixer &
+fi
+
 # Network manager
 if [ -z "$(pgrep nm-applet)" ] ; then
     nm-applet --sm-disable &
+fi
+
+# Bluetooth manager
+if [ -z "$(pgrep blueman-applet)" ] ; then
+    blueman-applet &
 fi

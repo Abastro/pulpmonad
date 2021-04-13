@@ -2,10 +2,13 @@ module Main ( main ) where
 
 import Data.List
 import qualified Data.Map as M
+import Graphics.X11.ExtraTypes.XF86
 import XMonad
 import qualified XMonad.StackSet as W
 import XMonad.Hooks.DynamicLog
+import XMonad.Hooks.SetWMName ( setWMName )
 import XMonad.Hooks.EwmhDesktops ( fullscreenEventHook )
+import XMonad.Hooks.ManageHelpers ( isFullscreen, doFullFloat )
 import XMonad.Actions.MouseResize ( mouseResize )
 import XMonad.Util.Run ( spawnPipe, safeSpawn, safeSpawnProg )
 import XMonad.Util.EZConfig ( additionalKeys, additionalMouseBindings )
@@ -57,15 +60,15 @@ main = do
   , workspaces = ["main", "side", "code", "term", "chat", "pic", "7", "8", "9"]
   , terminal = console
   , startupHook = startupHook config <+> do
+      setWMName "LG3D"
       gnomeRegister -- Registers xmonad with gnome
       spawn $ mkPath ["$HOME", ".xmonad", "xmonad.hook"]
   , manageHook = composeAll $ [
       className =? "Gimp" --> doF (W.shift "pic")
     , (role =? "gimp-toolbox" <||> role =? "gimp-image-window") --> unFloat
-    --, className =? "zoom"
-    --  <&&> (containing ["Chat", "Participants", "Rooms", "Poll"] <$> title) --> doFloat
     , className =? "zoom" <&&> (not <$> (
       title =? "Zoom" <||> title =? "Zoom Meeting")) --> doFloat
+    , className =? "Soffice" <&&> isFullscreen --> doFullFloat
     , className =? "Gnome-calculator" --> doFloat
     , className =? "Eog" --> doFloat
     ] <> [ manageHook config ]
@@ -80,6 +83,7 @@ main = do
     `additionalKeys` concat [ keysUtility, keysBasic, keysScreenshot ]
   where
     role = stringProperty "WM_WINDOW_ROLE"
+    p = resource
     unFloat = ask >>= doF . W.sink
     (_, _) = (leftClick, rightClick)
     containing l t = any (`isInfixOf` t) l
@@ -98,10 +102,12 @@ main = do
     keysBasic = [
         ((superMask, xK_p), spawn "dmenu_run")
       , ((superMask, xK_Pause), safeSpawn logout ["--no-prompt", "--logout"])
-      , ((superMask, xK_Delete), safeSpawn logout ["--no-prompt", "--power-off"])
+      , ((superMask, xK_Delete), safeSpawn logout ["--force", "--power-off"])
+      , ((noModMask, xF86XK_MonBrightnessUp), safeSpawn "lux" ["-a", "5%"])
+      , ((noModMask, xF86XK_MonBrightnessDown), safeSpawn "lux" ["-s", "5%"])
       ]
     keysScreenshot = [
         ((noModMask, xK_Print), spawn "sleep 0.2; gnome-screenshot")
-      , ((controlMask, xK_Print), spawn "sleep 0.2; gnome-screenshot -w")
-      , ((altMask, xK_Print), spawn "gnome-screenshot -i")
+      , ((altMask, xK_Print), spawn "sleep 0.2; gnome-screenshot -w")
+      , ((controlMask, xK_Print), spawn "gnome-screenshot -i")
       ]
