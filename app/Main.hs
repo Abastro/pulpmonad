@@ -30,6 +30,7 @@ opt --: val = printf "--%s %s" opt val
 opt -: val = printf "-%s %s" opt val
 opt =: val = printf "%s=\"%s\"" opt val
 
+
 background, tray, statBar :: String
 background = "feh" <-| ["bg-scale" --: mkPath [pathAs, "Background.jpg"]]
 tray = "trayer" <-| [
@@ -101,8 +102,8 @@ main = do
       ]
     keysBasic = [
         ((superMask, xK_p), spawn "dmenu_run")
-      , ((superMask, xK_Pause), safeSpawn logout ["--no-prompt", "--logout"])
-      , ((superMask, xK_Delete), safeSpawn logout ["--force", "--power-off"])
+      -- , ((superMask, xK_Pause), safeSpawn logout ["--no-prompt", "--logout"])
+      , ((superMask .|. altMask, xK_Delete), spawn "systemctl poweroff")
       , ((noModMask, xF86XK_MonBrightnessUp), safeSpawn "lux" ["-a", "5%"])
       , ((noModMask, xF86XK_MonBrightnessDown), safeSpawn "lux" ["-s", "5%"])
       ]

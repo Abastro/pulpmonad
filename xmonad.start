@@ -1,5 +1,6 @@
 #!/bin/sh
 export GTK2_RC_FILES="$HOME/.gtkrc-2.0"
+export QT_IM_MODULE=ibus # configure QT to use ibus
 
 # Load X resources
 xrdb -merge .Xresources
