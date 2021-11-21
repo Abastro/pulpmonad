@@ -17,3 +17,7 @@ fi
 if [ -z "$(pgrep blueman-applet)" ] ; then
     blueman-applet &
 fi
+
+# Unlock SSH keychain
+export SSH_ASKPASS="/usr/bin/ssh-askpass"
+cat /dev/null | ssh-add &

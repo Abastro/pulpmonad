@@ -7,7 +7,7 @@ import XMonad
 import qualified XMonad.StackSet as W
 import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.SetWMName ( setWMName )
-import XMonad.Hooks.EwmhDesktops ( fullscreenEventHook )
+import XMonad.Hooks.EwmhDesktops ( fullscreenEventHook, ewmh )
 import XMonad.Hooks.ManageHelpers ( isFullscreen, doFullFloat )
 import XMonad.Actions.MouseResize ( mouseResize )
 import XMonad.Util.Run ( spawnPipe, safeSpawn, safeSpawnProg )
@@ -54,7 +54,7 @@ main = do
   spawn background
   spawn $ "killall trayer;" <> tray
   xmbar <- spawnPipe statBar
-  let config = desktopConfig
+  let config = ewmh desktopConfig
   xmonad $ config {
     focusedBorderColor = "#eeaaaa"
   , normalBorderColor = "#cccccc"
