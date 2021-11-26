@@ -3,6 +3,7 @@ bin/
 asset/
 
 Setup.hs
+
 *.errors
 xmonad-abcfg
 xmonad-x86_64-linux

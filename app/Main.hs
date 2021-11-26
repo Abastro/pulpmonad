@@ -94,7 +94,7 @@ main = do
         -- Mod(Super) + Left Click: Float & Move around
         -- Mod(Super) + Right Click: Float & Resize
         ((controlMask, middleClick), \w -> isFloating w --> (focus w >> kill))
-      ]    
+      ]
     keysUtility = [
         ((superMask .|. altMask, xK_h), spawn $ "xdg-open" <-| [mkPath [pathAs, "Xmbindings.png"]])
       , ((superMask, xK_d), safeSpawnProg browser)
