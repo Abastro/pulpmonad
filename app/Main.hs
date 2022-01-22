@@ -1,13 +1,15 @@
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 module Main ( main ) where
 
 import Data.List
+import Data.Maybe
 import qualified Data.Map as M
 import Graphics.X11.ExtraTypes.XF86
 import XMonad
 import qualified XMonad.StackSet as W
 import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.SetWMName ( setWMName )
-import XMonad.Hooks.EwmhDesktops ( fullscreenEventHook, ewmh )
+import XMonad.Hooks.EwmhDesktops
 import XMonad.Hooks.ManageHelpers ( isFullscreen, doFullFloat )
 import XMonad.Actions.MouseResize ( mouseResize )
 import XMonad.Util.Run ( spawnPipe, safeSpawn, safeSpawnProg )
@@ -37,7 +39,7 @@ tray = "trayer" <-| [
     "--edge top", "--align right", "--expand true"
   , "--SetDockType true", "--SetPartialStrut true"
   , "--transparent true", "--alpha 0", "--tint 0x000000"
-  , "--width 10", "--height 24"
+  , "--width 10", "--height 35"
   ]
 statBar = "xmobar" <-| [ mkPath [pathCfg, ".xmobar"] ]
 
@@ -55,7 +57,7 @@ main = do
   spawn $ "killall trayer;" <> tray
   xmbar <- spawnPipe statBar
   let config = ewmh desktopConfig
-  xmonad $ config {
+  xmonad . ewmhFullscreen $ config {
     focusedBorderColor = "#eeaaaa"
   , normalBorderColor = "#cccccc"
   , workspaces = ["main", "side", "code", "term", "chat", "pic", "7", "8", "9"]
@@ -72,22 +74,29 @@ main = do
     , className =? "Soffice" <&&> isFullscreen --> doFullFloat
     , className =? "Gnome-calculator" --> doFloat
     , className =? "Eog" --> doFloat
+    , winTypeIs "_NET_WM_WINDOW_TYPE_DIALOG" --> doFloat
     ] <> [ manageHook config ]
   , layoutHook = mouseResize $ layoutHook config
   , logHook = dynamicLogWithPP xmobarPP {
       ppOutput = hPutStrLn xmbar
     , ppTitle  = xmobarColor "#555555" "" . shorten 50
     }
-  , handleEventHook = handleEventHook config <> fullscreenEventHook
+  , handleEventHook = handleEventHook config
   , modMask = superMask
   } `additionalMouseBindings` concat [ mouseMove ]
     `additionalKeys` concat [ keysUtility, keysBasic, keysScreenshot ]
   where
     role = stringProperty "WM_WINDOW_ROLE"
-    p = resource
+    winTypeIs typ = do
+      w <- ask
+      liftX . withDisplay $ \d -> do
+        a <- getAtom "_NET_WM_WINDOW_TYPE"
+        t <- getAtom typ
+        long <- io $ getWindowProperty32 d a w
+        pure $ t `elem` (fromIntegral <$> fromMaybe [] long)
+
+      -- stringProperty "_NET_WM_WINDOW_TYPE"
     unFloat = ask >>= doF . W.sink
-    (_, _) = (leftClick, rightClick)
-    containing l t = any (`isInfixOf` t) l
     isFloating = \w -> M.member w . W.floating <$> gets windowset
 
     mouseMove = [
@@ -102,7 +111,7 @@ main = do
       ]
     keysBasic = [
         ((superMask, xK_p), spawn "dmenu_run")
-      -- , ((superMask, xK_Pause), safeSpawn logout ["--no-prompt", "--logout"])
+      -- Super + Shift + Q: Logout
       , ((superMask .|. altMask, xK_Delete), spawn "systemctl poweroff")
       , ((noModMask, xF86XK_MonBrightnessUp), safeSpawn "lux" ["-a", "5%"])
       , ((noModMask, xF86XK_MonBrightnessDown), safeSpawn "lux" ["-s", "5%"])

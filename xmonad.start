@@ -5,6 +5,11 @@ export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus
 export QT4_IM_MODULE=ibus
 export QT_IM_MODULE=ibus # configure QT to use ibus
+export PATH="$HOME/.cabal/bin":"$HOME/.ghcup/bin":$PATH
+GDK_SCALE=2
+GDK_DPI_SCALE=0.5
+QT_AUTO_SCREEN_SCALE_FACTOR=1
+export GDK_SCALE GDK_DPI_SCALE QT_AUTO_SCREEN_SCALE_FACTOR
 
 # Load X resources
 xrdb -merge .Xresources
@@ -24,5 +29,8 @@ xss-lock -- gnome-screensaver -l &
 # Keyring-daemon for keys
 gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh
 
+# Monitor settings
+# xrandr --output eDP-1-0 --mode 1280x720 --scale 1x1
+
+# gnome-session --systemd --session=xmonad
 exec xmonad
-# exec gnome-session --session=xmonad "$@"

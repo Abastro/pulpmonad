@@ -1,5 +1,5 @@
 Config{
-    font = "xft:Noto Sans:pixlsize=20:bold,Font Awesome 5 Free:style=Solid:pixelsize=20"
+    font = "xft:Noto Sans:pixelsize=30:bold,Font Awesome 5 Free:style=Solid:pixelsize=30"
   , bgColor = "black"
   , fgColor = "grey"
   , position = TopW L 90
