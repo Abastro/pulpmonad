@@ -18,6 +18,9 @@ import XMonad.Config.Desktop ( desktopConfig )
 import XMonad.Config.Gnome ( gnomeRegister )
 import System.IO ( hPutStrLn )
 import Text.Printf ( printf )
+import XMonad.Layout.Tabbed
+import XMonad.Hooks.ManageDocks
+import XMonad.Util.Themes
 
 mkPath :: [FilePath] -> FilePath
 mkPath = intercalate "/"
@@ -51,6 +54,11 @@ logout = "gnome-session-quit"
 leftClick = button1; rightClick = button3; middleClick = button2;
 altMask = mod1Mask; superMask = mod4Mask
 
+myTabCfg = (theme adwaitaDarkTheme) { decoHeight = 50 }
+myLayout = Tall 1 (3/100) (1/2)
+  ||| Mirror (Tall 1 (3/100) (1/2))
+  ||| tabbed shrinkText myTabCfg
+
 main :: IO ()
 main = do
   spawn background
@@ -76,7 +84,7 @@ main = do
     , className =? "Eog" --> doFloat
     , winTypeIs "_NET_WM_WINDOW_TYPE_DIALOG" --> doFloat
     ] <> [ manageHook config ]
-  , layoutHook = mouseResize $ layoutHook config
+  , layoutHook = mouseResize . avoidStruts $ myLayout
   , logHook = dynamicLogWithPP xmobarPP {
       ppOutput = hPutStrLn xmbar
     , ppTitle  = xmobarColor "#555555" "" . shorten 50
