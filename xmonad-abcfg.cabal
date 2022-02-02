@@ -3,11 +3,8 @@ cabal-version:       >=1.10
 
 name:                xmonad-abcfg
 version:             0.1.0.0
--- synopsis:
 description:         Abastro's xmonad config
--- bug-reports:
 license:             AllRightsReserved
--- license-file:        LICENSE
 author:              Abastro
 maintainer:          abab9579@naver.com
 -- copyright:
@@ -27,4 +24,16 @@ executable xmonad-abcfg
     
   hs-source-dirs:      app
   default-language:    Haskell2010
-  ghc-options:  -W
+  ghc-options:  -W  -threaded +RTS -N -RTS
+
+executable taffybar-abcfg
+  main-is:             Main.hs
+  other-modules:
+  build-depends:
+      base >=4.14 && <5
+    , containers
+    , taffybar >=3.3
+
+  hs-source-dirs:      bar
+  default-language:    Haskell2010
+  ghc-options:  -W  -threaded +RTS -N -RTS

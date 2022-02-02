@@ -10,13 +10,17 @@ fi
 
 # Network manager
 if [ -z "$(pgrep nm-applet)" ] ; then
-    nm-applet --sm-disable &
+    nm-applet --sm-disable --indicator &
 fi
 
 # Bluetooth manager
 if [ -z "$(pgrep blueman-applet)" ] ; then
     blueman-applet &
 fi
+
+# Taffybar
+killall taffybar-abcfg
+$HOME/.xmonad/bin/taffybar-abcfg &
 
 # Unlock SSH keychain
 export SSH_ASKPASS="/usr/bin/ssh-askpass"

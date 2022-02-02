@@ -1,7 +1,9 @@
 #!/bin/sh
 output="$1"
 cfgid="xmonad-abcfg"
+barid="taffybar-abcfg"
 apps="./app"
+bars="./bar"
 cfgs="./cfg"
 
 lastModified () {
@@ -11,12 +13,18 @@ lastModifiedIn () {
     find $1 -type f -exec stat -c '%Y' "{}" \; | sort -n | tail -1
 }
 
+max_number() {
+    printf "%s\n" "$@" | sort -r | head -n1
+}
+
 appMod=$( lastModifiedIn $apps )
 cfgMod=$( lastModifiedIn $cfgs )
-echo "$appMod, $cfgMod, $( lastModified $1 )"
-if [ ! -f $1 ] || [ $(($appMod > $cfgMod? $appMod : $cfgMod)) -gt $( lastModified $1 ) ] ; then
-    cabal build "$cfgid"
-    cabal install "$cfgid" \
+barMod=$( lastModifiedIn $bars )
+lastMod=$( max_number $appMod $cfgMod $barMod )
+
+if [ ! -f $1 ] || [ $lastMod -gt $( lastModified $1 ) ] ; then
+    cabal build "$cfgid" "$barid"
+    cabal install "$cfgid" "$barid" \
         --enable-executable-stripping \
         --enable-optimization=2 \
         --installdir="./bin/" --install-method=copy \

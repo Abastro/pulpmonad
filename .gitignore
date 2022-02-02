@@ -1,6 +1,7 @@
 dist-newstyle/
 bin/
 asset/
+logs/
 
 Setup.hs
 

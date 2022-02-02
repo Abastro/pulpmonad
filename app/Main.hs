@@ -7,16 +7,16 @@ import qualified Data.Map as M
 import Graphics.X11.ExtraTypes.XF86
 import XMonad
 import qualified XMonad.StackSet as W
-import XMonad.Hooks.DynamicLog
+import XMonad.Hooks.TaffybarPagerHints ( pagerHints )
 import XMonad.Hooks.SetWMName ( setWMName )
 import XMonad.Hooks.EwmhDesktops
 import XMonad.Hooks.ManageHelpers ( isFullscreen, doFullFloat )
 import XMonad.Actions.MouseResize ( mouseResize )
-import XMonad.Util.Run ( spawnPipe, safeSpawn, safeSpawnProg )
+import XMonad.Util.Run ( safeSpawn, safeSpawnProg )
 import XMonad.Util.EZConfig ( additionalKeys, additionalMouseBindings )
 import XMonad.Config.Desktop ( desktopConfig )
 import XMonad.Config.Gnome ( gnomeRegister )
-import System.IO ( hPutStrLn )
+--import System.IO ( hPutStrLn )
 import Text.Printf ( printf )
 import XMonad.Layout.Tabbed
 import XMonad.Hooks.ManageDocks
@@ -62,10 +62,8 @@ myLayout = Tall 1 (3/100) (1/2)
 main :: IO ()
 main = do
   spawn background
-  spawn $ "killall trayer;" <> tray
-  xmbar <- spawnPipe statBar
   let config = ewmh desktopConfig
-  xmonad . ewmhFullscreen $ config {
+  xmonad . ewmhFullscreen . pagerHints $ config {
     focusedBorderColor = "#eeaaaa"
   , normalBorderColor = "#cccccc"
   , workspaces = ["main", "side", "code", "term", "chat", "pic", "7", "8", "9"]
@@ -85,10 +83,6 @@ main = do
     , winTypeIs "_NET_WM_WINDOW_TYPE_DIALOG" --> doFloat
     ] <> [ manageHook config ]
   , layoutHook = mouseResize . avoidStruts $ myLayout
-  , logHook = dynamicLogWithPP xmobarPP {
-      ppOutput = hPutStrLn xmbar
-    , ppTitle  = xmobarColor "#555555" "" . shorten 50
-    }
   , handleEventHook = handleEventHook config
   , modMask = superMask
   } `additionalMouseBindings` concat [ mouseMove ]
