@@ -4,8 +4,8 @@ cp -T $HOME/.xmonad/cfg/.gtkrc-2.0 $GTK2_RC_FILES
 cp -T $HOME/.xmonad/cfg/settings.ini $HOME/.config/gtk-3.0/settings.ini
 
 # Volume tray icon
-if [ -z "$(pgrep pnmixer)" ] ; then
-	pnmixer &
+if [ -z "$(pgrep pasystray)" ] ; then
+	pasystray &
 fi
 
 # Network manager

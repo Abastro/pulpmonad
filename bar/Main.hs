@@ -2,44 +2,41 @@
 import System.Taffybar
 import System.Taffybar.Information.CPU
 import System.Taffybar.Information.Memory
-import System.Taffybar.SimpleConfig
+import System.Taffybar.SimpleConfig hiding ( barPadding )
 import System.Taffybar.Widget
-import System.Taffybar.Widget.Generic.Graph
-import System.Taffybar.Widget.Generic.PollingGraph
+import System.Taffybar.Widget.Generic.PollingBar
 
-cpuCfg :: GraphConfig
-cpuCfg = defaultGraphConfig
-  { graphDataColors = [ (0, 1, 0, 1), (1, 0, 1, 0.5) ]
-  , graphLabel = Just "cpu"
-  }
-cpuCallback :: IO [Double]
+cpuCfg :: BarConfig
+cpuCfg = (defaultBarConfig $ const (0.4, 0.2, 0))
+  { barWidth = 25, barPadding = 4 }
+cpuCallback :: IO Double
 cpuCallback = do
-  (_, systemLoad, totalLoad) <- cpuLoad
-  return [ totalLoad, systemLoad ]
+  (_, _, totalLoad) <- cpuLoad
+  return totalLoad
 
-memCfg :: GraphConfig
-memCfg = defaultGraphConfig
-  { graphDataColors = [ (0.129, 0.588, 0.953, 1) ]
-  , graphLabel = Just "mem"
-  }
-memCallback :: IO [Double]
+memCfg :: BarConfig
+memCfg = (defaultBarConfig $ const (0.1, 0.6, 0.9))
+  { barWidth = 25, barPadding = 4 }
+
+memCallback :: IO Double
 memCallback = do
   mi <- parseMeminfo
-  return [memoryUsedRatio mi]
+  pure (memoryUsedRatio mi)
 
 main :: IO ()
 main = do
   startTaffybar $ toTaffyConfig simpleConfig
   where
     clock = textClockNewWith defaultClockConfig
-    cpu = pollingGraphNew cpuCfg 0.5 cpuCallback
-    mem = pollingGraphNew memCfg 1.0 memCallback
+      { clockFormatString = "%a %b %_d %H:%M %p" }
+    cpu = pollingBarNew cpuCfg 0.1 cpuCallback
+    mem = pollingBarNew memCfg 0.5 memCallback
     workspaces = workspacesNew defaultWorkspacesConfig
       { showWorkspaceFn = hideEmpty }
     simpleConfig = defaultSimpleTaffyConfig
-      { startWidgets = []
+      { startWidgets = [ workspaces ]
       , centerWidgets = [ clock ]
       , endWidgets = [ sniTrayNew, mem, cpu, batteryIconNew ]
       , barPosition = Top
-      , barHeight = 30
+      , barHeight = 40
       }
