@@ -21,6 +21,7 @@ import Text.Printf ( printf )
 import XMonad.Layout.Tabbed
 import XMonad.Hooks.ManageDocks
 import XMonad.Util.Themes
+import XMonad.Layout.PerWorkspace
 
 mkPath :: [FilePath] -> FilePath
 mkPath = intercalate "/"
@@ -55,9 +56,12 @@ leftClick = button1; rightClick = button3; middleClick = button2;
 altMask = mod1Mask; superMask = mod4Mask
 
 myTabCfg = (theme adwaitaDarkTheme) { decoHeight = 50 }
-myLayout = Tall 1 (3/100) (1/2)
-  ||| Mirror (Tall 1 (3/100) (1/2))
-  ||| tabbed shrinkText myTabCfg
+myLayout = onWorkspaces ["code", "pic"] (tabbed shrinkText myTabCfg)
+  $ tall ||| wide ||| myTab
+  where
+    tall = Tall 1 (3/100) (1/2)
+    wide = Mirror (Tall 1 (3/100) (1/2))
+    myTab = tabbed shrinkText myTabCfg
 
 main :: IO ()
 main = do
@@ -80,12 +84,13 @@ main = do
     , className =? "Soffice" <&&> isFullscreen --> doFullFloat
     , className =? "Gnome-calculator" --> doFloat
     , className =? "Eog" --> doFloat
+    , className =? "Steam" --> doF (W.shift "pic")
     , winTypeIs "_NET_WM_WINDOW_TYPE_DIALOG" --> doFloat
     ] <> [ manageHook config ]
   , layoutHook = mouseResize . avoidStruts $ myLayout
   , handleEventHook = handleEventHook config
   , modMask = superMask
-  } `additionalMouseBindings` concat [ mouseMove ]
+  } `additionalMouseBindings` mouseMove
     `additionalKeys` concat [ keysUtility, keysBasic, keysScreenshot ]
   where
     role = stringProperty "WM_WINDOW_ROLE"
