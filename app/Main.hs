@@ -117,6 +117,9 @@ main = do
       , ((superMask .|. altMask, xK_Delete), spawn "systemctl poweroff")
       , ((noModMask, xF86XK_MonBrightnessUp), safeSpawn "lux" ["-a", "5%"])
       , ((noModMask, xF86XK_MonBrightnessDown), safeSpawn "lux" ["-s", "5%"])
+      , ((noModMask, xF86XK_AudioRaiseVolume), safeSpawn "pactl" ["set-sink-volume", "0", "+5%"])
+      , ((noModMask, xF86XK_AudioLowerVolume), safeSpawn "pactl" ["set-sink-volume", "0", "-5%"])
+      , ((noModMask, xF86XK_AudioMute), safeSpawn "pactl" ["set-sink-mute", "0", "toggle"])
       ]
     keysScreenshot = [
         ((noModMask, xK_Print), spawn "sleep 0.2; gnome-screenshot")
