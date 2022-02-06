@@ -43,7 +43,7 @@ main = do
     , centerWidgets = [clock]
     , endWidgets    = [sniTrayNew, mem, memimg, cpuImg home, batteryIconNew]
     , barPosition   = Top
-    , barHeight     = 40
+    , barHeight     = 45
     , cssPath       = Just $ home </> ".xmonad/styles/taffybar.css"
     }
  where
