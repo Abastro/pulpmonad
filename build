@@ -19,7 +19,6 @@ max_number() {
 install_app () {
     if [ $( lastModifiedIn $2 ) -gt $( lastModified "./bin/$1" ) ] ; then
         cabal install "$1" \
-            --enable-executable-stripping \
             --installdir="./bin/" --install-method=copy \
             --overwrite-policy=always
     fi

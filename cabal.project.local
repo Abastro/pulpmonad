@@ -1,5 +1,7 @@
+
 package *
   ghc-options: -haddock
+  executable-dynamic: True
 
 program-options
   ghc-options: -haddock
