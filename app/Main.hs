@@ -71,7 +71,7 @@ main = do
   xmonad . ewmhFullscreen . pagerHints $ config {
     focusedBorderColor = "#eeaaaa"
   , normalBorderColor = "#cccccc"
-  , workspaces = ["main", "side", "code", "term", "chat", "pic", "7", "8", "9"]
+  , workspaces = ["\xe3af", "\xf0c7", "\xf121", "\xf120", "\xf4ad", "\xf03e", "7", "8", "9"]
   , terminal = console
   , startupHook = startupHook config <+> do
       setWMName "LG3D"
