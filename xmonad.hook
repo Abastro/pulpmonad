@@ -18,6 +18,11 @@ if [ -z "$(pgrep blueman-applet)" ] ; then
     blueman-applet &
 fi
 
+# Use synapse as app launcher
+if [ -z "$(pgrep synapse)" ] ; then
+    synapse -s &
+fi
+
 # Taffybar
 killall taffybar-abcfg
 $HOME/.xmonad/bin/taffybar-abcfg &

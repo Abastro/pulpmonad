@@ -22,6 +22,7 @@ import XMonad.Layout.Tabbed
 import XMonad.Hooks.ManageDocks
 import XMonad.Util.Themes
 import XMonad.Layout.PerWorkspace
+import XMonad.Layout.NoBorders ( smartBorders )
 
 mkPath :: [FilePath] -> FilePath
 mkPath = intercalate "/"
@@ -77,7 +78,8 @@ main = do
       gnomeRegister -- Registers xmonad with gnome
       spawn $ mkPath ["$HOME", ".xmonad", "xmonad.hook"]
   , manageHook = composeAll $ [
-      className =? "Gimp" --> doF (W.shift "pic")
+      resource =? "synapse" --> doIgnore
+    , className =? "Gimp" --> doF (W.shift "pic")
     , (role =? "gimp-toolbox" <||> role =? "gimp-image-window") --> unFloat
     , className =? "zoom" <&&> (not <$> (
       title =? "Zoom" <||> title =? "Zoom Meeting")) --> doFloat
@@ -87,7 +89,7 @@ main = do
     , className =? "Steam" --> doF (W.shift "pic")
     , winTypeIs "_NET_WM_WINDOW_TYPE_DIALOG" --> doFloat
     ] <> [ manageHook config ]
-  , layoutHook = mouseResize . avoidStruts $ myLayout
+  , layoutHook = mouseResize . smartBorders . avoidStruts $ myLayout
   , handleEventHook = handleEventHook config
   , modMask = superMask
   } `additionalMouseBindings` mouseMove
@@ -117,7 +119,7 @@ main = do
       , ((superMask .|. altMask, xK_s), spawn "/usr/local/pulse/pulseUi")
       ]
     keysBasic = [
-        ((superMask, xK_p), spawn "dmenu_run")
+        ((superMask, xK_p), spawn "synapse")
       -- Super + Shift + Q: Logout
       , ((superMask .|. altMask, xK_Delete), spawn "systemctl poweroff")
       , ((noModMask, xF86XK_MonBrightnessUp), safeSpawn "lux" ["-a", "5%"])

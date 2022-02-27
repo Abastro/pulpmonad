@@ -32,18 +32,21 @@ memCallback = memoryUsedRatio <$> parseMeminfo
 
 memWidget :: FilePath -> TaffyIO Widget
 memWidget home = do
-  bg  <- iconImageWidgetNew memN
+  fg  <- iconImageWidgetNew memN
   bar <- pollingBarNew memCfg 0.5 memCallback
+  barCtxt <- widgetGetStyleContext bar
+  styleContextAddClass barCtxt "mem-bar"
+
   wid <- overlayNew
 
   containerAdd wid bar
-  overlayAddOverlay wid bg
+  overlayAddOverlay wid fg
   widgetShowAll wid
   toWidget wid
  where
   memN = home </> ".xmonad/asset/icons/ram.png"
   memCfg =
-    (defaultBarConfig $ const (0.1, 0.6, 0.9)) { barWidth = 21, barPadding = 7 }
+    (defaultBarConfig $ const (0.1, 0.6, 0.9)) { barWidth = 9, barPadding = 0 }
 
 
 main :: IO ()
