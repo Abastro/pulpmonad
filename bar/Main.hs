@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+import qualified Data.Map                      as M
+import           Data.Maybe
 import           GI.Gtk                  hiding ( main )
 import           System.Directory
 import           System.FilePath
@@ -32,8 +34,8 @@ memCallback = memoryUsedRatio <$> parseMeminfo
 
 memWidget :: FilePath -> TaffyIO Widget
 memWidget home = do
-  fg  <- iconImageWidgetNew memN
-  bar <- pollingBarNew memCfg 0.5 memCallback
+  fg      <- iconImageWidgetNew memN
+  bar     <- pollingBarNew memCfg 0.5 memCallback
   barCtxt <- widgetGetStyleContext bar
   styleContextAddClass barCtxt "mem-bar"
 
@@ -48,6 +50,15 @@ memWidget home = do
   memCfg =
     (defaultBarConfig $ const (0.1, 0.6, 0.9)) { barWidth = 9, barPadding = 0 }
 
+workspaceMaps :: M.Map String String
+workspaceMaps = M.fromList
+  [ ("main", "\xe3af")
+  , ("docs", "\xf0c7")
+  , ("code", "\xf121")
+  , ("term", "\xf120")
+  , ("chat", "\xf4ad")
+  , ("pics", "\xf03e")
+  ]
 
 main :: IO ()
 main = do
@@ -64,5 +75,8 @@ main = do
   clock = textClockNewWith defaultClockConfig
     { clockFormatString = "%a %b %_d %H:%M %p"
     }
-  workspaces =
-    workspacesNew defaultWorkspacesConfig { showWorkspaceFn = hideEmpty }
+  getName n = fromMaybe n $ workspaceMaps M.!? n
+  workspaces = workspacesNew defaultWorkspacesConfig
+    { showWorkspaceFn = hideEmpty
+    , labelSetter     = pure . getName . workspaceName
+    }

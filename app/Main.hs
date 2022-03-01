@@ -57,7 +57,7 @@ leftClick = button1; rightClick = button3; middleClick = button2;
 altMask = mod1Mask; superMask = mod4Mask
 
 myTabCfg = (theme adwaitaDarkTheme) { decoHeight = 50 }
-myLayout = onWorkspaces ["code", "pic"] (tabbed shrinkText myTabCfg)
+myLayout = onWorkspaces ["code", "pics"] (tabbed shrinkText myTabCfg)
   $ tall ||| wide ||| myTab
   where
     tall = Tall 1 (3/100) (1/2)
@@ -71,7 +71,7 @@ main = do
   xmonad . ewmhFullscreen . pagerHints $ config {
     focusedBorderColor = "#eeaaaa"
   , normalBorderColor = "#cccccc"
-  , workspaces = ["\xe3af", "\xf0c7", "\xf121", "\xf120", "\xf4ad", "\xf03e", "7", "8", "9"]
+  , workspaces = ["main", "docs", "code", "term", "chat", "pics", "7", "8", "9"]
   , terminal = console
   , startupHook = startupHook config <+> do
       setWMName "LG3D"
@@ -79,14 +79,14 @@ main = do
       spawn $ mkPath ["$HOME", ".xmonad", "xmonad.hook"]
   , manageHook = composeAll $ [
       resource =? "synapse" --> doIgnore
-    , className =? "Gimp" --> doF (W.shift "pic")
+    , className =? "Gimp" --> doF (W.shift "pics")
     , (role =? "gimp-toolbox" <||> role =? "gimp-image-window") --> unFloat
     , className =? "zoom" <&&> (not <$> (
       title =? "Zoom" <||> title =? "Zoom Meeting")) --> doFloat
     , className =? "Soffice" <&&> isFullscreen --> doFullFloat
     , className =? "Gnome-calculator" --> doFloat
     , className =? "Eog" --> doFloat
-    , className =? "Steam" --> doF (W.shift "pic")
+    , className =? "Steam" --> doF (W.shift "pics")
     , winTypeIs "_NET_WM_WINDOW_TYPE_DIALOG" --> doFloat
     ] <> [ manageHook config ]
   , layoutHook = mouseResize . smartBorders . avoidStruts $ myLayout
