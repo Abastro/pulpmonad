@@ -98,6 +98,7 @@ workspaceMaps = M.fromList
   , ("pics", "\xf03e")
   ]
 
+
 main :: IO ()
 main = do
   home <- getHomeDirectory
