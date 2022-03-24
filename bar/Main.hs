@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+import           Control.Monad
 import qualified Data.Map                      as M
 import           Data.Maybe
+import           GI.Gdk
 import           GI.Gtk                  hiding ( main )
 import           System.Directory
 import           System.FilePath
@@ -15,6 +17,25 @@ import           System.Taffybar.Widget
 import           System.Taffybar.Widget.Generic.Icon
 import           System.Taffybar.Widget.Generic.PollingBar
 import           Text.Printf
+import           XMonad.Core
+
+spawnOnClick :: String -> EventButton -> IO Bool
+spawnOnClick str btn = do
+  b <- getEventButtonButton btn
+  True <$ when (b == 1) (spawn str)
+
+batWidget :: TaffyIO Widget
+batWidget = do
+  -- The display
+  disp <- batteryIconNew
+
+  -- Add button events
+  ev   <- eventBoxNew
+  containerAdd ev disp
+  onWidgetButtonReleaseEvent ev $ spawnOnClick "gnome-control-center power"
+
+  widgetShowAll ev
+  toWidget ev
 
 cpuCallback :: IO Double
 cpuCallback = do
@@ -22,9 +43,19 @@ cpuCallback = do
   return totalLoad
 
 cpuWidget :: FilePath -> TaffyIO Widget
-cpuWidget home = pollingIconImageWidgetNew (cpuN 0) 0.1 $ do
-  cpu <- cpuCallback
-  pure (cpuN . round $ cpu * 5)
+cpuWidget home = do
+  -- The display
+  disp <- pollingIconImageWidgetNew (cpuN 0) 0.1 $ do
+    cpu <- cpuCallback
+    pure (cpuN . round $ cpu * 5)
+
+  -- Add button events
+  ev <- eventBoxNew
+  containerAdd ev disp
+  onWidgetButtonReleaseEvent ev $ spawnOnClick "gnome-system-monitor -r"
+
+  widgetShowAll ev
+  toWidget ev
  where
   cpuN :: Int -> FilePath
   cpuN n = home </> printf ".xmonad/asset/icons/cpu%d.png" n
@@ -34,17 +65,24 @@ memCallback = memoryUsedRatio <$> parseMeminfo
 
 memWidget :: FilePath -> TaffyIO Widget
 memWidget home = do
+  -- Foreground and the Bar
   fg      <- iconImageWidgetNew memN
   bar     <- pollingBarNew memCfg 0.5 memCallback
   barCtxt <- widgetGetStyleContext bar
   styleContextAddClass barCtxt "mem-bar"
 
+  -- Overlay bg image above memory bar
   wid <- overlayNew
-
   containerAdd wid bar
   overlayAddOverlay wid fg
-  widgetShowAll wid
-  toWidget wid
+
+  -- Add button events
+  ev <- eventBoxNew
+  containerAdd ev wid
+  onWidgetButtonReleaseEvent ev $ spawnOnClick "gnome-system-monitor -r"
+
+  widgetShowAll ev
+  toWidget ev
  where
   memN = home </> ".xmonad/asset/icons/ram.png"
   memCfg =
@@ -66,7 +104,7 @@ main = do
   startTaffybar $ toTaffyConfig defaultSimpleTaffyConfig
     { startWidgets  = [workspaces]
     , centerWidgets = [clock]
-    , endWidgets = [sniTrayNew, memWidget home, cpuWidget home, batteryIconNew]
+    , endWidgets    = [sniTrayNew, memWidget home, cpuWidget home, batWidget]
     , barPosition   = Top
     , barHeight     = 45
     , cssPath       = Just $ home </> ".xmonad/styles/taffybar.css"

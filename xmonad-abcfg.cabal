@@ -35,6 +35,8 @@ executable taffybar-abcfg
     , filepath
     , directory
     , gi-gtk ==3.*
+    , gi-gdk ==3.*
+    , xmonad >=0.13
     , gtk-strut >=0.1.4
     , taffybar == 3.3.*
 
