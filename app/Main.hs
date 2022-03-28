@@ -57,7 +57,7 @@ main = do
       mouseMove =
         [((controlMask, middleClick), \w -> isFloating w --> (focus w >> kill))]
       keysUtility =
-        [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "Xmbindings.png"]),
+        [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "xmbindings.png"]),
           ("M-d", safeSpawnProg "nautilus"),
           ("M-S-t", namedScratchpadAction scratchpads "term"),
           ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
@@ -77,7 +77,7 @@ main = do
           ("C-<Print>", spawn "gnome-screenshot -i")
         ]
 
-  safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "Background.jpg"]
+  safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "background.jpg"]
   killBar <- fmap (signalProcess killProcess) . forkProcess $ startBar xmDir
   let keysSpecial =
         [ ("M-M1-d", debugStack),
