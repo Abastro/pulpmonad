@@ -23,7 +23,7 @@ import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
 
 scratchpads =
-  []
+  [NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") defaultFloating]
 
 myLayout =
   onWorkspaces ["code", "pics"] (tabbed shrinkText myTabCfg) $
@@ -59,7 +59,7 @@ main = do
       keysUtility =
         [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "Xmbindings.png"]),
           ("M-d", safeSpawnProg "nautilus"),
-          --("M-S-t", namedScratchpadAction scratchpads "term"),
+          ("M-S-t", namedScratchpadAction scratchpads "term"),
           ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
         ]
       keysBasic =

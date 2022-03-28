@@ -19,7 +19,7 @@ import System.Taffybar.Widget
 import System.Taffybar.Widget.Generic.Icon
 import System.Taffybar.Widget.Generic.PollingBar
 import Text.Printf
-import XMonad.Core
+import XMonad ((<&&>), spawn)
 
 spawnOnClick :: String -> EventButton -> IO Bool
 spawnOnClick str btn = do
@@ -123,6 +123,6 @@ startBar home =
     workspaces =
       workspacesNew
         defaultWorkspacesConfig
-          { showWorkspaceFn = hideEmpty,
+          { showWorkspaceFn = hideEmpty <&&> ((/= "NSP") . workspaceName),
             labelSetter = pure . getName . workspaceName
           }
