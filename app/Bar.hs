@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+module Bar where
+
 import Control.Monad
 import Data.Map qualified as M
 import Data.Maybe
 import GI.Gdk
 import GI.Gtk hiding (main)
-import System.Directory
 import System.FilePath
 import System.Taffybar
 import System.Taffybar.Context (TaffyIO)
@@ -59,13 +60,13 @@ cpuWidget home = do
   toWidget ev
   where
     cpuN :: Int -> FilePath
-    cpuN n = home </> printf ".xmonad/asset/icons/cpu%d.png" n
+    cpuN n = home </> "asset" </> "icons" </> printf "cpu%d.png" n
 
 memCallback :: IO Double
 memCallback = memoryUsedRatio <$> parseMeminfo
 
 memWidget :: FilePath -> TaffyIO Widget
-memWidget home = do
+memWidget xmDir = do
   -- Foreground and the Bar
   fg <- iconImageWidgetNew memN
   bar <- pollingBarNew memCfg 0.5 memCallback
@@ -85,7 +86,7 @@ memWidget home = do
   widgetShowAll ev
   toWidget ev
   where
-    memN = home </> ".xmonad/asset/icons/ram.png"
+    memN = xmDir </> "asset" </> "icons" </> "ram.png"
     memCfg =
       (defaultBarConfig $ const (0.1, 0.6, 0.9)) {barWidth = 9, barPadding = 0}
 
@@ -100,9 +101,8 @@ workspaceMaps =
       ("pics", "\xf03e")
     ]
 
-main :: IO ()
-main = do
-  home <- getHomeDirectory
+startBar :: FilePath -> IO ()
+startBar home =
   startTaffybar $
     toTaffyConfig
       defaultSimpleTaffyConfig
@@ -111,7 +111,7 @@ main = do
           endWidgets = [sniTrayNew, memWidget home, cpuWidget home, batWidget],
           barPosition = Top,
           barHeight = 45,
-          cssPath = Just $ home </> ".xmonad/styles/taffybar.css"
+          cssPath = Just $ home </> "styles" </> "taffybar.css"
         }
   where
     clock =

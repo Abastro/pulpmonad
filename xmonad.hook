@@ -24,8 +24,8 @@ if [ -z "$(pgrep synapse)" ] ; then
 fi
 
 # Taffybar
-killall taffybar-abcfg
-"$HOME"/.xmonad/bin/taffybar-abcfg &
+# killall taffybar-abcfg
+#"$HOME"/.xmonad/bin/taffybar-abcfg &
 
 # Unlock SSH keychain
 export SSH_ASKPASS="/usr/bin/ssh-askpass"

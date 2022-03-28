@@ -1,8 +1,9 @@
 module Main (main) where
 
+import Bar
 import Defines
-import System.Directory
 import System.FilePath
+import System.Posix
 import XMonad
 import XMonad.Actions.MouseResize (mouseResize)
 import XMonad.Config.Desktop (desktopConfig)
@@ -22,8 +23,7 @@ import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
 
 scratchpads =
-  [ --NS "term" "gnome-terminal" (className =? "Gnome-terminal") defaultFloating
-  ]
+  []
 
 myLayout =
   onWorkspaces ["code", "pics"] (tabbed shrinkText myTabCfg) $
@@ -51,13 +51,13 @@ staticManage =
 
 main :: IO ()
 main = do
-  xmDir <- (</> ".xmonad") <$> getHomeDirectory
-  safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "Background.jpg"]
-  let cfg = ewmh desktopConfig
+  dirs <- getDirectories
+  let xmDir = cfgDir dirs
+      cfg = ewmh desktopConfig
       mouseMove =
         [((controlMask, middleClick), \w -> isFloating w --> (focus w >> kill))]
       keysUtility =
-        [ ("M-M1-h", safeSpawn "xdg-open" [xmDir </> "asset" </> "Xmbindings.png"]),
+        [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "Xmbindings.png"]),
           ("M-d", safeSpawnProg "nautilus"),
           --("M-S-t", namedScratchpadAction scratchpads "term"),
           ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
@@ -76,10 +76,14 @@ main = do
           ("M1-<Print>", spawn "sleep 0.2; gnome-screenshot -w"),
           ("C-<Print>", spawn "gnome-screenshot -i")
         ]
-      keysSpecial =
-        [("M-M1-d", debugStack)]
 
-  xmonad . ewmhFullscreen . pagerHints $
+  safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "Background.jpg"]
+  killBar <- fmap (signalProcess killProcess) . forkProcess $ startBar xmDir
+  let keysSpecial =
+        [ ("M-M1-d", debugStack),
+          ("M-q", io $ killBar >> spawn "xmonad --recompile && xmonad --restart")
+        ]
+  (`launch` dirs) . ewmhFullscreen . pagerHints $
     cfg
       { focusedBorderColor = "#eeaaaa",
         normalBorderColor = "#cccccc",
