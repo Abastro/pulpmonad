@@ -14,6 +14,7 @@ build-type:          Simple
 executable xmonad-abcfg
   main-is:             Main.hs
   other-modules:
+    Defines
   default-extensions:
     ImportQualifiedPost
 

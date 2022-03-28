@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Data.Map qualified as M
+import Defines
 import System.Directory
 import System.FilePath
 import XMonad
@@ -16,13 +16,14 @@ import XMonad.Hooks.TaffybarPagerHints (pagerHints)
 import XMonad.Layout.NoBorders (smartBorders)
 import XMonad.Layout.PerWorkspace
 import XMonad.Layout.Tabbed
-import XMonad.StackSet qualified as W
 import XMonad.Util.EZConfig (additionalKeysP, additionalMouseBindings)
+import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
 
-middleClick :: Button -- Leftclick = button1, Rightclick = button3
-middleClick = button2
+scratchpads =
+  [ --NS "term" "gnome-terminal" (className =? "Gnome-terminal") defaultFloating
+  ]
 
 myLayout =
   onWorkspaces ["code", "pics"] (tabbed shrinkText myTabCfg) $
@@ -32,6 +33,21 @@ myLayout =
     tall = Tall 1 (3 / 100) (1 / 2)
     wide = Mirror (Tall 1 (3 / 100) (1 / 2))
     myTab = tabbed shrinkText myTabCfg
+
+staticManage =
+  composeAll
+    [ resource =? "synapse" --> doIgnore,
+      className =? "Gimp" --> doF (shift "pics"),
+      role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> unFloat,
+      className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doFloat,
+      className =? "Soffice" <&&> isFullscreen --> doFullFloat,
+      className =? "Gnome-calculator" --> doFloat,
+      className =? "Eog" --> doFloat,
+      className =? "Steam" --> doF (shift "pics"),
+      className =? "kakaotalk.exe"
+        <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doIgnore,
+      winTypeIs "_NET_WM_WINDOW_TYPE_DIALOG" --> doFloat
+    ]
 
 main :: IO ()
 main = do
@@ -43,6 +59,7 @@ main = do
       keysUtility =
         [ ("M-M1-h", safeSpawn "xdg-open" [xmDir </> "asset" </> "Xmbindings.png"]),
           ("M-d", safeSpawnProg "nautilus"),
+          --("M-S-t", namedScratchpadAction scratchpads "term"),
           ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
         ]
       keysBasic =
@@ -73,37 +90,10 @@ main = do
             setWMName "LG3D"
             gnomeRegister -- Registers xmonad with gnome
             safeSpawnProg (xmDir </> "xmonad.hook"),
-        manageHook = staticManage <> manageHook cfg,
+        manageHook = staticManage <> namedScratchpadManageHook scratchpads <> manageHook cfg,
         layoutHook = mouseResize . smartBorders . avoidStruts $ myLayout,
         handleEventHook = handleEventHook cfg,
         modMask = mod4Mask -- Super key
       }
       `additionalMouseBindings` mouseMove
       `additionalKeysP` concat [keysUtility, keysBasic, keysSpecial, keysScreenshot]
-  where
-    staticManage =
-      composeAll
-        [ resource =? "synapse" --> doIgnore,
-          className =? "Gimp" --> doF (W.shift "pics"),
-          role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> unFloat,
-          className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doFloat,
-          className =? "Soffice" <&&> isFullscreen --> doFullFloat,
-          className =? "Gnome-calculator" --> doFloat,
-          className =? "Eog" --> doFloat,
-          className =? "Steam" --> doF (W.shift "pics"),
-          className =? "kakaotalk.exe"
-            <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doIgnore,
-          winTypeIs "_NET_WM_WINDOW_TYPE_DIALOG" --> doFloat
-        ]
-
-    role = stringProperty "WM_WINDOW_ROLE"
-    winTypeIs typ = do
-      w <- ask
-      liftX . withDisplay $ \d -> do
-        a <- getAtom "_NET_WM_WINDOW_TYPE"
-        t <- getAtom typ
-        long <- io $ getWindowProperty32 d a w
-        pure $ t `elem` maybe [] (map fromIntegral) long
-
-    unFloat = ask >>= doF . W.sink
-    isFloating = \w -> M.member w . W.floating <$> gets windowset
