@@ -19,12 +19,13 @@ import System.Taffybar.Widget
 import System.Taffybar.Widget.Generic.Icon
 import System.Taffybar.Widget.Generic.PollingBar
 import Text.Printf
-import XMonad ((<&&>), spawn)
+import XMonad.ManageHook
+import XMonad.Util.Run
 
-spawnOnClick :: String -> EventButton -> IO Bool
-spawnOnClick str btn = do
+runOnClick :: IO () -> EventButton -> IO Bool
+runOnClick act btn = do
   b <- getEventButtonButton btn
-  True <$ when (b == 1) (spawn str)
+  True <$ when (b == 1) act
 
 batWidget :: TaffyIO Widget
 batWidget = do
@@ -34,7 +35,7 @@ batWidget = do
   -- Add button events
   ev <- eventBoxNew
   containerAdd ev disp
-  onWidgetButtonReleaseEvent ev $ spawnOnClick "gnome-control-center power"
+  onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-control-center" ["power"]
 
   widgetShowAll ev
   toWidget ev
@@ -54,7 +55,7 @@ cpuWidget home = do
   -- Add button events
   ev <- eventBoxNew
   containerAdd ev disp
-  onWidgetButtonReleaseEvent ev $ spawnOnClick "gnome-system-monitor -r"
+  onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-system-monitor" ["-r"]
 
   widgetShowAll ev
   toWidget ev
@@ -81,7 +82,7 @@ memWidget xmDir = do
   -- Add button events
   ev <- eventBoxNew
   containerAdd ev wid
-  onWidgetButtonReleaseEvent ev $ spawnOnClick "gnome-system-monitor -r"
+  onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-system-monitor" ["-r"]
 
   widgetShowAll ev
   toWidget ev

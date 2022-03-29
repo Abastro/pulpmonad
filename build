@@ -1,9 +1,7 @@
 #!/bin/sh
 output="$1"
 cfgid="xmonad-abcfg"
-barid="taffybar-abcfg"
 apps="./app"
-bars="./bar"
 
 lastModified () {
     stat -c '%Y' "$1"
@@ -25,6 +23,5 @@ install_app () {
 }
 
 install_app $cfgid $apps
-install_app $barid $bars
 
 ln -sf "./bin/$cfgid" "$output"

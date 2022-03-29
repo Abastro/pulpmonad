@@ -41,7 +41,9 @@ staticManage =
       role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> unFloat,
       className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doFloat,
       className =? "Soffice" <&&> isFullscreen --> doFullFloat,
-      className =? "Gnome-calculator" --> doFloat,
+      className =? "Gnome-calculator"--> doFloat,
+      className =? "Gnome-system-monitor" --> doFloat,
+      className =? "Gnome-control-center" --> doFloat,
       className =? "Eog" --> doFloat,
       className =? "Steam" --> doF (shift "pics"),
       className =? "kakaotalk.exe"
@@ -81,7 +83,8 @@ main = do
   killBar <- fmap (signalProcess killProcess) . forkProcess $ startBar xmDir
   let keysSpecial =
         [ ("M-M1-d", debugStack),
-          ("M-q", io $ killBar >> spawn "xmonad --recompile && xmonad --restart")
+          ("M-c", io $ () <$ forkProcess (() <$ recompile dirs False)),
+          ("M-q", io killBar >> restart (xmDir </> "xmonad-x86_64-linux") True)
         ]
   (`launch` dirs) . ewmhFullscreen . pagerHints $
     cfg
@@ -94,7 +97,7 @@ main = do
             setWMName "LG3D"
             gnomeRegister -- Registers xmonad with gnome
             safeSpawnProg (xmDir </> "xmonad.hook"),
-        manageHook = staticManage <> namedScratchpadManageHook scratchpads <> manageHook cfg,
+        manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads,
         layoutHook = mouseResize . smartBorders . avoidStruts $ myLayout,
         handleEventHook = handleEventHook cfg,
         modMask = mod4Mask -- Super key
