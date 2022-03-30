@@ -23,7 +23,9 @@ import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
 
 scratchpads =
-  [NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") defaultFloating]
+  [ NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") defaultFloating,
+    NS "irc" "gnome-terminal --class=irc -e glirc" (className =? "irc") defaultFloating
+  ]
 
 myLayout =
   onWorkspaces ["code", "pics"] (tabbed shrinkText myTabCfg) $
@@ -41,7 +43,7 @@ staticManage =
       role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> unFloat,
       className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doFloat,
       className =? "Soffice" <&&> isFullscreen --> doFullFloat,
-      className =? "Gnome-calculator"--> doFloat,
+      className =? "Gnome-calculator" --> doFloat,
       className =? "Gnome-system-monitor" --> doFloat,
       className =? "Gnome-control-center" --> doFloat,
       className =? "Eog" --> doFloat,
@@ -62,6 +64,7 @@ main = do
         [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "xmbindings.png"]),
           ("M-d", safeSpawnProg "nautilus"),
           ("M-S-t", namedScratchpadAction scratchpads "term"),
+          ("M-M1-c", namedScratchpadAction scratchpads "irc"),
           ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
         ]
       keysBasic =
@@ -86,7 +89,7 @@ main = do
           ("M-c", io $ () <$ forkProcess (() <$ recompile dirs False)),
           ("M-q", io killBar >> restart (xmDir </> "xmonad-x86_64-linux") True)
         ]
-  (`launch` dirs) . ewmhFullscreen . pagerHints $
+  xmonad . ewmhFullscreen . pagerHints $
     cfg
       { focusedBorderColor = "#eeaaaa",
         normalBorderColor = "#cccccc",
