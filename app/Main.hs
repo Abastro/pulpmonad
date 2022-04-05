@@ -10,8 +10,9 @@ import XMonad.Config.Desktop (desktopConfig)
 import XMonad.Config.Gnome (gnomeRegister)
 import XMonad.Hooks.DebugStack
 import XMonad.Hooks.EwmhDesktops
+import XMonad.Hooks.FadeWindows
 import XMonad.Hooks.ManageDocks
-import XMonad.Hooks.ManageHelpers (doFullFloat, isFullscreen)
+import XMonad.Hooks.ManageHelpers
 import XMonad.Hooks.SetWMName (setWMName)
 import XMonad.Hooks.TaffybarPagerHints (pagerHints)
 import XMonad.Layout.NoBorders (smartBorders)
@@ -22,13 +23,15 @@ import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
 
-scratchpads =
-  [ NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") defaultFloating,
-    NS "irc" "gnome-terminal --class=irc -- glirc" (className =? "irc") defaultFloating
-  ]
+(scTerm, scIRC) =
+  ( NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") doCenterFloat,
+    NS "irc" "gnome-terminal --class=irc -- glirc" (className =? "irc") doCenterFloat
+  )
+
+scratchpads = [scTerm, scIRC]
 
 myLayout =
-  onWorkspaces ["code", "pics"] (tabbed shrinkText myTabCfg) $
+  onWorkspaces [code, pics] (tabbed shrinkText myTabCfg) $
     tall ||| wide ||| myTab
   where
     myTabCfg = (theme adwaitaDarkTheme) {decoHeight = 50}
@@ -39,18 +42,18 @@ myLayout =
 staticManage =
   composeAll
     [ resource =? "synapse" --> doIgnore,
-      className =? "Gimp" --> doF (shift "pics"),
-      role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> unFloat,
-      className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doFloat,
+      className =? "Gimp" --> doF (shift pics),
+      role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink,
+      className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE,
       className =? "Soffice" <&&> isFullscreen --> doFullFloat,
-      className =? "Gnome-calculator" --> doFloat,
-      className =? "Gnome-system-monitor" --> doFloat,
-      className =? "Gnome-control-center" --> doFloat,
-      className =? "Eog" --> doFloat,
-      className =? "Steam" --> doF (shift "pics"),
+      className =? "Gnome-calculator" --> doCenterFloat,
+      className =? "Gnome-system-monitor" --> doCenterFloat,
+      className =? "Gnome-control-center" --> doCenterFloat,
+      className =? "Eog" --> doCenterFloat,
+      className =? "Steam" --> doF (shift pics),
       className =? "kakaotalk.exe"
         <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doIgnore,
-      winTypeIs "_NET_WM_WINDOW_TYPE_DIALOG" --> doFloat
+      isDialog --> doFloat
     ]
 
 main :: IO ()
@@ -60,12 +63,12 @@ main = do
       xmCache = cacheDir dirs
       cfg = ewmh desktopConfig
       mouseMove =
-        [((controlMask, middleClick), \w -> isFloating w --> (focus w >> kill))]
+        [((controlMask, middleClick), \w -> runQuery isFloating w --> (focus w >> kill))]
       keysUtility =
         [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "xmbindings.png"]),
           ("M-d", safeSpawnProg "nautilus"),
-          ("M-S-t", namedScratchpadAction scratchpads "term"),
-          ("M-M1-c", namedScratchpadAction scratchpads "irc"),
+          ("M-M1-t", namedScratchpadAction scratchpads (name scTerm)),
+          ("M-M1-c", namedScratchpadAction scratchpads (name scIRC)),
           ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
         ]
       keysBasic =
@@ -94,7 +97,7 @@ main = do
     cfg
       { focusedBorderColor = "#eeaaaa",
         normalBorderColor = "#cccccc",
-        workspaces = ["main", "docs", "code", "term", "chat", "pics", "7", "8", "9"],
+        workspaces = mySpaces,
         terminal = "gnome-terminal",
         startupHook =
           startupHook cfg <> do

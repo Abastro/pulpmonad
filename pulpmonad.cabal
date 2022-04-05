@@ -20,8 +20,6 @@ executable pulpmonad
     Defines
     Bar
   default-extensions:
-    ImportQualifiedPost
-
   build-depends:       
       base >=4.14 && <5
     , containers
