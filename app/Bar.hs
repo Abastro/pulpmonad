@@ -111,8 +111,8 @@ startBar home =
           centerWidgets = [clock],
           endWidgets = [sniTrayNew, memWidget home, cpuWidget home, batWidget],
           barPosition = Top,
-          barHeight = 45,
-          cssPath = Just $ home </> "styles" </> "taffybar.css"
+          barHeight = read "ExactSize 45",
+          cssPaths = [home </> "styles" </> "taffybar.css"]
         }
   where
     clock =
