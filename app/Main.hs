@@ -24,7 +24,7 @@ import XMonad.Util.Themes
 
 scratchpads =
   [ NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") defaultFloating,
-    NS "irc" "gnome-terminal --class=irc -e glirc" (className =? "irc") defaultFloating
+    NS "irc" "gnome-terminal --class=irc -- glirc" (className =? "irc") defaultFloating
   ]
 
 myLayout =
@@ -57,6 +57,7 @@ main :: IO ()
 main = do
   dirs <- getDirectories
   let xmDir = cfgDir dirs
+      xmCache = cacheDir dirs
       cfg = ewmh desktopConfig
       mouseMove =
         [((controlMask, middleClick), \w -> isFloating w --> (focus w >> kill))]
@@ -87,7 +88,7 @@ main = do
   let keysSpecial =
         [ ("M-M1-d", debugStack),
           ("M-c", io $ () <$ forkProcess (() <$ recompile dirs False)),
-          ("M-q", io killBar >> restart (xmDir </> "xmonad-x86_64-linux") True)
+          ("M-q", io killBar >> restart (xmCache </> "xmonad-x86_64-linux") True)
         ]
   xmonad . ewmhFullscreen . pagerHints $
     cfg

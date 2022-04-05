@@ -2,12 +2,6 @@ packages: .
 
 with-compiler: ghc-8.10.7
 
---allow-newer: HStringTemplate:template-haskell, HStringTemplate:bytestring
---source-repository-package
---  type: git
---  location: git@github.com:Abastro/taffybar.git
---  tag: 7031ee26344a4c9a7d4c5f0e94807deeb28fcaf2
-
 source-repository-package
   type: git
   location: git@github.com:Abastro/gtk-strut.git
