@@ -3,6 +3,10 @@
 cp -T "$1/cfg/.gtkrc-2.0" "$GTK2_RC_FILES"
 cp -T "$1/cfg/settings.ini" "$HOME/.config/gtk-3.0/settings.ini"
 
+if [ -z "$(pgrep status-notifier-watcher)" ] ; then
+    status-notifier-watcher &
+fi
+
 # Volume tray icon
 if [ -z "$(pgrep pasystray)" ] ; then
 	pasystray &
