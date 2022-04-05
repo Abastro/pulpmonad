@@ -5,9 +5,9 @@ module Bar where
 import Control.Monad
 import Data.Map qualified as M
 import Data.Maybe
+import Defines
 import GI.Gdk
 import GI.Gtk hiding (main)
-import System.FilePath
 import System.Taffybar
 import System.Taffybar.Context (TaffyIO)
 import System.Taffybar.Information.CPU
@@ -19,7 +19,8 @@ import System.Taffybar.Widget
 import System.Taffybar.Widget.Generic.Icon
 import System.Taffybar.Widget.Generic.PollingBar
 import Text.Printf
-import XMonad.ManageHook
+import XMonad.ManageHook ((<&&>))
+import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
 
 runOnClick :: IO () -> EventButton -> IO Bool
@@ -94,12 +95,12 @@ memWidget xmDir = do
 workspaceMaps :: M.Map String String
 workspaceMaps =
   M.fromList
-    [ ("main", "\xe3af"),
-      ("docs", "\xf0c7"),
-      ("code", "\xf121"),
-      ("term", "\xf120"),
-      ("chat", "\xf4ad"),
-      ("pics", "\xf03e")
+    [ (wmain, "\xe3af"),
+      (docs, "\xf0c7"),
+      (code, "\xf121"),
+      (term, "\xf120"),
+      (chat, "\xf4ad"),
+      (pics, "\xf03e")
     ]
 
 startBar :: FilePath -> IO ()
@@ -124,6 +125,6 @@ startBar home =
     workspaces =
       workspacesNew
         defaultWorkspacesConfig
-          { showWorkspaceFn = hideEmpty <&&> ((/= "NSP") . workspaceName),
+          { showWorkspaceFn = hideEmpty <&&> ((/= scratchpadWorkspaceTag) . workspaceName),
             labelSetter = pure . getName . workspaceName
           }

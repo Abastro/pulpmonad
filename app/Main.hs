@@ -2,7 +2,6 @@ module Main (main) where
 
 import Bar
 import Defines
-import System.FilePath
 import System.Posix
 import XMonad
 import XMonad.Actions.MouseResize (mouseResize)

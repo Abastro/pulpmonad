@@ -1,5 +1,6 @@
 module Defines
-  ( role,
+  ( module System.FilePath,
+    role,
     leftClick,
     rightClick,
     middleClick,
@@ -16,6 +17,7 @@ where
 
 import XMonad
 import XMonad.StackSet qualified as W
+import System.FilePath
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
