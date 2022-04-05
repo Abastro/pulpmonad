@@ -1,11 +1,13 @@
 #!/bin/sh
+cfgid="pulpmonad"
 output="$1"
-cfgid="xmonad-abcfg"
-apps="./app"
+cache="$( dirname "$1" )"
+src="./app"
 
 lastModified () {
-    stat -c '%Y' "$1"
+    if [ -e "$1" ]; then stat -c '%Y' "$1"; else echo "0"; fi
 }
+
 lastModifiedIn () {
     find "$1" -type f -exec stat -c '%Y' "{}" \; | sort -n | tail -1
 }
@@ -15,13 +17,14 @@ max_number() {
 }
 
 install_app () {
-    if [ "$( lastModifiedIn "$2" )" -gt "$( lastModified "./bin/$1" )" ] ; then
+    if [ "$( lastModifiedIn "$2" )" -gt "$( lastModified "$3/$1" )" ] ; then
+        echo "Updated, installing at $3..."
         cabal install "$1" \
-            --installdir="./bin/" --install-method=copy \
+            --installdir="$3" --install-method=copy \
             --overwrite-policy=always
     fi
 }
 
-install_app $cfgid $apps
-
-ln -sf "./bin/$cfgid" "$output"
+echo "Build script running."
+install_app "$cfgid" "$src" "$cache"
+ln -sf "$cache/$cfgid" "$output"

@@ -99,7 +99,7 @@ main = do
           startupHook cfg <> do
             setWMName "LG3D"
             gnomeRegister -- Registers xmonad with gnome
-            safeSpawnProg (xmDir </> "xmonad.hook"),
+            safeSpawn (xmDir </> "xmonad.hook") [xmDir],
         manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads,
         layoutHook = mouseResize . smartBorders . avoidStruts $ myLayout,
         handleEventHook = handleEventHook cfg,

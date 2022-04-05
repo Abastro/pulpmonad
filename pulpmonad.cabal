@@ -1,17 +1,20 @@
-cabal-version:       2.4
--- Cabal documentation: http://haskell.org/cabal/users-guide/
+cabal-version:      2.4
+name:               pulpmonad
+version:            0.1.0.2
+synopsis:           Pulpmonad, xmonad config
 
-name:                xmonad-abcfg
-version:             0.1.0.1
-description:         Abastro's xmonad config
-license:             NONE
-author:              Abastro
-maintainer:          abab9579@naver.com
--- copyright:
--- category:
-build-type:          Simple
+-- A longer description of the package.
+-- description:
+homepage:           https://github.com/Abastro/pulpmonad
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Abastro
+maintainer:         abab9579@gmail.com
+copyright:          2022 Abastro
+extra-source-files:
+    README.md
 
-executable xmonad-abcfg
+executable pulpmonad
   main-is:             Main.hs
   other-modules:
     Defines
