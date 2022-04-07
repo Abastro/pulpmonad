@@ -23,6 +23,7 @@ import XMonad.ManageHook ((<&&>))
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
 
+-- TODO Perhaps install gtk-declarative
 runOnClick :: IO () -> EventButton -> IO Bool
 runOnClick act btn = do
   b <- getEventButtonButton btn
