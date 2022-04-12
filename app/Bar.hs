@@ -1,3 +1,6 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Bar where
@@ -6,8 +9,8 @@ import Control.Monad
 import Data.Map qualified as M
 import Data.Maybe
 import Defines
-import GI.Gdk
-import GI.Gtk hiding (main)
+import GI.Gdk qualified as Gdk
+import GI.Gtk qualified as Gtk
 import System.Taffybar
 import System.Taffybar.Context (TaffyIO)
 import System.Taffybar.Information.CPU
@@ -23,71 +26,70 @@ import XMonad.ManageHook ((<&&>))
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
 
--- TODO Perhaps install gtk-declarative
-runOnClick :: IO () -> EventButton -> IO Bool
+runOnClick :: IO () -> Gdk.EventButton -> IO Bool
 runOnClick act btn = do
-  b <- getEventButtonButton btn
+  b <- Gdk.getEventButtonButton btn
   True <$ when (b == 1) act
 
-batWidget :: TaffyIO Widget
+-- Battery is quite cumbersome to implement with gtk-declarative
+batWidget :: TaffyIO Gtk.Widget
 batWidget = do
   -- The display
   disp <- batteryIconNew
 
   -- Add button events
-  ev <- eventBoxNew
-  containerAdd ev disp
-  onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-control-center" ["power"]
+  ev <- Gtk.eventBoxNew
+  Gtk.containerAdd ev disp
+  Gtk.onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-control-center" ["power"]
 
-  widgetShowAll ev
-  toWidget ev
+  Gtk.widgetShowAll ev
+  Gtk.toWidget ev
 
 cpuCallback :: IO Double
 cpuCallback = do
   (_, _, totalLoad) <- cpuLoad
   return totalLoad
 
-cpuWidget :: FilePath -> TaffyIO Widget
+cpuWidget :: FilePath -> TaffyIO Gtk.Widget
 cpuWidget home = do
   -- The display
-  disp <- pollingIconImageWidgetNew (cpuN 0) 0.1 $ do
-    cpu <- cpuCallback
-    pure (cpuN . round $ cpu * 5)
+  disp <- pollingIconImageWidgetNew (cpuN (0 :: Int)) 0.1 $ do
+    cpu :: Int <- round . (* 5) <$> cpuCallback
+    pure (cpuN cpu)
 
   -- Add button events
-  ev <- eventBoxNew
-  containerAdd ev disp
-  onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-system-monitor" ["-r"]
+  ev <- Gtk.eventBoxNew
+  Gtk.containerAdd ev disp
+  Gtk.onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-system-monitor" ["-r"]
 
-  widgetShowAll ev
-  toWidget ev
+  Gtk.widgetShowAll ev
+  Gtk.toWidget ev
   where
-    cpuN :: Int -> FilePath
     cpuN n = home </> "asset" </> "icons" </> printf "cpu%d.png" n
 
 memCallback :: IO Double
 memCallback = memoryUsedRatio <$> parseMeminfo
 
-memWidget :: FilePath -> TaffyIO Widget
+memWidget :: FilePath -> TaffyIO Gtk.Widget
 memWidget xmDir = do
   -- Foreground and the Bar
   fg <- iconImageWidgetNew memN
   bar <- pollingBarNew memCfg 0.5 memCallback
-  barCtxt <- widgetGetStyleContext bar
-  styleContextAddClass barCtxt "mem-bar"
+  barCtxt <- Gtk.widgetGetStyleContext bar
+  Gtk.styleContextAddClass barCtxt "mem-bar"
 
   -- Overlay bg image above memory bar
-  wid <- overlayNew
-  containerAdd wid bar
-  overlayAddOverlay wid fg
+  wid <- Gtk.overlayNew
+  Gtk.containerAdd wid bar
+  Gtk.overlayAddOverlay wid fg
 
   -- Add button events
-  ev <- eventBoxNew
-  containerAdd ev wid
-  onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-system-monitor" ["-r"]
+  ev <- Gtk.eventBoxNew
+  Gtk.containerAdd ev wid
+  Gtk.onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-system-monitor" ["-r"]
 
-  widgetShowAll ev
-  toWidget ev
+  Gtk.widgetShowAll ev
+  Gtk.toWidget ev
   where
     memN = xmDir </> "asset" </> "icons" </> "ram.png"
     memCfg =
