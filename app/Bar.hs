@@ -57,6 +57,7 @@ cpuWidget home = do
     cpu :: Int <- round . (* 5) <$> cpuCallback
     pure (cpuN cpu)
 
+  -- TODO Animation for CPU?
   -- Add button events
   ev <- Gtk.eventBoxNew
   Gtk.containerAdd ev disp

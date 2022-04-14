@@ -3,8 +3,6 @@ packages: .
 with-compiler: ghc-9.2.2
 allow-newer:
     coinbase-pro:*
---  , gi-gtk-declarative:haskell-gi
---  , gi-gtk-declarative:haskell-gi-base
 
 source-repository-package
   type: git
@@ -15,9 +13,3 @@ source-repository-package
   type: git
   location: git@github.com:Abastro/gtk-strut.git
   tag: 9a628963f0aea641b82878cb284e4d6202962a35
-
-source-repository-package
-  type: git
-  location: git@github.com:Abastro/gi-gtk-declarative.git
-  tag: d2ea85c5bcb7b15891123bdc5fa12d1f4b3c05ff
-  subdir: gi-gtk-declarative
