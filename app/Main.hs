@@ -71,7 +71,7 @@ main = do
           ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
         ]
       keysBasic =
-        [ ("M-p", safeSpawnProg "synapse"),
+        [ ("M-p", safeSpawnProg "synapse"), 
           ("M-M1-<Delete>", safeSpawn "systemctl" ["poweroff"]),
           ("<XF86MonBrightnessUp>", safeSpawn "lux" ["-a", "5%"]),
           ("<XF86MonBrightnessDown>", safeSpawn "lux" ["-s", "5%"]),

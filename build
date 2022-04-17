@@ -4,6 +4,8 @@ output="$1"
 cache="$( dirname "$1" )"
 src="./app"
 
+# TODO this build shell also needs rework, as it only checks `app` directory
+
 lastModified () {
     if [ -e "$1" ]; then stat -c '%Y' "$1"; else echo "0"; fi
 }
