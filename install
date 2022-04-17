@@ -1,0 +1,7 @@
+#!/bin/sh
+
+sudo apt install pasystray network-manager-gnome blueman synapse ssh-askpass-gnome
+
+if ! command -v status-notifier-watcher; then
+cabal install status-notifier-item
+fi
