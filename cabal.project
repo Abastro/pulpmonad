@@ -13,11 +13,6 @@ source-repository-package
   type: git
   location: git@github.com:Abastro/gtk-strut.git
   tag: 9a628963f0aea641b82878cb284e4d6202962a35
-  
+
 package *
-  executable-Dynamic: True
   ghc-options: -haddock
-
-program-options
-  ghc-options: -haddock
-
