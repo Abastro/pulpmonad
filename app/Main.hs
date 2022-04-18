@@ -75,9 +75,9 @@ main = do
           ("M-M1-<Delete>", safeSpawn "systemctl" ["poweroff"]),
           ("<XF86MonBrightnessUp>", safeSpawn "lux" ["-a", "5%"]),
           ("<XF86MonBrightnessDown>", safeSpawn "lux" ["-s", "5%"]),
-          ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "0", "+5%"]),
-          ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "0", "-5%"]),
-          ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "0", "toggle"])
+          ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "+5%"]),
+          ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "-5%"]),
+          ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
         ]
       keysScreenshot =
         [ ("<Print>", spawn "sleep 0.2; gnome-screenshot"),
