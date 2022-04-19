@@ -114,7 +114,7 @@ startBar home =
       defaultSimpleTaffyConfig
         { startWidgets = [workspaces],
           centerWidgets = [clock],
-          endWidgets = [sniTrayNew, memWidget home, cpuWidget home, batWidget],
+          endWidgets = [memWidget home, cpuWidget home, batWidget, sniTrayNew],
           barPosition = Top,
           barHeight = read "ExactSize 45",
           cssPaths = [home </> "styles" </> "taffybar.css"]

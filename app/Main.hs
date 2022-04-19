@@ -2,6 +2,7 @@ module Main (main) where
 
 import Bar
 import Defines
+import StartHook
 import System.Posix
 import XMonad
 import XMonad.Actions.MouseResize (mouseResize)
@@ -71,7 +72,7 @@ main = do
           ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
         ]
       keysBasic =
-        [ ("M-p", safeSpawnProg "synapse"), 
+        [ ("M-p", safeSpawnProg "synapse"),
           ("M-M1-<Delete>", safeSpawn "systemctl" ["poweroff"]),
           ("<XF86MonBrightnessUp>", safeSpawn "lux" ["-a", "5%"]),
           ("<XF86MonBrightnessDown>", safeSpawn "lux" ["-s", "5%"]),
@@ -102,7 +103,8 @@ main = do
           startupHook cfg <> do
             setWMName "LG3D"
             gnomeRegister -- Registers xmonad with gnome
-            safeSpawn (xmDir </> "xmonad.hook") [xmDir],
+            liftIO (copyConfig xmDir)
+            initiatePrograms, -- safeSpawn (xmDir </> "xmonad.hook") [xmDir]
         manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads,
         layoutHook = mouseResize . smartBorders . avoidStruts $ myLayout,
         handleEventHook = handleEventHook cfg,

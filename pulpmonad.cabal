@@ -19,6 +19,7 @@ executable pulpmonad
   other-modules:
     Defines
     Bar
+    StartHook
   default-extensions:
   build-depends:       
       base >=4.14 && <5
