@@ -51,7 +51,7 @@ cpuCallback = do
   return totalLoad
 
 cpuWidget :: FilePath -> TaffyIO Gtk.Widget
-cpuWidget home = do
+cpuWidget mainDir = do
   -- The display
   disp <- pollingIconImageWidgetNew (cpuN (0 :: Int)) 0.1 $ do
     cpu :: Int <- round . (* 5) <$> cpuCallback
@@ -66,13 +66,13 @@ cpuWidget home = do
   Gtk.widgetShowAll ev
   Gtk.toWidget ev
   where
-    cpuN n = home </> "asset" </> "icons" </> printf "cpu%d.png" n
+    cpuN n = mainDir </> "asset" </> "icons" </> printf "cpu%d.png" n
 
 memCallback :: IO Double
 memCallback = memoryUsedRatio <$> parseMeminfo
 
 memWidget :: FilePath -> TaffyIO Gtk.Widget
-memWidget xmDir = do
+memWidget mainDir = do
   -- Foreground and the Bar
   fg <- iconImageWidgetNew memN
   bar <- pollingBarNew memCfg 0.5 memCallback
@@ -92,7 +92,7 @@ memWidget xmDir = do
   Gtk.widgetShowAll ev
   Gtk.toWidget ev
   where
-    memN = xmDir </> "asset" </> "icons" </> "ram.png"
+    memN = mainDir </> "asset" </> "icons" </> "ram.png"
     memCfg =
       (defaultBarConfig $ const (0.1, 0.6, 0.9)) {barWidth = 9, barPadding = 0}
 
@@ -108,16 +108,16 @@ workspaceMaps =
     ]
 
 startBar :: FilePath -> IO ()
-startBar home =
+startBar mainDir =
   startTaffybar $
     toTaffyConfig
       defaultSimpleTaffyConfig
         { startWidgets = [workspaces],
           centerWidgets = [clock],
-          endWidgets = [memWidget home, cpuWidget home, batWidget, sniTrayNew],
+          endWidgets = [memWidget mainDir, cpuWidget mainDir, batWidget, sniTrayNew],
           barPosition = Top,
           barHeight = read "ExactSize 45",
-          cssPaths = [home </> "styles" </> "taffybar.css"]
+          cssPaths = [mainDir </> "styles" </> "taffybar.css"]
         }
   where
     clock =
