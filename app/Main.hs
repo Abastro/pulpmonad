@@ -87,8 +87,8 @@ main = do
         ]
       keysSpecial =
         [ ("M-M1-d", debugStack),
-          ("M-c", io $ () <$ forkProcess (() <$ recompile dirs False)),
-          ("M-q", restart (xmCache </> "xmonad-x86_64-linux") True)
+          ("M-c", io $ () <$ forkProcess (() <$ recompile dirs False))
+          -- ("M-q",restart (xmCache </> "xmonad-x86_64-linux") True)
         ]
 
       onStart = do

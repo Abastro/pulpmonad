@@ -1,40 +1,40 @@
-{-# LANGUAGE LambdaCase #-}
 module StartHook where
 
+import Control.Monad
 import Data.Coerce
 import Data.Foldable
-import qualified Data.Map.Strict as M
+import Data.Kind (Type)
+import Data.Proxy
+import Data.Set qualified as S
+import Data.Typeable
 import Defines
 import System.Environment
+import System.IO
 import XMonad
 import XMonad.Util.ExtensibleState qualified as XS
 import XMonad.Util.Run
 import XMonad.Util.SpawnOnce
-import System.IO
 
 modifyingM :: (ExtensionClass a) => (a -> X a) -> X ()
 modifyingM f = XS.get >>= f >>= XS.put
 
--- TODO Is restart required at all?
-newtype PerformRestartable s = PerformRestartable (M.Map String s)
+newtype PerformOnce (t :: Type) = PerformOnce (S.Set String)
   deriving (Read, Show)
 
-type TypRS s = (Typeable s, Read s, Show s)
-
-instance (TypRS s) => ExtensionClass (PerformRestartable s) where
-  initialValue = PerformRestartable mempty
+instance (Typeable t) => ExtensionClass (PerformOnce t) where
+  initialValue = PerformOnce mempty
   extensionType = PersistentExtension
 
--- | Performs a restart-aware action. ID should be uniquely given.
-performRestartable :: forall s. (TypRS s) => String -> X s -> (s -> X s) -> X ()
-performRestartable ident initial restart =
-  modifyingM @(PerformRestartable s) $ fmap coerce . M.alterF withState ident . coerce
+-- | Perform an action only once, alike `spawnOnce`. The proxy type should be unique.
+performOnce :: forall (t :: Type). Typeable t => Proxy t -> X () -> X ()
+performOnce proxy run =
+  modifyingM @(PerformOnce t) $ fmap coerce . S.alterF noting desig . coerce
   where
-    withState = fmap Just . maybe initial restart
+    desig = show (typeOf proxy)
+    noting b = True <$ unless b run
 
--- | Perform an action only once, alike `spawnOnce`. ID should be uniquely given.
-performOnce :: String -> X () -> X ()
-performOnce ident run = performRestartable ident run (const $ pure ())
+-- | Designate initiation.
+data Initiate
 
 -- | Copies configurations.
 copyConfig :: FilePath -> X ()
@@ -48,7 +48,7 @@ copyConfig mainDir = do
 
 -- | Initiate programs.
 initiatePrograms :: X ()
-initiatePrograms = performOnce "initiate" $ do
+initiatePrograms = performOnce (Proxy @Initiate) $ do
   liftIO $ hPrintf stderr "[Normal] Initiating programs... \n"
   safeSpawnProg "status-notifier-watcher"
   safeSpawnProg "pasystray"

@@ -41,13 +41,13 @@ library
   hs-source-dirs:      src
   exposed-modules:
     Defines
+    StartHook
 
 executable pulpmonad
   import:              pulpexe
   hs-source-dirs:      app
   main-is:             Main.hs
   other-modules:
-    StartHook
   build-depends:
       pulpmonad
 
@@ -55,6 +55,7 @@ executable pulpbar
   import:              pulpexe
   hs-source-dirs:      bar
   main-is:             Main.hs
+  other-modules:
   build-depends:
       pulpmonad
     , haskell-gi ==0.26.*

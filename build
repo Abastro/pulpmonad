@@ -6,29 +6,13 @@ cache="$( dirname "$1" )"
 
 # TODO this build shell also needs rework, as it only checks `app` directory
 
-lastModified () {
-    if [ -e "$1" ]; then stat -c '%Y' "$1"; else echo "0"; fi
-}
-
-lastModifiedIn () {
-    find "$1" -type f -exec stat -c '%Y' "{}" \; | sort -n | tail -1
-}
-
-max_number() {
-    printf "%s\n" "$@" | sort -r | head -n1
-}
-
-install_app () {
-    if [ "$( lastModifiedIn "$2" )" -gt "$( lastModified "$3/$1" )" ] ; then
-        echo "$1 Updated, installing at $3..."
-        cabal build "$1"    # More reliable
-        cabal install "$1" \
-            --installdir="$3" --install-method=copy \
-            --overwrite-policy=always
-    fi
-}
-
-echo "Build script running."
-install_app "$cfgid" "./app" "$cache"
-install_app "$barid" "./bar" "$cache"
-ln -sf "$cache/$cfgid" "$output"
+echo "[Build] Begin"
+if ! cabal build "exe:$cfgid" "exe:$barid" | grep "Up to date" ; then
+  cabal install "exe:$cfgid" "exe:$barid" \
+    --installdir="$cache" --install-method=copy \
+    --overwrite-policy=always
+  ln -sf "$cache/$cfgid" "$output"
+  # To make next Up-To-Date build faster
+  cabal build "exe:$cfgid" "exe:$barid"
+fi
+echo "[Build] End"
