@@ -1,6 +1,5 @@
 module Main (main) where
 
-import Bar
 import Defines
 import StartHook
 import System.Posix
@@ -22,6 +21,7 @@ import XMonad.Util.EZConfig (additionalKeysP, additionalMouseBindings)
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
+import XMonad.Hooks.StatusBar
 
 (scTerm, scIRC) =
   ( NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") doCenterFloat,
@@ -85,26 +85,28 @@ main = do
           ("M1-<Print>", spawn "sleep 0.2; gnome-screenshot -w"),
           ("C-<Print>", spawn "gnome-screenshot -i")
         ]
-
-  safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "background.jpg"]
-  killBar <- fmap (signalProcess killProcess) . forkProcess $ startBar xmDir
-  let keysSpecial =
+      keysSpecial =
         [ ("M-M1-d", debugStack),
           ("M-c", io $ () <$ forkProcess (() <$ recompile dirs False)),
-          ("M-q", io killBar >> restart (xmCache </> "xmonad-x86_64-linux") True)
+          ("M-q", restart (xmCache </> "xmonad-x86_64-linux") True)
         ]
-  xmonad . ewmhFullscreen . pagerHints $
+
+      onStart = do
+        setWMName "LG3D"
+        gnomeRegister -- Registers xmonad with gnome
+        safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "background.jpg"]
+        copyConfig xmDir
+        initiatePrograms
+      
+      pulpBar = statusBarGeneric (xmCache </> "pulpbar") mempty
+
+  xmonad . ewmhFullscreen . pagerHints . withSB pulpBar $
     cfg
       { focusedBorderColor = "#eeaaaa",
         normalBorderColor = "#cccccc",
         workspaces = mySpaces,
         terminal = "gnome-terminal",
-        startupHook =
-          startupHook cfg <> do
-            setWMName "LG3D"
-            gnomeRegister -- Registers xmonad with gnome
-            liftIO (copyConfig xmDir)
-            initiatePrograms,
+        startupHook = startupHook cfg <> onStart,
         manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads,
         layoutHook = mouseResize . smartBorders . avoidStruts $ myLayout,
         handleEventHook = handleEventHook cfg,

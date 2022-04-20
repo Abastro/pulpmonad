@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               pulpmonad
-version:            0.1.0.2
+version:            0.1.1.0
 synopsis:           Pulpmonad, xmonad config
 
 -- A longer description of the package.
@@ -14,14 +14,11 @@ copyright:          2022 Abastro
 extra-source-files:
     README.md
 
-executable pulpmonad
-  main-is:             Main.hs
-  other-modules:
-    Defines
-    Bar
-    StartHook
+common pulp
   default-extensions:
-  build-depends:       
+    LambdaCase
+
+  build-depends:
       base >=4.14 && <5
     , vector
     , containers
@@ -31,12 +28,37 @@ executable pulpmonad
     , unix
     , xmonad >=0.13
     , xmonad-contrib >=0.14
+
+  default-language:    GHC2021
+  ghc-options:         -W
+
+common pulpexe
+  import:              pulp
+  ghc-options:         -threaded +RTS -N -RTS
+
+library
+  import:              pulp
+  hs-source-dirs:      src
+  exposed-modules:
+    Defines
+
+executable pulpmonad
+  import:              pulpexe
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  other-modules:
+    StartHook
+  build-depends:
+      pulpmonad
+
+executable pulpbar
+  import:              pulpexe
+  hs-source-dirs:      bar
+  main-is:             Main.hs
+  build-depends:
+      pulpmonad
     , haskell-gi ==0.26.*
     , gi-gtk ==3.*
     , gi-gdk ==3.*
     , gtk-strut >=0.1.4
     , taffybar ==3.4.*
-    
-  hs-source-dirs:      app
-  default-language:    GHC2021
-  ghc-options:  -W  -threaded +RTS -N -RTS

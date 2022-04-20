@@ -1,8 +1,8 @@
 #!/bin/sh
 cfgid="pulpmonad"
+barid="pulpbar"
 output="$1"
 cache="$( dirname "$1" )"
-src="./app"
 
 # TODO this build shell also needs rework, as it only checks `app` directory
 
@@ -20,7 +20,8 @@ max_number() {
 
 install_app () {
     if [ "$( lastModifiedIn "$2" )" -gt "$( lastModified "$3/$1" )" ] ; then
-        echo "Updated, installing at $3..."
+        echo "$1 Updated, installing at $3..."
+        cabal build "$1"    # More reliable
         cabal install "$1" \
             --installdir="$3" --install-method=copy \
             --overwrite-policy=always
@@ -28,5 +29,6 @@ install_app () {
 }
 
 echo "Build script running."
-install_app "$cfgid" "$src" "$cache"
+install_app "$cfgid" "./app" "$cache"
+install_app "$barid" "./bar" "$cache"
 ln -sf "$cache/$cfgid" "$output"

@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Bar where
+module Main (main) where
 
 import Control.Monad
 import Data.Map qualified as M
@@ -21,10 +21,10 @@ import System.Taffybar.SimpleConfig hiding
 import System.Taffybar.Widget
 import System.Taffybar.Widget.Generic.Icon
 import System.Taffybar.Widget.Generic.PollingBar
-import Text.Printf
-import XMonad.ManageHook ((<&&>))
+import XMonad
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
+import System.Environment
 
 runOnClick :: IO () -> Gdk.EventButton -> IO Bool
 runOnClick act btn = do
@@ -107,8 +107,9 @@ workspaceMaps =
       (pics, "\xf03e")
     ]
 
-startBar :: FilePath -> IO ()
-startBar mainDir =
+main :: IO ()
+main = do
+  mainDir <- getEnv "XMONAD_CONFIG_DIR"
   startTaffybar $
     toTaffyConfig
       defaultSimpleTaffyConfig
