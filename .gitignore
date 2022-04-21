@@ -5,8 +5,6 @@ logs/
 Setup.hs
 
 *.freeze
-*.errors
-xmonad-abcfg
-xmonad-x86_64-linux
+build
 
 .vscode
