@@ -5,6 +5,5 @@ logs/
 Setup.hs
 
 *.freeze
-build
 
 .vscode
