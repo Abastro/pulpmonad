@@ -4,9 +4,9 @@ cfgid="pulpmonad"
 barid="pulpbar"
 cache=$( dirname "$1" )
 
+echo "[PulpMonad Build] Begin"
 mkfifo cabalout
 
-echo "[Pulpmonad Build] Begin"
 cabal build "exe:$cfgid" "exe:$barid" | tee cabalout &
 if ! grep -q "Up to date" <cabalout ; then
   cabal install "exe:$cfgid" "exe:$barid" \
@@ -16,4 +16,6 @@ if ! grep -q "Up to date" <cabalout ; then
   # To make next Up-To-Date build faster
   cabal build "exe:$cfgid" "exe:$barid"
 fi
-echo "[Pulpmonad Build] End"
+
+rm cabalout
+echo "[PulpMonad Build] End"
