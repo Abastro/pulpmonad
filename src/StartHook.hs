@@ -40,8 +40,10 @@ data Initiate
 copyConfig :: FilePath -> X ()
 copyConfig mainDir = do
   liftIO $ do
-    gtkrc <- getEnv "GTK2_RC_FILES"
-    copyFile (mainDir </> "cfg" </> ".gtkrc-2.0") gtkrc
+    gtk2 <- getXdgDirectory XdgConfig "gtk-2.0"
+    let gtk2rc = gtk2 </> ".gtkrc-2.0"
+    setEnv "GTK2_RC_FILES" gtk2rc
+    copyFile (mainDir </> "cfg" </> ".gtkrc-2.0") gtk2rc
   liftIO $ do
     gtk3 <- getXdgDirectory XdgConfig "gtk-3.0"
     copyFile (mainDir </> "cfg" </> "settings.ini") (gtk3 </> "settings.ini")
