@@ -5,9 +5,11 @@ module Main (main) where
 import Control.Monad
 import Data.Map qualified as M
 import Data.Maybe
+import Data.Text qualified as T
 import Defines
 import GI.Gdk qualified as Gdk
 import GI.Gtk qualified as Gtk
+import System.Environment
 import System.Taffybar
 import System.Taffybar.Context (TaffyIO)
 import System.Taffybar.Information.CPU
@@ -18,17 +20,20 @@ import System.Taffybar.SimpleConfig hiding
 import System.Taffybar.Widget
 import System.Taffybar.Widget.Generic.Icon
 import System.Taffybar.Widget.Generic.PollingBar
-import XMonad
+import XMonad.ManageHook
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
-import System.Environment
+
+setupIcons :: FilePath -> TaffyIO ()
+setupIcons mainDir = do
+  defaultTheme <- Gtk.iconThemeGetDefault
+  Gtk.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
 
 runOnClick :: IO () -> Gdk.EventButton -> IO Bool
 runOnClick act btn = do
   b <- Gdk.getEventButtonButton btn
   True <$ when (b == 1) act
 
--- Battery is quite cumbersome to implement with gtk-declarative
 batWidget :: TaffyIO Gtk.Widget
 batWidget = do
   -- The display
@@ -47,10 +52,11 @@ cpuCallback = do
   (_, _, totalLoad) <- cpuLoad
   return totalLoad
 
+-- FIXME currently, it blurs. Better way?
 cpuWidget :: FilePath -> TaffyIO Gtk.Widget
-cpuWidget mainDir = do
+cpuWidget _ = do
   -- The display
-  disp <- pollingIconImageWidgetNew (cpuN (0 :: Int)) 0.1 $ do
+  disp <- pollingIconImageWidgetNewFromName (cpuN (0 :: Int)) 0.1 $ do
     cpu :: Int <- round . (* 5) <$> cpuCallback
     pure (cpuN cpu)
 
@@ -63,15 +69,15 @@ cpuWidget mainDir = do
   Gtk.widgetShowAll ev
   Gtk.toWidget ev
   where
-    cpuN n = mainDir </> "asset" </> "icons" </> printf "cpu%d.png" n
+    cpuN n = T.pack $ printf "cpu-%03d" (n * 20)
 
 memCallback :: IO Double
 memCallback = memoryUsedRatio <$> parseMeminfo
 
 memWidget :: FilePath -> TaffyIO Gtk.Widget
-memWidget mainDir = do
+memWidget _ = do
   -- Foreground and the Bar
-  fg <- iconImageWidgetNew memN
+  fg <- iconImageWidgetNewFromName "ram-000"
   bar <- pollingBarNew memCfg 0.5 memCallback
   barCtxt <- Gtk.widgetGetStyleContext bar
   Gtk.styleContextAddClass barCtxt "mem-bar"
@@ -89,7 +95,6 @@ memWidget mainDir = do
   Gtk.widgetShowAll ev
   Gtk.toWidget ev
   where
-    memN = mainDir </> "asset" </> "icons" </> "ram.png"
     memCfg =
       (defaultBarConfig $ const (0.1, 0.6, 0.9)) {barWidth = 9, barPadding = 0}
 
@@ -110,11 +115,12 @@ main = do
   startTaffybar $
     toTaffyConfig
       defaultSimpleTaffyConfig
-        { startWidgets = [workspaces],
+        { startupHook = setupIcons mainDir,
+          startWidgets = [workspaces],
           centerWidgets = [clock],
           endWidgets = [memWidget mainDir, cpuWidget mainDir, batWidget, sniTrayNew],
           barPosition = Top,
-          barHeight = read "ExactSize 45",
+          barHeight = read "ExactSize 40",
           cssPaths = [mainDir </> "styles" </> "taffybar.css"]
         }
   where
