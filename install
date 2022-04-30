@@ -1,5 +1,6 @@
 #!/bin/sh
 
+# TODO Need also install lux
 sudo apt install pasystray network-manager-gnome blueman synapse ssh-askpass-gnome
 
 if ! command -v status-notifier-watcher; then

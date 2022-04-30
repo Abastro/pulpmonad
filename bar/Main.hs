@@ -3,6 +3,7 @@
 module Main (main) where
 
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Map qualified as M
 import Data.Maybe
 import Data.Text qualified as T
@@ -18,6 +19,7 @@ import System.Taffybar.SimpleConfig hiding
   ( barPadding,
   )
 import System.Taffybar.Widget
+import System.Taffybar.Widget.Generic.AutoSizeImage
 import System.Taffybar.Widget.Generic.Icon
 import System.Taffybar.Widget.Generic.PollingBar
 import XMonad.ManageHook
@@ -28,6 +30,11 @@ setupIcons :: FilePath -> TaffyIO ()
 setupIcons mainDir = do
   defaultTheme <- Gtk.iconThemeGetDefault
   Gtk.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
+
+autoSizeIconNew :: T.Text -> TaffyIO Gtk.Widget
+autoSizeIconNew name = do
+  image <- Gtk.imageNewFromIconName (Just name) (fromIntegral $ fromEnum Gtk.IconSizeLargeToolbar)
+  Gtk.toWidget image
 
 runOnClick :: IO () -> Gdk.EventButton -> IO Bool
 runOnClick act btn = do
@@ -56,10 +63,14 @@ cpuCallback = do
 cpuWidget :: FilePath -> TaffyIO Gtk.Widget
 cpuWidget _ = do
   -- The display
+  {-
   disp <- pollingIconImageWidgetNewFromName (cpuN (0 :: Int)) 0.1 $ do
     cpu :: Int <- round . (* 5) <$> cpuCallback
     pure (cpuN cpu)
+  -}
+  disp <- autoSizeIconNew "cpu-000"
 
+  -- TODO Exhausted while working on the widgets.. perhaps I should not rely on taffybar for most
   -- TODO Animation for CPU?
   -- Add button events
   ev <- Gtk.eventBoxNew
@@ -77,7 +88,8 @@ memCallback = memoryUsedRatio <$> parseMeminfo
 memWidget :: FilePath -> TaffyIO Gtk.Widget
 memWidget _ = do
   -- Foreground and the Bar
-  fg <- iconImageWidgetNewFromName "ram-000"
+  fg <- autoSizeIconNew "ram-000"
+  Gtk.setWidgetHalign fg Gtk.AlignCenter
   bar <- pollingBarNew memCfg 0.5 memCallback
   barCtxt <- Gtk.widgetGetStyleContext bar
   Gtk.styleContextAddClass barCtxt "mem-bar"
@@ -96,7 +108,7 @@ memWidget _ = do
   Gtk.toWidget ev
   where
     memCfg =
-      (defaultBarConfig $ const (0.1, 0.6, 0.9)) {barWidth = 9, barPadding = 0}
+      (defaultBarConfig $ const (0.1, 0.6, 0.9)) {barWidth = 6, barPadding = 0}
 
 workspaceMaps :: M.Map String String
 workspaceMaps =

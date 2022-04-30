@@ -121,8 +121,8 @@ button:checked, button:hover .Contents:hover {
 }
 
 .mem-bar {
-	padding-top: 6px;
-	padding-bottom: 6px;
+	padding-top: 10px;
+	padding-bottom: 10px;
 	padding-left: 4px;
 	padding-right: 6px;
 }

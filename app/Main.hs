@@ -1,8 +1,8 @@
 module Main (main) where
 
 import Defines
+import Selects
 import StartHook
-import System.Posix
 import XMonad
 import XMonad.Actions.MouseResize (mouseResize)
 import XMonad.Config.Desktop (desktopConfig)
@@ -12,8 +12,12 @@ import XMonad.Hooks.EwmhDesktops
 import XMonad.Hooks.FadeWindows
 import XMonad.Hooks.ManageDocks
 import XMonad.Hooks.ManageHelpers
+import XMonad.Hooks.Minimize
 import XMonad.Hooks.SetWMName (setWMName)
+import XMonad.Hooks.StatusBar
 import XMonad.Hooks.TaffybarPagerHints (pagerHints)
+import XMonad.Layout.Maximize
+import XMonad.Layout.Minimize
 import XMonad.Layout.NoBorders (smartBorders)
 import XMonad.Layout.PerWorkspace
 import XMonad.Layout.Tabbed
@@ -21,7 +25,6 @@ import XMonad.Util.EZConfig (additionalKeysP, additionalMouseBindings)
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
-import XMonad.Hooks.StatusBar
 
 (scTerm, scIRC) =
   ( NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") doCenterFloat,
@@ -31,12 +34,14 @@ import XMonad.Hooks.StatusBar
 scratchpads = [scTerm, scIRC]
 
 myLayout =
-  onWorkspaces [code, pics] (tabbed shrinkText myTabCfg) $
-    tall ||| wide ||| myTab
+  minimize . maximize
+    . onWorkspaces [code, pics] myTab
+    $ tall ||| wide ||| myTab
   where
     myTabCfg = (theme adwaitaDarkTheme) {decoHeight = 50}
     tall = Tall 1 (3 / 100) (1 / 2)
     wide = Mirror (Tall 1 (3 / 100) (1 / 2))
+    -- Tabbed Left is not great for now. Gotta work my own lateer
     myTab = tabbed shrinkText myTabCfg
 
 staticManage =
@@ -73,12 +78,13 @@ main = do
         ]
       keysBasic =
         [ ("M-p", safeSpawnProg "synapse"),
-          ("M-M1-<Delete>", safeSpawn "systemctl" ["poweroff"]),
           ("<XF86MonBrightnessUp>", safeSpawn "lux" ["-a", "5%"]),
           ("<XF86MonBrightnessDown>", safeSpawn "lux" ["-s", "5%"]),
           ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "+5%"]),
           ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "-5%"]),
-          ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
+          ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"]),
+          ("M-S-x", actSystemCtl sysCtlCfg dirs),
+          ("M-s", actGotoWindow gotoCfg)
         ]
       keysScreenshot =
         [ ("<Print>", spawn "sleep 0.2; gnome-screenshot"),
@@ -86,10 +92,20 @@ main = do
           ("C-<Print>", spawn "gnome-screenshot -i")
         ]
       keysSpecial =
-        [ ("M-M1-d", debugStack),
-          ("M-c", io $ () <$ forkProcess (() <$ recompile dirs False))
-          -- ("M-q",  restart (xmCache </> "xmonad-x86_64-linux") True)
-        ]
+        [("M-M1-d", debugStack)]
+
+      sysCtlCfg =
+        def
+          { ts_background = 0x02080808,
+            ts_node = (0xffa0a0a0, 0xff282828),
+            ts_nodealt = (0xffa0a0a0, 0xff2b2b2b),
+            ts_highlight = (0xffb0b0b0, 0xff383838),
+            ts_font = "xft:Sans-12"
+          }
+      gotoCfg =
+        def {
+          gs_bordercolor = "#404040"
+        }
 
       onStart = do
         setWMName "LG3D"
@@ -97,7 +113,7 @@ main = do
         safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "background.jpg"]
         copyConfig xmDir
         initiatePrograms
-      
+
       pulpBar = statusBarGeneric (xmCache </> "pulpbar") mempty
 
   xmonad . ewmhFullscreen . pagerHints . withSB pulpBar $
@@ -109,7 +125,7 @@ main = do
         startupHook = startupHook cfg <> onStart,
         manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads,
         layoutHook = mouseResize . smartBorders . avoidStruts $ myLayout,
-        handleEventHook = handleEventHook cfg,
+        handleEventHook = handleEventHook cfg <> minimizeEventHook,
         modMask = mod4Mask -- Super key
       }
       `additionalMouseBindings` mouseMove

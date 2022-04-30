@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               pulpmonad
-version:            0.1.1.0
+version:            0.1.2.0
 synopsis:           Pulpmonad, xmonad config
 
 -- A longer description of the package.
@@ -43,6 +43,7 @@ library
   exposed-modules:
     Defines
     StartHook
+    Selects
 
 executable pulpmonad
   import:              pulpexe
@@ -63,4 +64,5 @@ executable pulpbar
     , gi-gtk ==3.*
     , gi-gdk ==3.*
     , gtk-strut >=0.1.4
+    , gtk-sni-tray ==0.1.*
     , taffybar ==3.4.*
