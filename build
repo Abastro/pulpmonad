@@ -7,14 +7,14 @@ cache=$( dirname "$1" )
 echo "[PulpMonad Build] Begin"
 mkfifo cabalout
 
-cabal build "exe:$cfgid" "exe:$barid" | tee cabalout &
+# Dry run build to check for updates
+cabal build "exe:$cfgid" "exe:$barid" --dry-run | tee cabalout &
 if ! grep -q "Up to date" <cabalout ; then
   cabal install "exe:$cfgid" "exe:$barid" \
     --installdir="$cache" --install-method=copy \
     --overwrite-policy=always
   ln -sf "$cache/$cfgid" "$output"
-  # To make next Up-To-Date build faster
-  cabal build "exe:$cfgid" "exe:$barid"
+  cabal build "exe:$cfgid" "exe:$barid" # Build needs to be done, since we just did dry-run
 fi
 
 rm cabalout

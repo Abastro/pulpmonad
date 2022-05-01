@@ -103,9 +103,9 @@ main = do
             ts_font = "xft:Sans-12"
           }
       gotoCfg =
-        def {
-          gs_bordercolor = "#404040"
-        }
+        def
+          { gs_bordercolor = "#404040"
+          }
 
       onStart = do
         setWMName "LG3D"
