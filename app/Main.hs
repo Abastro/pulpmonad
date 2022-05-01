@@ -41,7 +41,7 @@ myLayout =
     myTabCfg = (theme adwaitaDarkTheme) {decoHeight = 50}
     tall = Tall 1 (3 / 100) (1 / 2)
     wide = Mirror (Tall 1 (3 / 100) (1 / 2))
-    -- Tabbed Left is not great for now. Gotta work my own lateer
+    -- Tabbed Left is not great for now. Gotta work my own later
     myTab = tabbed shrinkText myTabCfg
 
 staticManage =
