@@ -20,7 +20,7 @@ selectEnum cfg = treeselect cfg $ pure . nodeOf <$> [minBound .. maxBound]
   where
     nodeOf en = TSNode (show en) "" en
 
-data SystemCtl = Recompile | Refresh | LogOut | Reboot | PowerOff
+data SystemCtl = Recompile | Refresh | Logout | Reboot | PowerOff
   deriving (Show, Enum, Bounded)
 
 actSystemCtl :: TSConfig SystemCtl -> Directories -> X ()
@@ -41,7 +41,7 @@ actSystemCtl cfg dirs = withDisplay $ \disp -> do
   for_ ctl $ \case
     Recompile -> io $ () <$ forkProcess (() <$ recompile dirs False)
     Refresh -> safeSpawn "xmonad" ["--restart"]
-    LogOut -> io $ exitWith ExitSuccess
+    Logout -> io $ exitWith ExitSuccess
     Reboot -> safeSpawn "systemctl" ["reboot"]
     PowerOff -> safeSpawn "systemctl" ["poweroff"]
 

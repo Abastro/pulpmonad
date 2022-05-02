@@ -33,7 +33,7 @@ setupIcons mainDir = do
 
 autoSizeIconNew :: T.Text -> TaffyIO Gtk.Widget
 autoSizeIconNew name = do
-  image <- Gtk.imageNewFromIconName (Just name) (fromIntegral $ fromEnum Gtk.IconSizeLargeToolbar)
+  image <- Gtk.imageNewFromIconName (Just name) (fromIntegral $ fromEnum Gtk.IconSizeDnd)
   Gtk.toWidget image
 
 runOnClick :: IO () -> Gdk.EventButton -> IO Bool
@@ -59,7 +59,6 @@ cpuCallback = do
   (_, _, totalLoad) <- cpuLoad
   return totalLoad
 
--- FIXME currently, it blurs. Better way?
 cpuWidget :: FilePath -> TaffyIO Gtk.Widget
 cpuWidget _ = do
   -- The display
@@ -87,16 +86,21 @@ memCallback = memoryUsedRatio <$> parseMeminfo
 
 memWidget :: FilePath -> TaffyIO Gtk.Widget
 memWidget _ = do
+  -- Workaround since overlay limits placement
+  hack <- autoSizeIconNew "ram-000"
+
   -- Foreground and the Bar
   fg <- autoSizeIconNew "ram-000"
-  Gtk.setWidgetHalign fg Gtk.AlignCenter
+
+  -- TODO Manual refitting sucks, how to do better?
   bar <- pollingBarNew memCfg 0.5 memCallback
   barCtxt <- Gtk.widgetGetStyleContext bar
   Gtk.styleContextAddClass barCtxt "mem-bar"
 
   -- Overlay bg image above memory bar
   wid <- Gtk.overlayNew
-  Gtk.containerAdd wid bar
+  Gtk.containerAdd wid hack
+  Gtk.overlayAddOverlay wid bar
   Gtk.overlayAddOverlay wid fg
 
   -- Add button events
@@ -108,7 +112,7 @@ memWidget _ = do
   Gtk.toWidget ev
   where
     memCfg =
-      (defaultBarConfig $ const (0.1, 0.6, 0.9)) {barWidth = 6, barPadding = 0}
+      (defaultBarConfig $ const (0.1, 0.6, 0.9)) {barWidth = 7, barPadding = 0}
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -130,7 +134,7 @@ main = do
         { startupHook = setupIcons mainDir,
           startWidgets = [workspaces],
           centerWidgets = [clock],
-          endWidgets = [memWidget mainDir, cpuWidget mainDir, batWidget, sniTrayNew],
+          endWidgets = [cpuWidget mainDir, memWidget mainDir, batWidget, sniTrayNew],
           barPosition = Top,
           barHeight = read "ExactSize 40",
           cssPaths = [mainDir </> "styles" </> "taffybar.css"]
