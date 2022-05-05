@@ -1,0 +1,6 @@
+# Profile PulpMonad
+ID: "pulpmonad"
+name: "PulpMonad"
+details: "Pulp-styled profile with UIs"
+install: "./install"
+buildOnStart: false
