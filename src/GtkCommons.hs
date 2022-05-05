@@ -38,6 +38,11 @@ import GI.Gtk.Objects.StyleContext
 import GI.Gtk.Objects.Widget
 import XMonad.StackSet (RationalRect (..))
 
+-- TODO
+-- 1. These GTK stuffs should be separate from XMonad.
+-- Separate build routine? Certainly have enough to handle one myself.
+-- 2. Taffybar is suboptimal, esp. dependency. Cook one up myself?
+
 delaySeconds :: Double -> IO ()
 delaySeconds interval = threadDelay $ floor (interval * 1000000)
 

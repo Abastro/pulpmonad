@@ -26,12 +26,11 @@ import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
 
-(scTerm, scIRC) =
-  ( NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") doCenterFloat,
-    NS "irc" "gnome-terminal --class=irc -- glirc" (className =? "irc") doCenterFloat
+scTerm =
+  ( NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") doCenterFloat
   )
 
-scratchpads = [scTerm, scIRC]
+scratchpads = [scTerm]
 
 myLayout =
   minimize . maximize
@@ -74,7 +73,6 @@ main = do
         [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "xmbindings.png"]),
           ("M-d", safeSpawnProg "nautilus"),
           ("M-M1-t", namedScratchpadAction scratchpads (name scTerm)),
-          ("M-M1-c", namedScratchpadAction scratchpads (name scIRC)),
           ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
         ]
       keysBasic =

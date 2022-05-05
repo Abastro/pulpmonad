@@ -7,3 +7,4 @@ Setup.hs
 *.freeze
 
 .vscode
+*.code-workspace

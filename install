@@ -1,6 +1,7 @@
 #!/bin/sh
 cfg=$( dirname "$0" )
 
+# MAYBE Copying assets?
 # TODO Need also install lux
 sudo apt install pasystray network-manager-gnome blueman synapse ssh-askpass-gnome
 
