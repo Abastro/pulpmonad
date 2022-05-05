@@ -9,7 +9,6 @@ where
 
 import Data.Foldable
 import System.Exit
-import System.Posix
 import XMonad
 import XMonad.Actions.GridSelect
 import XMonad.Actions.TreeSelect
@@ -24,7 +23,7 @@ data SystemCtl = Recompile | Refresh | Logout | Reboot | PowerOff
   deriving (Show, Enum, Bounded)
 
 actSystemCtl :: TSConfig SystemCtl -> Directories -> X ()
-actSystemCtl cfg dirs = withDisplay $ \disp -> do
+actSystemCtl cfg _dirs = withDisplay $ \disp -> do
   -- TODO Improve (or start GTK UI)
   let dispW = fromIntegral $ displayWidth disp (defaultScreen disp)
       dispH = fromIntegral $ displayHeight disp (defaultScreen disp)
@@ -39,7 +38,8 @@ actSystemCtl cfg dirs = withDisplay $ \disp -> do
           ts_originY = (dispH - ctlH * fromEnum @SystemCtl maxBound) `div` 2
         }
   for_ ctl $ \case
-    Recompile -> io $ () <$ forkProcess (() <$ recompile dirs False)
+    -- TODO Using terminal to display is lame
+    Recompile -> safeSpawn "gnome-terminal" ["--class=term-float", "--", "xmonad", "--recompile"]
     Refresh -> safeSpawn "xmonad" ["--restart"]
     Logout -> io $ exitWith ExitSuccess
     Reboot -> safeSpawn "systemctl" ["reboot"]

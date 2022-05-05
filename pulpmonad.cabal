@@ -22,13 +22,23 @@ common pulp
       base >=4.14 && <5
     , vector ==0.12.*
     , containers ==0.6.*
+    , mtl ==2.2.*
     , text ==1.2.*
     , filepath
     , directory
     , X11
     , unix
+    , stm == 2.5.*
     , xmonad >=0.13
     , xmonad-contrib >=0.14
+    , enclosed-exceptions ==1.0.*
+    , broadcast-chan ==0.2.*
+    , haskell-gi ==0.26.*
+    , gi-gtk ==3.*
+    , gi-gdk ==3.*
+    , gi-gtk-hs ==0.3.*
+    , gi-cairo-render ==0.1.*
+    , gi-cairo-connector ==0.1.*
 
   default-language:    GHC2021
   ghc-options:         -W
@@ -44,6 +54,7 @@ library
     Defines
     StartHook
     Selects
+    GtkCommons
 
 executable pulpmonad
   import:              pulpexe
@@ -60,9 +71,6 @@ executable pulpbar
   other-modules:
   build-depends:
       pulpmonad
-    , haskell-gi ==0.26.*
-    , gi-gtk ==3.*
-    , gi-gdk ==3.*
     , gtk-strut >=0.1.4
     , gtk-sni-tray ==0.1.*
     , taffybar ==3.4.*

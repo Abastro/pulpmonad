@@ -54,6 +54,7 @@ staticManage =
       className =? "Gnome-calculator" --> doCenterFloat,
       className =? "Gnome-system-monitor" --> doCenterFloat,
       className =? "Gnome-control-center" --> doCenterFloat,
+      className =? "term-float" --> doCenterFloat,
       className =? "Eog" --> doCenterFloat,
       className =? "Steam" --> doF (shift pics),
       className =? "kakaotalk.exe"

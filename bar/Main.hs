@@ -2,27 +2,26 @@
 
 module Main (main) where
 
-import Control.Monad
-import Control.Monad.IO.Class
+import BroadcastChan
+import Control.Monad.Reader
 import Data.Map qualified as M
 import Data.Maybe
+import Data.Ratio ((%))
 import Data.Text qualified as T
 import Defines
-import GI.Gdk qualified as Gdk
-import GI.Gtk qualified as Gtk
+import GtkCommons qualified as Gtk
 import System.Environment
-import System.Taffybar
+import System.Taffybar (startTaffybar)
 import System.Taffybar.Context (TaffyIO)
+import System.Taffybar.Information.Battery (BatteryInfo (..), getDisplayBatteryChan, getDisplayBatteryInfo)
 import System.Taffybar.Information.CPU
 import System.Taffybar.Information.Memory
 import System.Taffybar.SimpleConfig hiding
   ( barPadding,
   )
 import System.Taffybar.Widget
-import System.Taffybar.Widget.Generic.AutoSizeImage
-import System.Taffybar.Widget.Generic.Icon
-import System.Taffybar.Widget.Generic.PollingBar
 import XMonad.ManageHook
+import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
 
@@ -31,88 +30,56 @@ setupIcons mainDir = do
   defaultTheme <- Gtk.iconThemeGetDefault
   Gtk.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
 
-autoSizeIconNew :: T.Text -> TaffyIO Gtk.Widget
-autoSizeIconNew name = do
-  image <- Gtk.imageNewFromIconName (Just name) (fromIntegral $ fromEnum Gtk.IconSizeDnd)
-  Gtk.toWidget image
-
-runOnClick :: IO () -> Gdk.EventButton -> IO Bool
-runOnClick act btn = do
-  b <- Gdk.getEventButtonButton btn
-  True <$ when (b == 1) act
-
 batWidget :: TaffyIO Gtk.Widget
 batWidget = do
   -- The display
-  disp <- batteryIconNew
+  disp <- do
+    chan <- getDisplayBatteryChan
+    getBatName <- asks (runReaderT $ T.pack . batteryIconName <$> getDisplayBatteryInfo)
+    Gtk.iconNewChanneling (readBChan <$> newBChanListener chan) getBatName
 
-  -- Add button events
-  ev <- Gtk.eventBoxNew
-  Gtk.containerAdd ev disp
-  Gtk.onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-control-center" ["power"]
-
-  Gtk.widgetShowAll ev
-  Gtk.toWidget ev
+  ev <- Gtk.widgetClickable disp $ safeSpawn "gnome-control-center" ["power"]
+  ev <$ Gtk.widgetShowAll ev
 
 cpuCallback :: IO Double
 cpuCallback = do
   (_, _, totalLoad) <- cpuLoad
   return totalLoad
 
-cpuWidget :: FilePath -> TaffyIO Gtk.Widget
-cpuWidget _ = do
-  -- The display
-  {-
-  disp <- pollingIconImageWidgetNewFromName (cpuN (0 :: Int)) 0.1 $ do
-    cpu :: Int <- round . (* 5) <$> cpuCallback
-    pure (cpuN cpu)
-  -}
-  disp <- autoSizeIconNew "cpu-000"
-
-  -- TODO Exhausted while working on the widgets.. perhaps I should not rely on taffybar for most
-  -- TODO Animation for CPU?
-  -- Add button events
-  ev <- Gtk.eventBoxNew
-  Gtk.containerAdd ev disp
-  Gtk.onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-system-monitor" ["-r"]
-
-  Gtk.widgetShowAll ev
-  Gtk.toWidget ev
-  where
-    cpuN n = T.pack $ printf "cpu-%03d" (n * 20)
-
 memCallback :: IO Double
 memCallback = memoryUsedRatio <$> parseMeminfo
 
-memWidget :: FilePath -> TaffyIO Gtk.Widget
-memWidget _ = do
-  -- Workaround since overlay limits placement
-  hack <- autoSizeIconNew "ram-000"
+mainboardWidget :: TaffyIO Gtk.Widget
+mainboardWidget = do
+  mem <- do
+    hack <- Gtk.iconNewFromName "ram-000"
+    fg <- Gtk.iconNewFromName "ram-000"
+    let barRect = RationalRect (13 % 32) (8 % 32) (19 % 32) (24 % 32)
+    bar <- Gtk.barNewPolling barRect (0.1, 0.6, 0.9) 0.5 memCallback
+    Gtk.overlayed hack [bar, fg]
+  Gtk.setWidgetHalign mem Gtk.AlignStart
 
-  -- Foreground and the Bar
-  fg <- autoSizeIconNew "ram-000"
+  cpu <- do
+    -- MAYBE Use temperature
+    icon <- Gtk.iconNewPolling 0.1 $ do
+      cpu :: Int <- round . (* 5) <$> cpuCallback
+      pure (cpuN cpu)
 
-  -- TODO Manual refitting sucks, how to do better?
-  bar <- pollingBarNew memCfg 0.5 memCallback
-  barCtxt <- Gtk.widgetGetStyleContext bar
-  Gtk.styleContextAddClass barCtxt "mem-bar"
+    let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
+    bar <- Gtk.barNewPolling barRect (0.9, 0.6, 0.1) 0.1 cpuCallback
+    Gtk.overlayed icon [bar]
+  Gtk.setWidgetHalign cpu Gtk.AlignEnd
 
-  -- Overlay bg image above memory bar
-  wid <- Gtk.overlayNew
-  Gtk.containerAdd wid hack
-  Gtk.overlayAddOverlay wid bar
-  Gtk.overlayAddOverlay wid fg
+  bg <- do
+    img <- Gtk.imageNew -- Will set image later
+    Gtk.widgetSetSizeRequest img 56 32
+    Gtk.toWidget img
 
-  -- Add button events
-  ev <- Gtk.eventBoxNew
-  Gtk.containerAdd ev wid
-  Gtk.onWidgetButtonReleaseEvent ev $ runOnClick $ safeSpawn "gnome-system-monitor" ["-r"]
-
-  Gtk.widgetShowAll ev
-  Gtk.toWidget ev
+  disp <- Gtk.overlayed bg [cpu, mem]
+  ev <- Gtk.widgetClickable disp $ safeSpawn "gnome-system-monitor" ["-r"]
+  ev <$ Gtk.widgetShowAll ev
   where
-    memCfg =
-      (defaultBarConfig $ const (0.1, 0.6, 0.9)) {barWidth = 7, barPadding = 0}
+    cpuN n = T.pack $ printf "cpu-%03d" (n * 20)
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -134,7 +101,7 @@ main = do
         { startupHook = setupIcons mainDir,
           startWidgets = [workspaces],
           centerWidgets = [clock],
-          endWidgets = [cpuWidget mainDir, memWidget mainDir, batWidget, sniTrayNew],
+          endWidgets = [mainboardWidget, batWidget, sniTrayNew],
           barPosition = Top,
           barHeight = read "ExactSize 40",
           cssPaths = [mainDir </> "styles" </> "taffybar.css"]
