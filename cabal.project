@@ -1,5 +1,7 @@
 packages:
-  ./pulpmonad.cabal
+  common/pulp-commons.cabal
+  desk/pulpdesk.cabal
+  winman/pulpmonad.cabal
 
 with-compiler: ghc-9.2.2
 allow-newer:

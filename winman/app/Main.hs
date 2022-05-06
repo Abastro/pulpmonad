@@ -21,10 +21,17 @@ import XMonad.Layout.Minimize
 import XMonad.Layout.NoBorders (smartBorders)
 import XMonad.Layout.PerWorkspace
 import XMonad.Layout.Tabbed
+import XMonad.StackSet (shift)
 import XMonad.Util.EZConfig (additionalKeysP, additionalMouseBindings)
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
+
+role :: Query String
+role = stringProperty "WM_WINDOW_ROLE"
+
+_leftClick, _rightClick, middleClick :: Button
+(_leftClick, _rightClick, middleClick) = (button1, button3, button2)
 
 scTerm =
   ( NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") doCenterFloat

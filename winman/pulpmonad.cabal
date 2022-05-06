@@ -1,14 +1,14 @@
 cabal-version:      2.4
-name:               pulpdesk
+name:               pulpmonad
 version:            0.1.0.0
-synopsis:           Desktop UIs for pulpmonad
+synopsis:           Pulpmonad - XMonad configuration
 license:            BSD-3-Clause
 license-file:       LICENSE
 author:             Abastro
 maintainer:         abab9579@gmail.com
 copyright:          2022 Abastro
 
-common pulp-gtk
+common pulp-xmonad
   default-extensions:
     LambdaCase
   default-language:    GHC2021
@@ -26,29 +26,19 @@ common pulp-gtk
     , stm == 2.5.*
     , xmonad >=0.13
     , xmonad-contrib >=0.14
-    , enclosed-exceptions ==1.0.*
-    , broadcast-chan ==0.2.*
-    , haskell-gi ==0.26.*
-    , gi-gtk ==3.*
-    , gi-gdk ==3.*
-    , gi-gtk-hs ==0.3.*
-    , gi-cairo-render ==0.1.*
-    , gi-cairo-connector ==0.1.*
     , pulp-commons
 
 library
-  import:             pulp-gtk
+  import:             pulp-xmonad
   hs-source-dirs:     src
   exposed-modules:
-    GtkCommons
+    StartHook
+    Selects
 
-executable pulpbar
-  import:             pulp-gtk
+executable pulpmonad
+  import:             pulp-xmonad
   main-is:            Main.hs
-  hs-source-dirs:     bar
-  ghc-options:        -threaded +RTS -N -RTS
+  hs-source-dirs:     app
+  ghc-options:         -threaded +RTS -N -RTS
   build-depends:
-      pulpdesk
-    , gtk-strut >=0.1.4
-    , gtk-sni-tray ==0.1.*
-    , taffybar ==3.4.*
+    pulpmonad

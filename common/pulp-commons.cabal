@@ -1,0 +1,29 @@
+cabal-version:      2.4
+name:               pulp-commons
+version:            0.1.0.0
+synopsis:           Common library for pulpmonad
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Abastro
+maintainer:         abab9579@gmail.com
+copyright:          2022 Abastro
+
+library
+  hs-source-dirs:       src
+  default-extensions:
+    LambdaCase
+  default-language:     GHC2021
+  ghc-options:          -W
+  build-depends:
+      base >=4.14 && <5
+    , vector ==0.12.*
+    , containers ==0.6.*
+    , mtl ==2.2.*
+    , text ==1.2.*
+    , filepath
+    , directory
+    , X11
+    , unix
+    , stm == 2.5.*
+  exposed-modules:
+    Defines
