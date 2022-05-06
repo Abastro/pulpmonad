@@ -2,7 +2,6 @@ module Main (main) where
 
 import Defines
 import Selects
-import StartHook
 import XMonad
 import XMonad.Actions.MouseResize (mouseResize)
 import XMonad.Config.Desktop (desktopConfig)
@@ -117,8 +116,6 @@ main = do
         setWMName "LG3D"
         gnomeRegister -- Registers xmonad with gnome
         safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "background.jpg"]
-        copyConfig xmDir
-        initiatePrograms
 
       pulpBar = statusBarGeneric (xmCache </> "pulpbar") mempty
 

@@ -2,18 +2,12 @@ module StartHook where
 
 import Control.Monad
 import Data.Coerce
-import Data.Foldable
 import Data.Kind (Type)
 import Data.Proxy
 import Data.Set qualified as S
 import Data.Typeable
-import Defines
-import System.Environment
-import System.IO
 import XMonad
 import XMonad.Util.ExtensibleState qualified as XS
-import XMonad.Util.Run
-import XMonad.Util.SpawnOnce
 
 modifyingM :: (ExtensionClass a) => (a -> X a) -> X ()
 modifyingM f = XS.get >>= f >>= XS.put
@@ -36,27 +30,4 @@ performOnce proxy run =
 -- | Designate initiation.
 data Initiate
 
--- | Copies configurations.
-copyConfig :: FilePath -> X ()
-copyConfig mainDir = do
-  liftIO $ do
-    gtk2 <- getXdgDirectory XdgConfig "gtk-2.0"
-    let gtk2rc = gtk2 </> ".gtkrc-2.0"
-    setEnv "GTK2_RC_FILES" gtk2rc
-    copyFile (mainDir </> "cfg" </> ".gtkrc-2.0") gtk2rc
-  liftIO $ do
-    gtk3 <- getXdgDirectory XdgConfig "gtk-3.0"
-    copyFile (mainDir </> "cfg" </> "settings.ini") (gtk3 </> "settings.ini")
-
--- | Initiate programs.
-initiatePrograms :: X ()
-initiatePrograms = performOnce (Proxy @Initiate) $ do
-  liftIO $ hPrintf stderr "[Normal] Initiating programs... \n"
-  safeSpawnProg "status-notifier-watcher"
-  safeSpawnProg "pasystray"
-  safeSpawn "nm-applet" ["--sm-disable", "--indicator"]
-  safeSpawnProg "blueman-applet"
-  safeSpawn "synapse" ["-s"]
-
-  liftIO $ findExecutable "ssh-askpass" >>= traverse_ (setEnv "SSH_ASKPASS")
-  spawnOnce "ssh-add"
+-- What would be here?
