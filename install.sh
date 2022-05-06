@@ -1,5 +1,5 @@
 #!/bin/sh
-cfg=$( dirname "$0" )
+cfg="$XMONAD_CONFIG_DIR"
 
 # MAYBE Copying assets?
 # TODO Need also install lux

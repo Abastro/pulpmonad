@@ -1,8 +1,0 @@
-cradle:
-  cabal:
-    - path: "./src"
-      component: "lib:pulpmonad"
-    - path: "./app"
-      component: "exe:pulpmonad"
-    - path: "./bar"
-      component: "exe:pulpbar"

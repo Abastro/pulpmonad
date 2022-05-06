@@ -39,7 +39,8 @@ actSystemCtl cfg _dirs = withDisplay $ \disp -> do
         }
   for_ ctl $ \case
     -- TODO Using terminal to display is lame
-    Recompile -> safeSpawn "gnome-terminal" ["--class=term-float", "--", "xmonad", "--recompile"]
+    Recompile -> safeSpawn "gnome-terminal" ["--class=term-float", "--", "xmonad-manage", "build", "pulpmonad"]
+    -- TODO Restart routine
     Refresh -> safeSpawn "xmonad" ["--restart"]
     Logout -> io $ exitWith ExitSuccess
     Reboot -> safeSpawn "systemctl" ["reboot"]

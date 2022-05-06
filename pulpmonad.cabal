@@ -12,7 +12,7 @@ author:             Abastro
 maintainer:         abab9579@gmail.com
 copyright:          2022 Abastro
 extra-source-files:
-    README.md
+  README.md
 
 common pulp
   default-extensions:

@@ -1,0 +1,26 @@
+cabal-version:      2.4
+name:               pulpdesk
+version:            0.1.0.0
+synopsis:           Desktop UIs for pulpmonad
+-- description:
+license:            LICENSE
+author:             Abastro
+maintainer:         abab9579@gmail.com
+copyright:          Abastro 2022
+
+common pulp
+  default-extensions:
+    LambdaCase
+  default-language:    GHC2021
+  ghc-options:         -W -threaded +RTS -N -RTS
+
+library
+  import:           pulp
+  hs-source-dirs:   src
+
+executable desk
+  import:           pulp
+  main-is:          Main.hs
+  build-depends:    base ^>=4.16.1.0
+  hs-source-dirs:   app
+  default-language: Haskell2010

@@ -1,5 +1,3 @@
-{-# LANGUAGE ImplicitParams #-}
-
 module GtkCommons
   ( iconNewFromName,
     iconNewPolling,
@@ -51,8 +49,8 @@ iconNewWith realize unrealize = do
   image <- imageNew
   _ <- onWidgetRealize image $ do
     let sizeEnum = fromIntegral $ fromEnum IconSizeDnd
-    key <- realize $ \name -> imageSetFromIconName ?self (Just name) sizeEnum
-    () <$ onWidgetUnrealize ?self (unrealize key)
+    key <- realize $ \name -> imageSetFromIconName image (Just name) sizeEnum
+    () <$ onWidgetUnrealize image (unrealize key)
   toWidget image
 
 iconNewFromName :: MonadIO m => T.Text -> m Widget
@@ -99,7 +97,7 @@ barNewPolling relative color interval getFill = do
     forkIO . forever $ do
       tryAny $ do
         getFill >>= atomically . writeTVar fvar
-        postGUIASync $ widgetQueueDraw ?self
+        postGUIASync $ widgetQueueDraw area
       delaySeconds interval
     -- Rendering
     _ <- onWidgetDraw area $ \ctx -> do

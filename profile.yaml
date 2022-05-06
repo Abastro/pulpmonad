@@ -2,5 +2,7 @@
 ID: "pulpmonad"
 name: "PulpMonad"
 details: "Pulp-styled profile with UIs"
-install: "./install"
+install: "./install.sh"
+build: "./build.sh"
+run: "./run.sh"
 buildOnStart: false

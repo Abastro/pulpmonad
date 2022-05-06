@@ -1,4 +1,5 @@
-packages: .
+packages:
+  ./pulpmonad.cabal
 
 with-compiler: ghc-9.2.2
 allow-newer:
