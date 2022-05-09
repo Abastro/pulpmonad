@@ -123,6 +123,7 @@ staticManage =
   composeAll
     [ resource =? "synapse" --> doIgnore,
       className =? "Gimp" --> doF (shift pics),
+      className =? "Inkscape" --> doF (shift pics),
       role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink,
       className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE,
       className =? "Soffice" <&&> isFullscreen --> doFullFloat,
