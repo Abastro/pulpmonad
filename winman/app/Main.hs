@@ -123,8 +123,8 @@ staticManage =
   composeAll
     [ resource =? "synapse" --> doIgnore,
       className =? "Gimp" --> doF (shift pics),
-      className =? "Inkscape" --> doF (shift pics),
       role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink,
+      className =? "Inkscape" --> doF (shift pics),
       className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE,
       className =? "Soffice" <&&> isFullscreen --> doFullFloat,
       className =? "Gnome-calculator" --> doCenterFloat,
@@ -135,5 +135,5 @@ staticManage =
       className =? "Steam" --> doF (shift game),
       className =? "kakaotalk.exe"
         <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doIgnore,
-      isDialog --> doFloat
+      isDialog --> doCenterFloat
     ]
