@@ -22,8 +22,8 @@ selectEnum cfg = treeselect cfg $ pure . nodeOf <$> [minBound .. maxBound]
 data SystemCtl = Recompile | Refresh | Logout | Reboot | PowerOff
   deriving (Show, Enum, Bounded)
 
-actSystemCtl :: TSConfig SystemCtl -> Directories -> X ()
-actSystemCtl cfg _dirs = withDisplay $ \disp -> do
+actSystemCtl :: TSConfig SystemCtl -> X ()
+actSystemCtl cfg = withDisplay $ \disp -> do
   -- TODO Improve (or start GTK UI)
   let dispW = fromIntegral $ displayWidth disp (defaultScreen disp)
       dispH = fromIntegral $ displayHeight disp (defaultScreen disp)

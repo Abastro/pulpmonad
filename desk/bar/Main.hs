@@ -89,7 +89,8 @@ workspaceMaps =
       (code, "\xf121"),
       (term, "\xf120"),
       (chat, "\xf4ad"),
-      (pics, "\xf03e")
+      (pics, "\xf03e"),
+      (game, "\xf43c")
     ]
 
 main :: IO ()
