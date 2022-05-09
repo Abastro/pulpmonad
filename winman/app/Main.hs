@@ -78,8 +78,7 @@ main = do
       keysUtility =
         [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "xmbindings.png"]),
           ("M-d", safeSpawnProg "nautilus"),
-          ("M-M1-t", namedScratchpadAction scratchpads (name scTerm)),
-          ("M-M1-s", safeSpawnProg "/usr/local/pulse/pulseUi")
+          ("M-M1-t", namedScratchpadAction scratchpads (name scTerm))
         ]
       keysBasic =
         [ ("M-p", safeSpawnProg "synapse"),
