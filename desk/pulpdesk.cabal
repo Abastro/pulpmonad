@@ -52,3 +52,12 @@ executable pulpbar
     , gtk-strut >=0.1.4
     , gtk-sni-tray ==0.1.*
     , taffybar ==3.4.*
+
+executable pulp-sysctl
+  import:             pulp-gtk
+  main-is:            Main.hs
+  hs-source-dirs:     sysctl
+  ghc-options:        -threaded +RTS -N -RTS
+  build-depends:
+      pulpdesk
+    , gi-gio ==2.0.*

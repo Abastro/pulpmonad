@@ -9,6 +9,7 @@ module GtkCommons
     module Data.GI.Gtk.Threading,
     module GI.Gtk.Enums,
     module GI.Gtk.Objects.Widget,
+    module GI.Gtk.Objects.Container,
     module GI.Gtk.Objects.IconTheme,
     module GI.Gtk.Objects.StyleContext,
   )
