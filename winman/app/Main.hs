@@ -17,7 +17,7 @@ import XMonad.Hooks.StatusBar
 import XMonad.Hooks.TaffybarPagerHints (pagerHints)
 import XMonad.Layout.Maximize
 import XMonad.Layout.Minimize
-import XMonad.Layout.NoBorders (smartBorders)
+import XMonad.Layout.NoBorders
 import XMonad.Layout.PerWorkspace
 import XMonad.Layout.Tabbed
 import XMonad.StackSet (shift)
@@ -56,7 +56,7 @@ main = do
         terminal = "gnome-terminal",
         startupHook = onStart <> startupHook cfg,
         manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads,
-        layoutHook = mouseResize . smartBorders . avoidStruts $ myLayout,
+        layoutHook = lessBorders (Combine Union Never OnlyFloat) $ myLayout,
         handleEventHook = handleEventHook cfg <> minimizeEventHook,
         modMask = mod4Mask -- Super key
       }
@@ -104,7 +104,7 @@ scTerm =
 scratchpads = [scTerm]
 
 myLayout =
-  minimize . maximize
+  mouseResize . avoidStruts . minimize . maximize
     . onWorkspaces [code, pics] myTab
     $ tall ||| wide ||| myTab
   where
