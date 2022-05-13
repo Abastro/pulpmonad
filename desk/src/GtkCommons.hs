@@ -2,7 +2,7 @@ module GtkCommons
   ( iconNewFromName,
     iconNewPolling,
     iconNewChanneling,
-    widgetClickable,
+    buttonNewWith,
     overlayed,
     barNewPolling,
     imageNew,
@@ -25,22 +25,18 @@ import Data.GI.Gtk.Threading
 import Data.Text qualified as T
 import GI.Cairo.Render qualified as C
 import GI.Cairo.Render.Connector (renderWithContext)
-import GI.Gdk.Structs.EventButton (getEventButtonButton)
 import GI.Gtk.Enums
 import GI.Gtk.Objects.Container
-import GI.Gtk.Objects.DrawingArea
-import GI.Gtk.Objects.EventBox
 import GI.Gtk.Objects.IconTheme
 import GI.Gtk.Objects.Image
 import GI.Gtk.Objects.Overlay
 import GI.Gtk.Objects.StyleContext
 import GI.Gtk.Objects.Widget
 import XMonad.StackSet (RationalRect (..))
+import GI.Gtk.Objects.Button
 
 -- TODO
--- 1. These GTK stuffs should be separate from XMonad.
--- Separate build routine? Certainly have enough to handle one myself.
--- 2. Taffybar is suboptimal, esp. dependency. Cook one up myself?
+-- Taffybar is suboptimal, esp. dependency. Cook one up myself?
 
 delaySeconds :: Double -> IO ()
 delaySeconds interval = threadDelay $ floor (interval * 1000000)
@@ -69,27 +65,26 @@ iconNewChanneling mkWaiter getName = iconNewWith realize killThread
         tryAny $ getName >>= postGUIASync . setIcon
         waits
 
-widgetClickable :: MonadIO m => Widget -> IO () -> m Widget
-widgetClickable widget onClick = do
-  ev <- eventBoxNew
-  containerAdd ev widget
-  onWidgetButtonReleaseEvent ev handleClick
-  toWidget ev
-  where
-    handleClick btn = do
-      b <- getEventButtonButton btn
-      True <$ when (b == 1) onClick
+buttonNewWith :: MonadIO m => Widget -> IO () -> m Widget
+buttonNewWith widget onClick = do
+  btn <- buttonNew
+  containerAdd btn widget
+  onButtonClicked btn onClick
+  toWidget btn
 
 overlayed :: MonadIO m => Widget -> [Widget] -> m Widget
 overlayed core overlays = do
   overlay <- overlayNew
   containerAdd overlay core
   traverse_ (overlayAddOverlay overlay) overlays
+  -- Pass through inputs
+  traverse_ (\wid -> overlaySetOverlayPassThrough overlay wid True) overlays
   toWidget overlay
 
+-- Uses images, DrawingArea sneaks in Gdk Window for some reason..
 barNewPolling :: MonadIO m => RationalRect -> (Double, Double, Double) -> Double -> IO Double -> m Widget
 barNewPolling relative color interval getFill = do
-  area <- drawingAreaNew
+  area <- imageNew
   setWidgetHalign area AlignFill
   setWidgetValign area AlignFill
   _ <- onWidgetRealize area $ do
@@ -108,7 +103,7 @@ barNewPolling relative color interval getFill = do
   toWidget area
 
 -- For now, assume from down to up
-drawBar :: DrawingArea -> RationalRect -> (Double, Double, Double) -> Double -> C.Render ()
+drawBar :: Image -> RationalRect -> (Double, Double, Double) -> Double -> C.Render ()
 drawBar area relative (red, green, blue) fill = do
   w <- widgetGetAllocatedWidth area
   h <- widgetGetAllocatedHeight area

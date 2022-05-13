@@ -4,7 +4,7 @@ window {
 
 box.btn-area {
   padding: 10px 15px;
-  border: 10px inset rgba(90, 90, 90, 0.8);
+  border: 10px inset rgba(70, 70, 70, 0.8);
   border-radius: 20px;
   background-color: rgba(120, 120, 120, 0.8);
 }

@@ -38,7 +38,7 @@ batWidget = do
     getBatName <- asks (runReaderT $ T.pack . batteryIconName <$> getDisplayBatteryInfo)
     Gtk.iconNewChanneling (readBChan <$> newBChanListener chan) getBatName
 
-  ev <- Gtk.widgetClickable disp $ safeSpawn "gnome-control-center" ["power"]
+  ev <- Gtk.buttonNewWith disp $ safeSpawn "gnome-control-center" ["power"]
   ev <$ Gtk.widgetShowAll ev
 
 cpuCallback :: IO Double
@@ -75,8 +75,8 @@ mainboardWidget = do
     Gtk.widgetSetSizeRequest img 56 32
     Gtk.toWidget img
 
-  disp <- Gtk.overlayed bg [cpu, mem]
-  ev <- Gtk.widgetClickable disp $ safeSpawn "gnome-system-monitor" ["-r"]
+  disp <- Gtk.overlayed bg [mem, cpu]
+  ev <- Gtk.buttonNewWith disp $ safeSpawn "gnome-system-monitor" ["-r"]
   ev <$ Gtk.widgetShowAll ev
   where
     cpuN n = T.pack $ printf "cpu-%03d" (n * 20)

@@ -119,7 +119,3 @@ button:checked, button:hover .Contents:hover {
 .taffy-window menuitem:hover > label, menuitem:hover > label {
 	color: #ffffff;
 }
-
-.mem-bar {
-	padding: 7px 12px;
-}
