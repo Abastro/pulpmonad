@@ -36,7 +36,7 @@ batWidget = do
   disp <- do
     chan <- getDisplayBatteryChan
     getBatName <- asks (runReaderT $ T.pack . batteryIconName <$> getDisplayBatteryInfo)
-    Gtk.iconNewChanneling (readBChan <$> newBChanListener chan) getBatName
+    Gtk.iconNewChanneling Gtk.IconSizeDnd (readBChan <$> newBChanListener chan) getBatName
 
   ev <- Gtk.buttonNewWith disp $ safeSpawn "gnome-control-center" ["power"]
   ev <$ Gtk.widgetShowAll ev
@@ -52,8 +52,8 @@ memCallback = memoryUsedRatio <$> parseMeminfo
 mainboardWidget :: TaffyIO Gtk.Widget
 mainboardWidget = do
   mem <- do
-    hack <- Gtk.iconNewFromName "ram-000"
-    fg <- Gtk.iconNewFromName "ram-000"
+    hack <- Gtk.iconNewFromName Gtk.IconSizeDnd "ram-000"
+    fg <- Gtk.iconNewFromName Gtk.IconSizeDnd "ram-000"
     let barRect = RationalRect (13 % 32) (8 % 32) (19 % 32) (24 % 32)
     bar <- Gtk.barNewPolling barRect (0.1, 0.6, 0.9) 0.5 memCallback
     Gtk.overlayed hack [bar, fg]
@@ -61,7 +61,7 @@ mainboardWidget = do
 
   cpu <- do
     -- MAYBE Use temperature
-    icon <- Gtk.iconNewPolling 0.1 $ do
+    icon <- Gtk.iconNewPolling Gtk.IconSizeDnd 0.1 $ do
       cpu :: Int <- round . (* 5) <$> cpuCallback
       pure (cpuN cpu)
 

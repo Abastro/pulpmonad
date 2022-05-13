@@ -6,23 +6,14 @@ import Data.Text qualified as T
 import Defines
 import GI.Gdk.Constants qualified as Gdk
 import GI.Gdk.Enums qualified as Gdk
-import GI.Gdk.Flags qualified as Gdk
-import GI.Gdk.Objects.Cursor qualified as Gdk
-import GI.Gdk.Objects.Display qualified as Gdk
 import GI.Gdk.Objects.Screen qualified as Gdk
-import GI.Gdk.Objects.Seat qualified as Gdk
-import GI.Gdk.Objects.Window qualified as Gdk
-import GI.Gdk.Structs.EventAny qualified as Gdk
 import GI.Gdk.Structs.EventKey qualified as Gdk
 import GI.Gio.Objects.Application qualified as Gio
 import GI.Gtk.Constants qualified as Gtk
-import GI.Gtk.Functions qualified as Gtk
 import GI.Gtk.Objects.Application qualified as Gtk
 import GI.Gtk.Objects.ApplicationWindow qualified as Gtk
 import GI.Gtk.Objects.Box qualified as Gtk
-import GI.Gtk.Objects.Button qualified as Gtk
 import GI.Gtk.Objects.CssProvider qualified as Gtk
-import GI.Gtk.Objects.Image qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import GI.Gtk.Objects.Window qualified as Gtk
 import GtkCommons qualified as Gtk
@@ -61,29 +52,18 @@ actOf window = \case
   Reboot -> safeSpawn "systemctl" ["reboot"]
   Poweroff -> safeSpawn "systemctl" ["poweroff"]
 
-ctlButton :: Gtk.Window -> SysCtl -> IO Gtk.Button
+ctlButton :: Gtk.Window -> SysCtl -> IO Gtk.Widget
 ctlButton window ctl = do
-  box <- Gtk.boxNew Gtk.OrientationVertical 5
-  Gtk.widgetSetValign box Gtk.AlignCenter
-  Gtk.containerAdd box =<< Gtk.imageNewFromIconName (Just $ iconOf ctl) size
-  Gtk.containerAdd box =<< Gtk.labelNew (Just . T.pack $ show ctl)
+  box <- do
+    box <- Gtk.boxNew Gtk.OrientationVertical 5
+    Gtk.widgetSetValign box Gtk.AlignCenter
+    Gtk.containerAdd box =<< Gtk.iconNewFromName Gtk.IconSizeDialog (iconOf ctl)
+    Gtk.containerAdd box =<< Gtk.labelNew (Just . T.pack $ show ctl)
+    Gtk.toWidget box
 
-  btn <- Gtk.buttonNew
-  Gtk.containerAdd btn box
-  Gtk.onButtonClicked btn $ actOf window ctl
+  btn <- Gtk.buttonNewWith box $ actOf window ctl
   Gtk.widgetGetStyleContext btn >>= flip Gtk.styleContextAddClass (styleOf ctl)
   pure btn
-  where
-    size = fromIntegral $ fromEnum Gtk.IconSizeDialog
-
-windowAsTransparent :: Gtk.Window -> IO ()
-windowAsTransparent window = do
-  Gtk.setWidgetAppPaintable window True
-  screen <- Gtk.windowGetScreen window
-  composited <- Gdk.screenIsComposited screen
-  when composited $
-    Gdk.screenGetRgbaVisual screen >>= Gtk.widgetSetVisual window
-  pure ()
 
 main :: IO ()
 main = do
@@ -119,19 +99,10 @@ main = do
           Gdk.KEY_Escape -> True <$ Gtk.windowClose window
           _ -> pure False
 
-      windowAsTransparent window
+      Gtk.windowAsTransparent window
+      Gtk.windowGrabOnMap window
 
       btns window >>= Gtk.containerAdd window
-
-      Gtk.afterWidgetMapEvent window $
-        Gdk.getEventAnyWindow >=> \case
-          Nothing -> pure False
-          Just win -> do
-            event <- Gtk.getCurrentEvent
-            seat <- Gdk.windowGetDisplay win >>= Gdk.displayGetDefaultSeat
-            Gdk.seatGrab seat win [Gdk.SeatCapabilitiesAll] True (Nothing @Gdk.Cursor) event Nothing
-            pure False
-
       Gtk.widgetShowAll window
 
     btns :: Gtk.Window -> IO Gtk.Box
