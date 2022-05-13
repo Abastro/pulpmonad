@@ -29,6 +29,9 @@ import XMonad.Util.Themes
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
 
+isSplash :: Query Bool
+isSplash = isInProperty "_NET_WM_WINDOW_TYPE" "_NET_WM_WINDOW_TYPE_SPLASH"
+
 _leftClick, _rightClick, middleClick :: Button
 (_leftClick, _rightClick, middleClick) = (button1, button3, button2)
 
@@ -58,7 +61,7 @@ main = do
         modMask = mod4Mask -- Super key
       }
       `additionalMouseBindings` mouseMove
-      `additionalKeysP` concat [keysUtility xmDir, keysBasic, keysSpecial, keysScreenshot]
+      `additionalKeysP` concat [keysUtility xmDir, keysBasic xmCache, keysSpecial, keysScreenshot]
       `removeKeysP` keysRemoved
   where
     cfg = ewmh desktopConfig
@@ -69,14 +72,14 @@ main = do
         ("M-d", safeSpawnProg "nautilus"),
         ("M-M1-t", namedScratchpadAction scratchpads (name scTerm))
       ]
-    keysBasic =
+    keysBasic xmCache =
       [ ("M-p", safeSpawnProg "synapse"),
         ("<XF86MonBrightnessUp>", safeSpawn "lux" ["-a", "5%"]),
         ("<XF86MonBrightnessDown>", safeSpawn "lux" ["-s", "5%"]),
         ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "+5%"]),
         ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "-5%"]),
         ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"]),
-        ("M-S-x", actSystemCtl sysCtlCfg),
+        ("M-S-x", safeSpawnProg (xmCache </> "pulp-sysctl")),
         ("M-s", actGotoWindow gotoCfg)
       ]
     keysScreenshot =
@@ -89,14 +92,6 @@ main = do
     keysRemoved =
       ["M-q", "M-S-q", "M-S-p"]
 
-    sysCtlCfg =
-      def
-        { ts_background = 0x02080808,
-          ts_node = (0xffa0a0a0, 0xff282828),
-          ts_nodealt = (0xffa0a0a0, 0xff2b2b2b),
-          ts_highlight = (0xffb0b0b0, 0xff383838),
-          ts_font = "xft:Sans-12"
-        }
     gotoCfg =
       def
         { gs_bordercolor = "#404040"
@@ -121,7 +116,8 @@ myLayout =
 
 staticManage =
   composeAll
-    [ resource =? "synapse" --> doIgnore,
+    [ isDialog --> doCenterFloat,
+      isSplash --> doIgnore,
       className =? "Gimp" --> doF (shift pics),
       role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink,
       className =? "Inkscape" --> doF (shift pics),
@@ -134,6 +130,5 @@ staticManage =
       className =? "Eog" --> doCenterFloat,
       className =? "Steam" --> doF (shift game),
       className =? "kakaotalk.exe"
-        <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doIgnore,
-      isDialog --> doCenterFloat
+        <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doIgnore
     ]

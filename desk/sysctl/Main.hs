@@ -1,13 +1,22 @@
 module Main (main) where
 
-import Defines
 import Control.Monad
 import Data.Foldable
 import Data.Text qualified as T
+import Defines
 import GI.Gdk.Constants qualified as Gdk
 import GI.Gdk.Enums qualified as Gdk
+import GI.Gdk.Flags qualified as Gdk
+import GI.Gdk.Objects.Cursor qualified as Gdk
+import GI.Gdk.Objects.Display qualified as Gdk
+import GI.Gdk.Objects.Screen qualified as Gdk
+import GI.Gdk.Objects.Seat qualified as Gdk
+import GI.Gdk.Objects.Window qualified as Gdk
+import GI.Gdk.Structs.EventAny qualified as Gdk
 import GI.Gdk.Structs.EventKey qualified as Gdk
 import GI.Gio.Objects.Application qualified as Gio
+import GI.Gtk.Constants qualified as Gtk
+import GI.Gtk.Functions qualified as Gtk
 import GI.Gtk.Objects.Application qualified as Gtk
 import GI.Gtk.Objects.ApplicationWindow qualified as Gtk
 import GI.Gtk.Objects.Box qualified as Gtk
@@ -17,11 +26,9 @@ import GI.Gtk.Objects.Image qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import GI.Gtk.Objects.Window qualified as Gtk
 import GtkCommons qualified as Gtk
+import System.Environment (getEnv)
 import System.Exit
 import XMonad.Util.Run (safeSpawn)
-import System.Environment (getEnv)
-import qualified GI.Gtk.Constants as Gtk
-import qualified GI.Gdk.Objects.Screen as Gdk
 
 data SysCtl = Build | Refresh | Logout | Reboot | Poweroff
   deriving (Enum, Bounded, Show)
@@ -69,6 +76,15 @@ ctlButton window ctl = do
   where
     size = fromIntegral $ fromEnum Gtk.IconSizeDialog
 
+windowAsTransparent :: Gtk.Window -> IO ()
+windowAsTransparent window = do
+  Gtk.setWidgetAppPaintable window True
+  screen <- Gtk.windowGetScreen window
+  composited <- Gdk.screenIsComposited screen
+  when composited $
+    Gdk.screenGetRgbaVisual screen >>= Gtk.widgetSetVisual window
+  pure ()
+
 main :: IO ()
 main = do
   -- Does not care crashing here
@@ -93,13 +109,28 @@ main = do
       window <- Gtk.applicationWindowNew app >>= Gtk.toWindow
       Gtk.windowSetTitle window (T.pack "Pulp System Control")
       Gtk.windowSetDefaultSize window 560 140
-      Gtk.windowSetTypeHint window Gdk.WindowTypeHintDialog
+      Gtk.windowSetTypeHint window Gdk.WindowTypeHintSplashscreen
+      Gtk.windowSetPosition window Gtk.WindowPositionCenterAlways
+      Gtk.windowSetKeepAbove window True
+      Gtk.windowSetSkipPagerHint window True
+      Gtk.windowSetSkipTaskbarHint window True
       Gtk.onWidgetKeyPressEvent window $
         Gdk.getEventKeyKeyval >=> \case
           Gdk.KEY_Escape -> True <$ Gtk.windowClose window
           _ -> pure False
 
+      windowAsTransparent window
+
       btns window >>= Gtk.containerAdd window
+
+      Gtk.afterWidgetMapEvent window $
+        Gdk.getEventAnyWindow >=> \case
+          Nothing -> pure False
+          Just win -> do
+            event <- Gtk.getCurrentEvent
+            seat <- Gdk.windowGetDisplay win >>= Gdk.displayGetDefaultSeat
+            Gdk.seatGrab seat win [Gdk.SeatCapabilitiesAll] True (Nothing @Gdk.Cursor) event Nothing
+            pure False
 
       Gtk.widgetShowAll window
 
