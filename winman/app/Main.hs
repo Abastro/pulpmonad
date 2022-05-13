@@ -1,7 +1,6 @@
 module Main (main) where
 
 import Defines
-import Selects
 import XMonad
 import XMonad.Actions.MouseResize (mouseResize)
 import XMonad.Config.Desktop (desktopConfig)
@@ -25,6 +24,7 @@ import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
+import XMonad.Actions.GridSelect
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
@@ -65,6 +65,7 @@ main = do
       `removeKeysP` keysRemoved
   where
     cfg = ewmh desktopConfig
+    -- MAYBE keybindings to cfg file
     mouseMove =
       [((controlMask, middleClick), \w -> runQuery isFloating w --> (focus w >> kill))]
     keysUtility xmDir =
@@ -74,13 +75,13 @@ main = do
       ]
     keysBasic xmCache =
       [ ("M-p", safeSpawnProg "synapse"),
-        ("<XF86MonBrightnessUp>", safeSpawn "lux" ["-a", "5%"]),
-        ("<XF86MonBrightnessDown>", safeSpawn "lux" ["-s", "5%"]),
+        ("<XF86MonBrightnessUp>", safeSpawn "light" ["-A", "5"]),
+        ("<XF86MonBrightnessDown>", safeSpawn "light" ["-U", "5"]),
         ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "+5%"]),
         ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "-5%"]),
         ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"]),
         ("M-S-x", safeSpawnProg (xmCache </> "pulp-sysctl")),
-        ("M-s", actGotoWindow gotoCfg)
+        ("M-s", goToSelected gotoCfg)
       ]
     keysScreenshot =
       [ ("<Print>", spawn "sleep 0.2; gnome-screenshot"),

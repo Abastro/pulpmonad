@@ -2,8 +2,7 @@
 cfg="$XMONAD_CONFIG_DIR"
 
 # MAYBE Copying assets?
-# TODO Need also install lux
-sudo apt install pasystray network-manager-gnome blueman synapse ssh-askpass-gnome
+sudo apt install light pasystray network-manager-gnome blueman synapse ssh-askpass-gnome
 
 if ! command -v status-notifier-watcher; then
   cabal install status-notifier-item
