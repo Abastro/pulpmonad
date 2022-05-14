@@ -32,6 +32,9 @@ role = stringProperty "WM_WINDOW_ROLE"
 isSplash :: Query Bool
 isSplash = isInProperty "_NET_WM_WINDOW_TYPE" "_NET_WM_WINDOW_TYPE_SPLASH"
 
+isTooltip :: Query Bool
+isTooltip = isInProperty "_NET_WM_WINDOW_TYPE" "_NET_WM_WINDOW_TYPE_TOOLTIP"
+
 _leftClick, _rightClick, middleClick :: Button
 (_leftClick, _rightClick, middleClick) = (button1, button3, button2)
 
@@ -119,6 +122,7 @@ staticManage =
   composeAll
     [ isDialog --> doCenterFloat,
       isSplash --> doIgnore,
+      isTooltip --> doIgnore,
       className =? "Gimp" --> doF (shift pics),
       role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink,
       className =? "Inkscape" --> doF (shift pics),
