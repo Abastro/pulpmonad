@@ -3,9 +3,12 @@
 module Main (main) where
 
 import BroadcastChan
+import Control.Applicative
 import Control.Monad.Reader
 import Data.Map qualified as M
 import Data.Maybe
+import Data.Monoid
+import Data.Ord (clamp)
 import Data.Ratio ((%))
 import Data.Text qualified as T
 import Defines
@@ -14,7 +17,7 @@ import System.Environment
 import System.Taffybar (startTaffybar)
 import System.Taffybar.Context (TaffyIO)
 import System.Taffybar.Information.Battery (BatteryInfo (..), getDisplayBatteryChan, getDisplayBatteryInfo)
-import System.Taffybar.Information.CPU
+import System.Taffybar.Information.CPU2
 import System.Taffybar.Information.Memory
 import System.Taffybar.SimpleConfig hiding
   ( barPadding,
@@ -41,10 +44,22 @@ batWidget = do
   ev <- Gtk.buttonNewWith disp $ safeSpawn "gnome-control-center" ["power"]
   ev <$ Gtk.widgetShowAll ev
 
-cpuCallback :: IO Double
-cpuCallback = do
-  (_, _, totalLoad) <- cpuLoad
-  return totalLoad
+cpuTotalLoad :: IO Double
+cpuTotalLoad = do
+  [sysT, userT] <- getCPULoad "cpu"
+  pure (sysT + userT)
+
+cpuTemp :: IO Double
+cpuTemp = do
+  -- MAYBE handle more cases? Intel CPU?
+  dirs <- map (baseDir </>) <$> listDirectory baseDir
+  getAlt (foldMap (Alt . withName) dirs) <|> pure 0
+  where
+    baseDir = "/" </> "sys" </> "class" </> "hwmon"
+    withName dir =
+      readFile (dir </> "name") >>= \case
+        "k10temp\n" -> readCPUTempFile (dir </> "temp2_input")
+        _ -> fail "Not relevant device"
 
 memCallback :: IO Double
 memCallback = memoryUsedRatio <$> parseMeminfo
@@ -62,11 +77,13 @@ mainboardWidget = do
   cpu <- do
     -- MAYBE Use temperature
     icon <- Gtk.iconNewPolling Gtk.IconSizeDnd 0.1 $ do
-      cpu :: Int <- round . (* 5) <$> cpuCallback
-      pure (cpuN cpu)
+      -- Will operate on range 20C - 120C
+      temp <- cpuTemp
+      let tmpInd :: Int = round $ clamp (0, 100) (temp - 20) * 0.05
+      pure (cpuN tmpInd)
 
     let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
-    bar <- Gtk.barNewPolling barRect (0.9, 0.6, 0.1) 0.1 cpuCallback
+    bar <- Gtk.barNewPolling barRect (0.9, 0.6, 0.1) 0.1 cpuTotalLoad
     Gtk.overlayed icon [bar]
   Gtk.setWidgetHalign cpu Gtk.AlignEnd
 
