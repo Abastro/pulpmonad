@@ -46,6 +46,16 @@ library
     GtkCommons
     HWStatus
 
+test-suite test-pulpdesk
+  import:             pulp-gtk
+  type:               exitcode-stdio-1.0
+  main-is:            Spec.hs
+  hs-source-dirs:     test
+  build-depends:
+      pulpdesk
+    , QuickCheck ==2.14.*
+    , hspec ==2.9.*
+
 executable pulpbar
   import:             pulp-gtk
   main-is:            Main.hs

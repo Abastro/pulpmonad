@@ -96,7 +96,7 @@ data CPUStat = CPUStat
     ioWait :: Int,
     irqTime :: Int,
     softirqTime :: Int
-  }
+  } deriving Show
 
 cpuUsed :: CPUStat -> Int
 cpuUsed CPUStat {..} = userTime + systemTime
