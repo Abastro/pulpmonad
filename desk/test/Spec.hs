@@ -11,6 +11,7 @@ main = hspec $ do
   describe "HWStatus" $ do
     describe "cpuStat" $ do
       it "does not throw" $ () <$ cpuStat
+      -- TODO Count number of CPUs
     describe "cpuDiff" $ do
       prop "does not throw for positive delays" . withMaxSuccess 10 $
         \(Positive t) -> () <$ cpuDiff t
@@ -28,3 +29,5 @@ main = hspec $ do
           assert (used >= 0 && used <= 1)
     describe "batStat" $ do
       it "does not throw" $ () <$ batStat
+    describe "diskStat" $ do
+      it "does not throw" $ () <$ diskStat

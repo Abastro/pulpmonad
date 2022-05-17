@@ -11,6 +11,7 @@ copyright:          2022 Abastro
 common pulp-gtk
   default-extensions:
     LambdaCase
+    RecordWildCards
   default-language:    GHC2021
   ghc-options:         -W
   build-depends:
