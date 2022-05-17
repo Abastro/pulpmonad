@@ -25,6 +25,7 @@ common pulp-gtk
     , unix
     , stm == 2.5.*
     , parsec ^>= 3.1.14.0
+    , megaparsec ==9.2.*
     , xmonad >=0.13
     , xmonad-contrib >=0.14
     , enclosed-exceptions ==1.0.*

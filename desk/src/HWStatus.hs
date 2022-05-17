@@ -21,71 +21,55 @@ where
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad.Identity
+import Data.Char
 import Data.List (isPrefixOf)
 import Data.Map qualified as M
 import Data.Monoid
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
+import Data.Void
 import System.Directory
 import System.FilePath
 import System.IO
-import Text.Parsec qualified as P
-import Text.Parsec.Text qualified as P
-import Text.Parsec.Token qualified as P
+import Text.Megaparsec qualified as P
+import Text.Megaparsec.Char qualified as P
+import Text.Megaparsec.Char.Lexer qualified as Lex
 
 -- | Gets a single line from a file
 getFileLine :: FilePath -> IO T.Text
 getFileLine path = withFile path ReadMode T.hGetLine
 
-simpleLex :: P.GenTokenParser T.Text () Identity
-simpleLex = P.makeTokenParser simpleLangDef
-  where
-    simpleLangDef =
-      P.LanguageDef
-        { P.commentStart = "/*",
-          P.commentEnd = "*/",
-          P.commentLine = "#",
-          P.nestedComments = True,
-          P.identStart = P.letter,
-          P.identLetter = P.alphaNum <|> P.oneOf "_'()",
-          P.opStart = P.opLetter simpleLangDef,
-          P.opLetter = P.oneOf "=:",
-          P.reservedNames = [],
-          P.reservedOpNames = ["=", ":"],
-          P.caseSensitive = True
-        }
-
-eol :: P.Parser ()
-eol = () <$ P.newline <|> P.eof
-
-skipSpaces :: P.Parser ()
-skipSpaces = P.skipMany (P.char ' ')
-
--- | Natural number parsing, parses the whitespace
-naturalNum :: Num a => P.Parser a
-naturalNum = fromIntegral <$> P.natural simpleLex
-
--- | Decimal parsing, without parsing the whitespace
-decimalNum :: Num a => P.Parser a
-decimalNum = fromIntegral <$> P.decimal simpleLex
-
-identStr :: P.Parser String
-identStr = P.identifier simpleLex
-
-symbolStr :: String -> P.Parser String
-symbolStr str = P.symbol simpleLex str
-
-operator :: String -> P.Parser ()
-operator = P.reservedOp simpleLex
-
-finalParse :: P.Parser a -> P.Parser a
-finalParse parse = P.whiteSpace simpleLex *> parse <* P.eof
-
-parseFile :: P.Parser a -> FilePath -> IO a
+parseFile :: P.Parsec Void T.Text a -> FilePath -> IO a
 parseFile parser path =
-  P.parseFromFile parser path >>= \case
-    Left err -> fail $ show err
+  P.parse parser path <$> T.readFile path >>= \case
+    Left err -> fail $ P.errorBundlePretty err
     Right result -> pure result
+
+-- | Skips horizontally.
+skipH :: P.MonadParsec e T.Text m => m ()
+skipH = Lex.space P.hspace1 empty empty
+
+-- | Parses remaining characters until a line break.
+remainH :: P.MonadParsec e T.Text m => m T.Text
+remainH = P.takeWhileP (Just "remaining") $ (/= '\n')
+
+-- | Space-separated identifier, which could include '(' and ')'.
+identH :: P.MonadParsec e T.Text m => m T.Text
+identH = Lex.lexeme skipH (P.takeWhileP (Just "identifier") isID)
+  where
+    isID c = isAlphaNum c || c == '(' || c == ')' || c == '_'
+
+-- | Horizontal symbols.
+symbolH :: P.MonadParsec e T.Text m => T.Text -> m T.Text
+symbolH = Lex.symbol skipH
+
+-- | Horizontal decimals.
+decimalH :: (P.MonadParsec e T.Text m, Num a) => m a
+decimalH = Lex.lexeme skipH Lex.decimal
+
+-- | Parse an end of line, or eof.
+eoH :: P.MonadParsec e T.Text m => m ()
+eoH = () <$ P.eol <|> P.eof
 
 -- | CPU statistics. Unit is USER_HZ (?)
 data CPUStat = CPUStat
@@ -96,7 +80,8 @@ data CPUStat = CPUStat
     ioWait :: Int,
     irqTime :: Int,
     softirqTime :: Int
-  } deriving Show
+  }
+  deriving (Show)
 
 cpuUsed :: CPUStat -> Int
 cpuUsed CPUStat {..} = userTime + systemTime
@@ -111,9 +96,9 @@ cpuStat = parseFile cpus ("/" </> "proc" </> "stat")
   where
     cpus = (,) <$> cpu <*> many cpu -- NOTE: We only parse the beginning.
     cpu = do
-      P.try $ identStr >>= guard . ("cpu" `isPrefixOf`)
+      P.try $ identH >>= guard . ("cpu" `T.isPrefixOf`)
       userTime : niceTime : systemTime : idleTime : ioWait : irqTime : softirqTime : _ <-
-        P.sepBy decimalNum skipSpaces <* eol
+        many decimalH <* eoH
       pure CPUStat {..}
 
 -- | Compute time spent in each mode during specified amount of time (ms).
@@ -134,7 +119,7 @@ cpuTemp = do
     baseDir = "/" </> "sys" </> "class" </> "hwmon"
     withName dir =
       getFileLine (dir </> "name") >>= \case
-        "k10temp" -> parseFile (finalParse naturalNum) (dir </> "temp2_input")
+        "k10temp" -> parseFile Lex.decimal (dir </> "temp2_input")
         name -> fail $ "Not relevant device: " <> show name
 
 -- | Memory statistics. All units are in kB.
@@ -147,6 +132,7 @@ data MemStat = MemStat
     swapTotal :: Int,
     swapFree :: Int
   }
+  deriving (Show)
 
 memUsed :: MemStat -> Int
 memUsed MemStat {..} = memTotal - memFree - memBuffers - memCached
@@ -161,11 +147,12 @@ memStat = parseFile memory ("/" </> "proc" </> "meminfo")
   where
     memory = do
       mmap <- M.fromList <$> many memLine
-      Just [memTotal, memFree, memAvailable, memBuffers, memCached, swapTotal, swapFree] <-
-        pure $ traverse (mmap M.!?) ["MemTotal", "MemFree", "MemAvailable", "Buffers", "Cached", "SwapTotal", "SwapFree"]
-      pure $ MemStat {..}
-    memLine = (,) <$> identStr <*> (operator ":" *> mayKB)
-    mayKB = naturalNum <* P.optional (symbolStr "kB")
+      case traverse (mmap M.!?) ["MemTotal", "MemFree", "MemAvailable", "Buffers", "Cached", "SwapTotal", "SwapFree"] of
+        Just [memTotal, memFree, memAvailable, memBuffers, memCached, swapTotal, swapFree] ->
+          pure $ MemStat {..}
+        _ -> fail $ "Ill-formed map parsed: " <> show mmap
+    memLine = (,) <$> identH <*> (symbolH ":" *> mayKB <* eoH)
+    mayKB = decimalH <* P.optional (symbolH "kB")
 
 -- Note: NotCharging = "Not Charging".
 data BatStatus = Charging | Discharging | NotCharging | Full | Unknown
@@ -207,8 +194,10 @@ batStat = do
   where
     battery = do
       bmap <- M.fromList <$> many batLine
-      Just (Left status, Right capacity) <-
-        pure $ (,) <$> bmap M.!? "POWER_SUPPLY_STATUS" <*> bmap M.!? "POWER_SUPPLY_CAPACITY"
+      (status, capacity) <-
+        case (,) <$> bmap M.!? "POWER_SUPPLY_STATUS" <*> bmap M.!? "POWER_SUPPLY_CAPACITY" of
+          Just (Left status, Right capacity) -> pure (status, capacity)
+          _ -> fail $ "Cannot find status and/or capacity from: " <> show bmap
       let batStatus = statusEnum status
           intField str = bmap M.!? str >>= either (const Nothing) Just
           energyFull = intField "POWER_SUPPLY_ENERGY_FULL"
@@ -223,8 +212,8 @@ batStat = do
           powerNow = intField "POWER_SUPPLY_POWER_NOW"
       pure $ BatStat {..}
 
-    batLine = (,) <$> identStr <*> (operator "=" *> decOrStr)
-    decOrStr = Right <$> naturalNum <|> Left <$> (P.lexeme simpleLex $ many (P.noneOf "\n"))
+    batLine = (,) <$> identH <*> (symbolH "=" *> decOrStr <* eoH)
+    decOrStr = Right <$> decimalH <|> Left <$> remainH
     statusEnum = \case
       "Charging" -> Charging
       "Discharging" -> Discharging
