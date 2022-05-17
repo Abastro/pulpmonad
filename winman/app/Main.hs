@@ -135,5 +135,5 @@ staticManage =
       className =? "Eog" --> doCenterFloat,
       className =? "Steam" --> doF (shift game),
       className =? "kakaotalk.exe"
-        <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doIgnore
+        <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doHideIgnore
     ]
