@@ -16,7 +16,7 @@ import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Objects.CssProvider qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import GI.Gtk.Objects.Window qualified as Gtk
-import GtkCommons qualified as Gtk
+import UI.GtkCommons qualified as Gtk
 import System.Environment (getEnv)
 import System.Exit
 import XMonad.Util.Run (safeSpawn)

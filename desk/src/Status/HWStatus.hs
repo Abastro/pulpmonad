@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module HWStatus (
+module Status.HWStatus (
   CPUStat (..),
   cpuRatios,
   cpuUsed,

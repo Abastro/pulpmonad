@@ -1,6 +1,6 @@
 module Main (main) where
 
-import HWStatus
+import Status.HWStatus
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck

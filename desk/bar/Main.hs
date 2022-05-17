@@ -11,8 +11,8 @@ import Data.Ratio ((%))
 import Data.Text qualified as T
 import Data.Traversable
 import Defines
-import GtkCommons qualified as Gtk
-import HWStatus
+import UI.GtkCommons qualified as Gtk
+import Status.HWStatus
 import System.Environment
 import System.Taffybar (startTaffybar)
 import System.Taffybar.Context (TaffyIO)

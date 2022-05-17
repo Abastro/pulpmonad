@@ -1,4 +1,4 @@
-module GtkCommons
+module UI.GtkCommons
   ( iconNewFromName,
     iconNewChanneling,
     iconNewTask,
