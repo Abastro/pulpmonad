@@ -61,7 +61,7 @@ ctlButton window ctl = do
     Gtk.containerAdd box =<< Gtk.labelNew (Just . T.pack $ show ctl)
     Gtk.toWidget box
 
-  btn <- Gtk.buttonNewWith box $ actOf window ctl
+  btn <- Gtk.buttonNewWith (Just box) $ actOf window ctl
   Gtk.widgetGetStyleContext btn >>= flip Gtk.styleContextAddClass (styleOf ctl)
   pure btn
 

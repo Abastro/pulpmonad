@@ -1,12 +1,11 @@
 module GtkCommons
   ( iconNewFromName,
-    iconNewPolling,
     iconNewChanneling,
+    iconNewTask,
     buttonNewWith,
     overlayed,
-    barNewPolling,
+    barNewTask,
     imageNew,
-    module Data.GI.Gtk.Threading,
     module GI.Gtk.Enums,
     module GI.Gtk.Objects.Widget,
     module GI.Gtk.Objects.Container,
@@ -23,11 +22,13 @@ import Control.Exception.Enclosed (tryAny)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Foldable
-import Data.GI.Gtk.Threading
 import Data.Text qualified as T
 import GI.Cairo.Render qualified as C
 import GI.Cairo.Render.Connector (renderWithContext)
+import GI.GLib.Constants
+import GI.GLib.Structs.Source
 import GI.Gdk.Flags qualified as Gdk
+import GI.Gdk.Functions qualified as Gdk
 import GI.Gdk.Objects.Cursor qualified as Gdk
 import GI.Gdk.Objects.Display qualified as Gdk
 import GI.Gdk.Objects.Screen qualified as Gdk
@@ -44,13 +45,22 @@ import GI.Gtk.Objects.Overlay
 import GI.Gtk.Objects.StyleContext
 import GI.Gtk.Objects.Widget
 import GI.Gtk.Objects.Window
+import Task
 import XMonad.StackSet (RationalRect (..))
 
 -- TODO
 -- Taffybar is suboptimal, esp. dependency. Cook one up myself?
 
-delaySeconds :: Double -> IO ()
-delaySeconds interval = threadDelay $ floor (interval * 1000000)
+-- | Adds GDK single-use task, which only runs once.
+gdkSingleRun :: IO a -> IO ()
+gdkSingleRun task = () <$ Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE (False <$ task)
+
+-- | Adds GDK Task, returns the kill action.
+gdkTask :: Task a -> (a -> IO b) -> IO (IO ())
+gdkTask (Task kill var) actWith = do
+  let action = True <$ (tryTakeMVar var >>= traverse_ actWith)
+  sourceId <- Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE action
+  pure $ kill <* sourceRemove sourceId
 
 windowAsTransparent :: MonadIO m => Window -> m ()
 windowAsTransparent window = do
@@ -85,22 +95,25 @@ iconNewWith iconSize realize unrealize = do
 iconNewFromName :: MonadIO m => IconSize -> T.Text -> m Widget
 iconNewFromName iconSize name = iconNewWith iconSize (\setIcon -> setIcon name) pure
 
-iconNewPolling :: MonadIO m => IconSize -> Double -> IO T.Text -> m Widget
-iconNewPolling iconSize interval getName = iconNewChanneling iconSize (pure $ delaySeconds interval) getName
-
 iconNewChanneling :: MonadIO m => IconSize -> IO (IO a) -> IO T.Text -> m Widget
 iconNewChanneling iconSize mkWaiter getName = iconNewWith iconSize realize killThread
   where
     realize setIcon = do
       waits <- mkWaiter
       forkIO . forever $ do
-        tryAny $ getName >>= postGUIASync . setIcon
+        tryAny $ getName >>= gdkSingleRun . setIcon
         waits
 
-buttonNewWith :: MonadIO m => Widget -> IO () -> m Widget
+iconNewTask :: MonadIO m => IconSize -> Task a -> (a -> T.Text) -> m Widget
+iconNewTask iconSize task naming = iconNewWith iconSize realize unrealize
+  where
+    realize setIcon = gdkTask task (setIcon . naming)
+    unrealize kill = kill
+
+buttonNewWith :: MonadIO m => Maybe Widget -> IO () -> m Widget
 buttonNewWith widget onClick = do
   btn <- buttonNew
-  containerAdd btn widget
+  traverse_ (containerAdd btn) widget
   onButtonClicked btn onClick
   toWidget btn
 
@@ -113,26 +126,22 @@ overlayed core overlays = do
   traverse_ (\wid -> overlaySetOverlayPassThrough overlay wid True) overlays
   toWidget overlay
 
--- Uses images, DrawingArea sneaks in Gdk Window for some reason..
-barNewPolling :: MonadIO m => RationalRect -> (Double, Double, Double) -> Double -> IO Double -> m Widget
-barNewPolling relative color interval getFill = do
-  area <- imageNew
-  setWidgetHalign area AlignFill
-  setWidgetValign area AlignFill
-  _ <- onWidgetRealize area $ do
-    fvar <- getFill >>= atomically . newTVar
-    -- Updating
-    forkIO . forever $ do
-      tryAny $ do
-        getFill >>= atomically . writeTVar fvar
-        postGUIASync $ widgetQueueDraw area
-      delaySeconds interval
-    -- Rendering
-    _ <- onWidgetDraw area $ \ctx -> do
-      fill <- readTVarIO fvar
-      True <$ renderWithContext (drawBar area relative color fill) ctx
-    pure ()
-  toWidget area
+barNewTask :: MonadIO m => RationalRect -> (Double, Double, Double) -> Task a -> (a -> Double) -> m Widget
+barNewTask relative color task@(Task _ var) asFill = do
+  -- Uses images as base and render on the image.
+  bar <- imageNew
+  setWidgetHalign bar AlignFill
+  setWidgetValign bar AlignFill
+  -- Uses TVar as well to allow rendering
+  _ <- onWidgetRealize bar $ do
+    tvar <- takeMVar var >>= atomically . newTVar
+    killTask <- gdkTask task $ \val ->
+      atomically (writeTVar tvar val) *> widgetQueueDraw bar
+    _ <- onWidgetDraw bar $ \ctx -> do
+      fill <- asFill <$> readTVarIO tvar
+      True <$ renderWithContext (drawBar bar relative color fill) ctx
+    () <$ onWidgetUnrealize bar killTask
+  toWidget bar
 
 -- For now, assume from down to up
 drawBar :: Image -> RationalRect -> (Double, Double, Double) -> Double -> C.Render ()

@@ -24,11 +24,13 @@ common pulp-gtk
     , X11
     , unix
     , stm == 2.5.*
+    , parsec ^>= 3.1.14.0
     , xmonad >=0.13
     , xmonad-contrib >=0.14
     , enclosed-exceptions ==1.0.*
     , broadcast-chan ==0.2.*
     , haskell-gi ==0.26.*
+    , gi-glib ==2.0.*
     , gi-gtk ==3.*
     , gi-gdk ==3.*
     , gi-gtk-hs ==0.3.*
@@ -40,7 +42,9 @@ library
   import:             pulp-gtk
   hs-source-dirs:     src
   exposed-modules:
+    Task
     GtkCommons
+    HWStatus
 
 executable pulpbar
   import:             pulp-gtk
