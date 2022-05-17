@@ -19,59 +19,29 @@ module HWStatus
 where
 
 import Control.Applicative
+import Control.Applicative.Combinators
 import Control.Concurrent
-import Control.Monad.Identity
-import Data.Char
 import Data.List (isPrefixOf)
-import Data.Map qualified as M
+import Data.Map.Strict qualified as M
 import Data.Monoid
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
-import Data.Void
+import Parse.ParseHor
 import System.Directory
 import System.FilePath
 import System.IO
-import Text.Megaparsec qualified as P
-import Text.Megaparsec.Char qualified as P
-import Text.Megaparsec.Char.Lexer qualified as Lex
 
 -- | Gets a single line from a file
 getFileLine :: FilePath -> IO T.Text
 getFileLine path = withFile path ReadMode T.hGetLine
 
-parseFile :: P.Parsec Void T.Text a -> FilePath -> IO a
-parseFile parser path =
-  P.parse parser path <$> T.readFile path >>= \case
-    Left err -> fail $ P.errorBundlePretty err
-    Right result -> pure result
-
--- | Skips horizontally.
-skipH :: P.MonadParsec e T.Text m => m ()
-skipH = Lex.space P.hspace1 empty empty
-
--- | Parses remaining characters until a line break.
-remainH :: P.MonadParsec e T.Text m => m T.Text
-remainH = P.takeWhileP (Just "remaining") $ (/= '\n')
-
--- | Space-separated identifier, which could include '(' and ')'.
-identH :: P.MonadParsec e T.Text m => m T.Text
-identH = Lex.lexeme skipH (P.takeWhileP (Just "identifier") isID)
+procStat :: IO (M.Map T.Text [Int])
+procStat = parseFile stat ("/" </> "proc" </> "stat")
   where
-    isID c = isAlphaNum c || c == '(' || c == ')' || c == '_'
+    stat = M.fromList <$> statLine `sepEndBy` eoH
+    statLine = label "stat-line" $ (,) <$> identH <*> many decimalH
 
--- | Horizontal symbols.
-symbolH :: P.MonadParsec e T.Text m => T.Text -> m T.Text
-symbolH = Lex.symbol skipH
-
--- | Horizontal decimals.
-decimalH :: (P.MonadParsec e T.Text m, Num a) => m a
-decimalH = Lex.lexeme skipH Lex.decimal
-
--- | Parse an end of line, or eof.
-eoH :: P.MonadParsec e T.Text m => m ()
-eoH = () <$ P.eol <|> P.eof
-
--- | CPU statistics. Unit is USER_HZ (?)
+-- | CPU statistics. Unit is USER_HZ (typically 0.01s)
 data CPUStat = CPUStat
   { userTime :: Int,
     niceTime :: Int,
@@ -83,6 +53,11 @@ data CPUStat = CPUStat
   }
   deriving (Show)
 
+cpuOf :: [Int] -> Maybe CPUStat
+cpuOf = \case
+  userTime : niceTime : systemTime : idleTime : ioWait : irqTime : softirqTime : _ -> Just $ CPUStat {..}
+  _ -> Nothing
+
 cpuUsed :: CPUStat -> Int
 cpuUsed CPUStat {..} = userTime + systemTime
 
@@ -92,16 +67,16 @@ cpuUsedRatio cpu@CPUStat {idleTime} = (fromIntegral $ cpuUsed cpu) / (fromIntegr
 -- | Gets CPU statistics in accumulative sense. Second of the pair is for each core.
 -- Pulls from "/proc/stat".
 cpuStat :: IO (CPUStat, [CPUStat])
-cpuStat = parseFile cpus ("/" </> "proc" </> "stat")
-  where
-    cpus = (,) <$> cpu <*> many cpu -- NOTE: We only parse the beginning.
-    cpu = do
-      P.try $ identH >>= guard . ("cpu" `T.isPrefixOf`)
-      userTime : niceTime : systemTime : idleTime : ioWait : irqTime : softirqTime : _ <-
-        many decimalH <* eoH
-      pure CPUStat {..}
+cpuStat = do
+  smap <- procStat
+  total <- maybe (fail "/proc/stat, cpu(total) ill-formed") pure $ smap M.!? "cpu" >>= cpuOf
+  cores <-
+    maybe (fail "/proc/stat, cpu cores ill-formed") pure $
+      traverse cpuOf . M.elems $ M.filterWithKey (\k _ -> "cpu" /= k && "cpu" `T.isPrefixOf` k) smap
+  pure (total, cores)
 
 -- | Compute time spent in each mode during specified amount of time (ms).
+-- Argument should be positive.
 cpuDiff :: Int -> IO CPUStat
 cpuDiff delay = do
   CPUStat t1 t2 t3 t4 t5 t6 t7 <- fst <$> cpuStat
@@ -119,7 +94,7 @@ cpuTemp = do
     baseDir = "/" </> "sys" </> "class" </> "hwmon"
     withName dir =
       getFileLine (dir </> "name") >>= \case
-        "k10temp" -> parseFile Lex.decimal (dir </> "temp2_input")
+        "k10temp" -> parseFile decimalH (dir </> "temp2_input")
         name -> fail $ "Not relevant device: " <> show name
 
 -- | Memory statistics. All units are in kB.
@@ -146,13 +121,13 @@ memStat :: IO MemStat
 memStat = parseFile memory ("/" </> "proc" </> "meminfo")
   where
     memory = do
-      mmap <- M.fromList <$> many memLine
+      mmap <- M.fromList <$> memLine `sepEndBy` eoH
       case traverse (mmap M.!?) ["MemTotal", "MemFree", "MemAvailable", "Buffers", "Cached", "SwapTotal", "SwapFree"] of
         Just [memTotal, memFree, memAvailable, memBuffers, memCached, swapTotal, swapFree] ->
           pure $ MemStat {..}
         _ -> fail $ "Ill-formed map parsed: " <> show mmap
-    memLine = (,) <$> identH <*> (symbolH ":" *> mayKB <* eoH)
-    mayKB = decimalH <* P.optional (symbolH "kB")
+    memLine = label "meminfo-line" $ (,) <$> identH <*> (symbolH ":" *> mayKB)
+    mayKB = label "field" $ decimalH <* optional (symbolH "kB")
 
 -- Note: NotCharging = "Not Charging".
 data BatStatus = Charging | Discharging | NotCharging | Full | Unknown
@@ -193,7 +168,7 @@ batStat = do
   parseFile battery (path </> batName </> "uevent")
   where
     battery = do
-      bmap <- M.fromList <$> many batLine
+      bmap <- M.fromList <$> batLine `sepEndBy` eoH
       (status, capacity) <-
         case (,) <$> bmap M.!? "POWER_SUPPLY_STATUS" <*> bmap M.!? "POWER_SUPPLY_CAPACITY" of
           Just (Left status, Right capacity) -> pure (status, capacity)
@@ -212,8 +187,8 @@ batStat = do
           powerNow = intField "POWER_SUPPLY_POWER_NOW"
       pure $ BatStat {..}
 
-    batLine = (,) <$> identH <*> (symbolH "=" *> decOrStr <* eoH)
-    decOrStr = Right <$> decimalH <|> Left <$> remainH
+    batLine = label "battery-uevent-line" $ (,) <$> identH <*> (symbolH "=" *> decOrStr)
+    decOrStr = label "field" $ Right <$> decimalH <|> Left <$> remainH
     statusEnum = \case
       "Charging" -> Charging
       "Discharging" -> Discharging
@@ -222,5 +197,6 @@ batStat = do
       _ -> Unknown
 
 -- Disk is complex, perhaps /etc/mtab & /proc/diskstats
+-- Actually I could just.. let the user select.
 
 -- Brightness: "/sys/class/backlight/?"
