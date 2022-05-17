@@ -12,6 +12,8 @@ common pulp-gtk
   default-extensions:
     LambdaCase
     RecordWildCards
+    DerivingStrategies
+    DerivingVia
   default-language:    GHC2021
   ghc-options:         -W
   build-depends:
@@ -24,6 +26,7 @@ common pulp-gtk
     , directory
     , X11
     , unix
+    , generic-data ==0.9.*
     , stm == 2.5.*
     , parser-combinators ==1.3.*
     , megaparsec ==9.2.*

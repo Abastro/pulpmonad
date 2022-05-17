@@ -50,12 +50,12 @@ mainboardWidget = do
       hack <- Gtk.iconNewFromName Gtk.IconSizeDnd "ram-000"
       fg <- Gtk.iconNewFromName Gtk.IconSizeDnd "ram-000"
       let barRect = RationalRect (13 % 32) (8 % 32) (19 % 32) (24 % 32)
-      bar <- Gtk.barNewTask barRect (0.1, 0.6, 0.9) task memUsedRatio
+      bar <- Gtk.barNewTask barRect (0.1, 0.6, 0.9) task (memUsed . memRatios)
       Gtk.overlayed hack [bar, fg]
   traverse_ (`Gtk.setWidgetHalign` Gtk.AlignStart) widMem
 
   widCPU <- do
-    cpuUse <- startRegular 50 (cpuDiff 50)
+    cpuUse <- startRegular 50 (cpuDelta 50)
     cpuTemp <- startRegular 100 cpuTemp
     for ((,) <$> cpuUse <*> cpuTemp) \(taskUse, taskTemp) -> do
       let cpuN n = T.pack $ printf "cpu-%03d" (n * 20)
@@ -63,7 +63,7 @@ mainboardWidget = do
         -- Will operate on range 20C - 120C
         let tmpInd :: Int = round $ clamp (0, 100) (temp - 20) * 0.05 in cpuN tmpInd
       let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
-      bar <- Gtk.barNewTask barRect (0.9, 0.6, 0.1) taskUse cpuUsedRatio
+      bar <- Gtk.barNewTask barRect (0.9, 0.6, 0.1) taskUse (cpuUsed . cpuRatios)
       Gtk.overlayed fg [bar]
   traverse_ (`Gtk.setWidgetHalign` Gtk.AlignEnd) widCPU
 

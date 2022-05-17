@@ -2,20 +2,23 @@
 
 module HWStatus (
   CPUStat (..),
+  cpuRatios,
   cpuUsed,
-  cpuUsedRatio,
   cpuStat,
-  cpuDiff,
+  cpuDelta,
   cpuTemp,
   MemStat (..),
+  memRatios,
   memUsed,
-  memUsedRatio,
   memStat,
   BatStatus (..),
   BatStat (..),
   batStat,
+  IOStat (..),
   DiskStat (..),
+  diskSpeed,
   diskStat,
+  diskDelta,
 ) where
 
 import Control.Applicative
@@ -25,43 +28,49 @@ import Data.Map.Strict qualified as M
 import Data.Monoid
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
+import Generic.Data
 import Parse.ParseHor
 import System.Directory
 import System.FilePath
 import System.IO
 
--- | Gets a single line from a file
+-- | Gets a single line from a file.
 getFileLine :: FilePath -> IO T.Text
 getFileLine path = withFile path ReadMode T.hGetLine
 
--- | CPU statistics. Unit is USER_HZ (typically 0.01s)
-data CPUStat = CPUStat
-  { userTime :: Int
-  , niceTime :: Int
-  , systemTime :: Int
-  , idleTime :: Int
-  , ioWait :: Int
-  , irqTime :: Int
-  , softirqTime :: Int
-  }
-  deriving (Show)
+-- | Ratio to certain value
+ratioTo :: (Applicative v, Real a, Fractional b) => a -> v a -> v b
+ratioTo un = fmap (\n -> realToFrac n / realToFrac un)
 
-cpuOf :: [Int] -> Maybe CPUStat
+-- | CPU statistics. Usual unit is USER_HZ (typically 0.01s)
+data CPUStat a = CPUStat
+  { userTime :: !a
+  , niceTime :: !a
+  , systemTime :: !a
+  , idleTime :: !a
+  , ioWait :: !a
+  , irqTime :: !a
+  , softirqTime :: !a
+  }
+  deriving stock (Show, Generic1)
+  deriving (Functor, Applicative) via (Generically1 CPUStat)
+
+cpuOf :: [a] -> Maybe (CPUStat a)
 cpuOf = \case
   userTime : niceTime : systemTime : idleTime : ioWait : irqTime : softirqTime : _ -> Just CPUStat{..}
   _ -> Nothing
 
-cpuUsed :: CPUStat -> Int
+cpuRatios :: (Real a, Fractional b) => CPUStat a -> CPUStat b
+cpuRatios cpu@CPUStat{userTime, systemTime, idleTime} = ratioTo (userTime + systemTime + idleTime) cpu
+
+cpuUsed :: Num a => CPUStat a -> a
 cpuUsed CPUStat{..} = userTime + systemTime
 
-cpuUsedRatio :: CPUStat -> Double
-cpuUsedRatio cpu@CPUStat{idleTime} = (fromIntegral $ cpuUsed cpu) / (fromIntegral $ cpuUsed cpu + idleTime)
-
 {- |
-  Gets CPU statistics in accumulative sense. Second of the pair is for each core.
+  Gets CPU statistics in accumulated from booting. Second of the pair is for each core.
   Pulls from </proc/stat>.
 -}
-cpuStat :: IO (CPUStat, [CPUStat])
+cpuStat :: IO (CPUStat Int, [CPUStat Int])
 cpuStat = parseFile cpus ("/" </> "proc" </> "stat")
   where
     cpus = fields (many decimalH) >>= exQueryMap query
@@ -71,15 +80,15 @@ cpuStat = parseFile cpus ("/" </> "proc" </> "stat")
       pure (total, cores)
 
 {- |
-  Compute time spent in each mode during specified amount of time (ms).
-  Argument should be positive.
+  CPU time spent in each mode during specified amount of time (ms).
+  The argument should be positive.
 -}
-cpuDiff :: Int -> IO CPUStat
-cpuDiff delay = do
-  CPUStat t1 t2 t3 t4 t5 t6 t7 <- fst <$> cpuStat
+cpuDelta :: Int -> IO (CPUStat Int)
+cpuDelta delay = do
+  pre <- fst <$> cpuStat
   threadDelay (delay * 1000)
-  CPUStat t1' t2' t3' t4' t5' t6' t7' <- fst <$> cpuStat
-  pure $ CPUStat (t1' - t1) (t2' - t2) (t3' - t3) (t4' - t4) (t5' - t5) (t6' - t6) (t7' - t7)
+  post <- fst <$> cpuStat
+  pure (liftA2 (-) post pre)
 
 {- |
   Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
@@ -96,29 +105,30 @@ cpuTemp = do
         "k10temp" -> parseFile decimalH (dir </> "temp2_input")
         name -> fail $ "Not relevant device: " <> show name
 
--- | Memory statistics. All units are in kB.
-data MemStat = MemStat
-  { memTotal :: Int
-  , memFree :: Int
-  , memAvailable :: Int
-  , memBuffers :: Int
-  , memCached :: Int
-  , swapTotal :: Int
-  , swapFree :: Int
+-- | Memory statistics. Usual unit is kB.
+data MemStat a = MemStat
+  { memTotal :: !a
+  , memFree :: !a
+  , memAvailable :: !a
+  , memBuffers :: !a
+  , memCached :: !a
+  , swapTotal :: !a
+  , swapFree :: !a
   }
-  deriving (Show)
+  deriving stock (Show, Generic1)
+  deriving (Functor, Applicative) via (Generically1 MemStat)
 
-memUsed :: MemStat -> Int
+memRatios :: (Real a, Fractional b) => MemStat a -> MemStat b
+memRatios mem@MemStat{memTotal} = ratioTo memTotal mem
+
+memUsed :: Num a => MemStat a -> a
 memUsed MemStat{..} = memTotal - memFree - memBuffers - memCached
-
-memUsedRatio :: MemStat -> Double
-memUsedRatio mem@MemStat{memTotal} = (fromIntegral $ memUsed mem) / fromIntegral memTotal
 
 {- |
   Gets Memory statistics.
   Pulls from </proc/meminfo>.
 -}
-memStat :: IO MemStat
+memStat :: IO (MemStat Int)
 memStat = parseFile memory ("/" </> "proc" </> "meminfo")
   where
     memory = do
@@ -135,7 +145,7 @@ memStat = parseFile memory ("/" </> "proc" </> "meminfo")
       swapFree <- queryField "SwapFree"
       pure MemStat{..}
 
--- Note: NotCharging = "Not Charging".
+-- | Battery status, note that @NotCharging@ means "Not charging".
 data BatStatus = Charging | Discharging | NotCharging | Full | Unknown
   deriving (Show)
 
@@ -203,42 +213,72 @@ batStat = do
       "Full" -> Full
       _ -> Unknown
 
+-- | Disk statistics for either of Read/Write.
+data IOStat a = IOStat
+  { numReqs :: !a
+  , numMerges :: !a
+  , numSectors :: !a
+  , timeSpentms :: !a
+  }
+  deriving stock (Show, Generic1)
+  deriving (Functor, Applicative) via (Generically1 IOStat)
+
+-- | Disk speed in bit/s from IOStat.
+diskSpeed :: (Real a, Fractional b) => IOStat a -> b
+diskSpeed IOStat{..} =
+  if timeSpentms == 0
+    then 0 -- v MAYBE Use disk sector size instead of this
+    else (4096 * 1000 * realToFrac numSectors) / realToFrac timeSpentms
+
 {- |
-  Disk statistics.
+  Disk statistics. Note that the units differ.
   Consult <https://www.kernel.org/doc/html/latest/admin-guide/iostats.html>.
 -}
-data DiskStat = DiskStat
-  { numReads :: Int
-  , readMerged :: Int
-  , readSectors :: Int
-  , readMilliSecs :: Int
-  , numWrites :: Int
-  , writeMerged :: Int
-  , writeSectors :: Int
-  , writeMilliSecs :: Int
-  , ioMilliSecs :: Int
+data DiskStat a = DiskStat
+  { readStat :: !(IOStat a)
+  , writeStat :: !(IOStat a)
+  , ioMilliSecs :: !a
   -- ^ 10th field, not 9th
-  } deriving (Show)
+  }
+  deriving stock (Show, Generic1)
+  deriving (Functor, Applicative) via (Generically1 DiskStat)
 
-diskOf :: [Int] -> Maybe DiskStat
+diskOf :: [a] -> Maybe (DiskStat a)
 diskOf = \case
-  numReads : readMerged : readSectors : readMilliSecs : numWrites : writeMerged : writeSectors : writeMilliSecs : _ : ioMilliSecs : _ ->
-    Just DiskStat{..}
+  xs
+    | (reads, xs') <- splitAt 4 xs
+    , (writes, ioMilliSecs : _) <- splitAt 4 xs'
+    , Just readStat <- ioOf reads
+    , Just writeStat <- ioOf writes ->
+        Just DiskStat{..}
   _ -> Nothing
+  where
+    ioOf = \case
+      numReqs : numMerges : numSectors : timeSpentms : _ -> Just $ IOStat{..}
+      _ -> Nothing
 
 {- |
-  Gets disk statistics.
+  Gets disk statistics accumulated from booting.
   Since multiple disks & disk partitions exist in many cases, map of non-loop disks are returned.
 
   Pulls from </proc/diskstats>.
 -}
-diskStat :: IO (M.Map T.Text DiskStat)
+diskStat :: IO (M.Map T.Text (DiskStat Int))
 diskStat = do
   parseFile disks ("/" </> "proc" </> "diskstats")
   where
     disks = fieldsWithHead (skipH <* identH <* identH) (many decimalH) >>= exQueryMap query
     query = queryAllAs (not . ("loop" `T.isPrefixOf`)) (traverse diskOf)
 
--- TODO Implement disk diff
+{- |
+  Disk statistics as rates over certain delay(ms), for certain disk/partition.
+  The disk/partition name is analogous to the one from "df" command.
+-}
+diskDelta :: Int -> IO (M.Map T.Text (DiskStat Int))
+diskDelta delay = do
+  pre <- diskStat
+  threadDelay (delay * 1000)
+  post <- diskStat
+  pure (M.intersectionWith (liftA2 (-)) pre post)
 
 -- Brightness: "/sys/class/backlight/?"
