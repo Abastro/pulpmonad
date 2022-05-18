@@ -8,3 +8,11 @@ Setup.hs
 
 .vscode
 *.code-workspace
+*.local
+
+*.eventlog
+*.eventlog.html
+*.hp
+*.ps
+*.pdf
+*.aux
