@@ -1,4 +1,5 @@
 module UI.Singles (
+  module GI.Gtk.Objects.Label,
   imageNew,
   iconNewFromName,
   iconNewTask,
@@ -15,6 +16,7 @@ import GI.Cairo.Render.Connector
 import GI.Gtk.Objects.Image
 import UI.Commons
 import UI.Task
+import GI.Gtk.Objects.Label
 import XMonad.StackSet (RationalRect (..))
 
 iconNewWith :: MonadIO m => IconSize -> ((T.Text -> IO ()) -> IO a) -> (a -> IO ()) -> m Widget

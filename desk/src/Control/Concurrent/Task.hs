@@ -8,7 +8,7 @@ import Control.Monad.IO.Class
 import Data.Foldable
 import System.IO
 
--- | Represents a Task.
+-- | Represents a repeatedly run Task.
 data Task a = Task {killTask :: IO (), taskVar :: MVar a}
 
 -- | Starts regular task with delay (ms). Delay should be longer than 10ms.

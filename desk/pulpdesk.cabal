@@ -36,6 +36,7 @@ common pulp-gtk
     , broadcast-chan ==0.2.*
     , haskell-gi ==0.26.*
     , gi-glib ==2.0.*
+    , gi-gio ==2.0.*
     , gi-gtk ==3.*
     , gi-gdk ==3.*
     , gi-gtk-hs ==0.3.*
@@ -56,6 +57,7 @@ library
     UI.Singles
     UI.Containers
     UI.Window
+    UI.Application
 
 test-suite test-pulpdesk
   import:             pulp-gtk
@@ -85,4 +87,3 @@ executable pulp-sysctl
   ghc-options:        -rtsopts -threaded +RTS -N -RTS
   build-depends:
       pulpdesk
-    , gi-gio ==2.0.*

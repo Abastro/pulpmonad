@@ -3,18 +3,15 @@ module Main (main) where
 import Control.Monad
 import Data.Text qualified as T
 import Defines
-import GI.Gdk.Objects.Screen qualified as Gdk
 import GI.Gdk.Structs.EventKey qualified as Gdk
-import GI.Gio.Objects.Application qualified as Gio
-import GI.Gtk.Objects.Application qualified as Gtk
 import GI.Gtk.Objects.CssProvider qualified as Gtk
-import GI.Gtk.Objects.Label qualified as UI
 import System.Environment (getEnv)
 import System.Exit
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Singles qualified as UI
 import UI.Window qualified as UI
+import UI.Application qualified as UI
 import XMonad.Util.Run (safeSpawn)
 
 data SysCtl = Build | Refresh | Logout | Reboot | Poweroff
@@ -73,9 +70,9 @@ ctlButton window ctl = do
 main :: IO ()
 main = do
   -- Does not care crashing here
-  Just app <- Gtk.applicationNew (Just $ T.pack "pulp.ui.sysctl") []
-  Gio.onApplicationActivate app (activating app)
-  status <- Gio.applicationRun app Nothing
+  Just app <- UI.applicationNew (Just $ T.pack "pulp.ui.sysctl") []
+  UI.onApplicationActivate app (activating app)
+  status <- UI.applicationRun app Nothing
   when (status /= 0) $ exitWith (ExitFailure $ fromIntegral status)
   where
     cssProv :: IO Gtk.CssProvider
@@ -85,11 +82,9 @@ main = do
       Gtk.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-sysctl.css")
       pure css
 
-    activating :: Gtk.Application -> IO ()
+    activating :: UI.Application -> IO ()
     activating app = do
-      Just screen <- Gdk.screenGetDefault
-      css <- cssProv
-      UI.styleContextAddProviderForScreen screen css $ fromIntegral UI.STYLE_PROVIDER_PRIORITY_USER
+      cssProv >>= flip UI.defscreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
 
       window <- UI.appWindowNew app
       UI.windowSetTitle window (T.pack "Pulp System Control")
