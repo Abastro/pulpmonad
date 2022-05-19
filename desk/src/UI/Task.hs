@@ -5,7 +5,7 @@ import Data.Foldable
 import GI.GLib.Constants
 import GI.GLib.Structs.Source
 import GI.Gdk.Functions qualified as Gdk
-import Task
+import Control.Concurrent.Task
 
 -- | Adds UI single-use task, which only runs once.
 uiSingleRun :: IO a -> IO ()

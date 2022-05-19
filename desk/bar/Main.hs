@@ -18,7 +18,6 @@ import System.Taffybar (startTaffybar)
 import System.Taffybar.Context (TaffyIO)
 import System.Taffybar.SimpleConfig
 import System.Taffybar.Widget
-import Task
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Singles qualified as UI
@@ -26,6 +25,7 @@ import XMonad.ManageHook
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
+import Control.Concurrent.Task
 
 setupIcons :: FilePath -> TaffyIO ()
 setupIcons mainDir = do

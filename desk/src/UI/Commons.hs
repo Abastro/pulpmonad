@@ -8,7 +8,7 @@ module UI.Commons (
 ) where
 
 import GI.Gdk.Constants hiding (MAJOR_VERSION, MICRO_VERSION, MINOR_VERSION)
-import GI.Gdk.Enums hiding  (WindowType, WindowTypeToplevel, AnotherWindowType)
+import GI.Gdk.Enums hiding (AnotherWindowType, WindowType, WindowTypeToplevel)
 import GI.Gtk.Constants hiding (MAJOR_VERSION, MICRO_VERSION, MINOR_VERSION)
 import GI.Gtk.Enums
 import GI.Gtk.Objects.StyleContext

@@ -47,7 +47,7 @@ library
   import:             pulp-gtk
   hs-source-dirs:     src
   exposed-modules:
-    Task
+    Control.Concurrent.Task
     Parse.ParseHor
     Status.HWStatus
 

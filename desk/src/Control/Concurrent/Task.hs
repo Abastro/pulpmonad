@@ -1,4 +1,4 @@
-module Task where
+module Control.Concurrent.Task where
 
 import Control.Concurrent
 import Control.Exception
