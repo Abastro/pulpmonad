@@ -36,7 +36,7 @@ import Text.Printf
 parseFile :: P.Parsec Void T.Text a -> FilePath -> IO a
 parseFile parser path =
   P.parse parser path <$> T.readFile path >>= \case
-    Left err -> fail $ P.errorBundlePretty err
+    Left err -> fail $ P.errorBundlePretty err -- TODO use fast-logger to log
     Right result -> pure result
 
 -- | Skips horizontal spaces.
@@ -76,6 +76,8 @@ fieldsWithHead :: P.MonadParsec e T.Text m => m hd -> m a -> m (M.Map T.Text a)
 fieldsWithHead hd pval = M.fromList <$> field `sepEndBy` eoH
   where
     field = P.label "field" $ (,) <$> (hd *> identH) <*> pval
+
+-- MAYBE create generalized module for parsing?
 
 -- | Map query monad.
 newtype QueryMap b a = QueryMap (ExceptT String (State (M.Map T.Text b)) a)

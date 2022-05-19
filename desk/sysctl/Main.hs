@@ -1,28 +1,32 @@
 module Main (main) where
 
 import Control.Monad
-import Data.Foldable
 import Data.Text qualified as T
 import Defines
-import GI.Gdk.Constants qualified as Gdk
-import GI.Gdk.Enums qualified as Gdk
 import GI.Gdk.Objects.Screen qualified as Gdk
 import GI.Gdk.Structs.EventKey qualified as Gdk
 import GI.Gio.Objects.Application qualified as Gio
-import GI.Gtk.Constants qualified as Gtk
 import GI.Gtk.Objects.Application qualified as Gtk
-import GI.Gtk.Objects.ApplicationWindow qualified as Gtk
-import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Objects.CssProvider qualified as Gtk
-import GI.Gtk.Objects.Label qualified as Gtk
-import GI.Gtk.Objects.Window qualified as Gtk
-import UI.GtkCommons qualified as Gtk
+import GI.Gtk.Objects.Label qualified as UI
 import System.Environment (getEnv)
 import System.Exit
+import UI.Commons qualified as UI
+import UI.Containers qualified as UI
+import UI.Singles qualified as UI
+import UI.Window qualified as UI
 import XMonad.Util.Run (safeSpawn)
 
 data SysCtl = Build | Refresh | Logout | Reboot | Poweroff
   deriving (Enum, Bounded, Show)
+
+nameOf :: SysCtl -> T.Text
+nameOf = \case
+  Build -> T.pack "Build"
+  Refresh -> T.pack "Refresh"
+  Logout -> T.pack "Log out"
+  Reboot -> T.pack "Reboot"
+  Poweroff -> T.pack "Power off"
 
 iconOf :: SysCtl -> T.Text
 iconOf = \case
@@ -40,29 +44,30 @@ styleOf = \case
   Reboot -> T.pack "btn-reboot"
   Poweroff -> T.pack "btn-poweroff"
 
-actOf :: Gtk.Window -> SysCtl -> IO ()
+actOf :: UI.Window -> SysCtl -> IO ()
 actOf window = \case
   Build -> do
     safeSpawn "gnome-terminal" ["--class=term-float", "--", "xmonad-manage", "build", "pulpmonad"]
-    Gtk.windowClose window -- For now, close the window..
+    UI.windowClose window -- For now, close the window..
   Refresh -> do
     safeSpawn "xmonad" ["--restart"]
-    Gtk.windowClose window
+    UI.windowClose window
   Logout -> safeSpawn "killall" ["xmonad-manage"] -- A roundabout
   Reboot -> safeSpawn "systemctl" ["reboot"]
   Poweroff -> safeSpawn "systemctl" ["poweroff"]
 
-ctlButton :: Gtk.Window -> SysCtl -> IO Gtk.Widget
+ctlButton :: UI.Window -> SysCtl -> IO UI.Widget
 ctlButton window ctl = do
-  box <- do
-    box <- Gtk.boxNew Gtk.OrientationVertical 5
-    Gtk.widgetSetValign box Gtk.AlignCenter
-    Gtk.containerAdd box =<< Gtk.iconNewFromName Gtk.IconSizeDialog (iconOf ctl)
-    Gtk.containerAdd box =<< Gtk.labelNew (Just . T.pack $ show ctl)
-    Gtk.toWidget box
+  box <-
+    UI.boxed UI.OrientationVertical 5
+      =<< sequenceA
+        [ UI.iconNewFromName UI.IconSizeDialog (iconOf ctl)
+        , UI.toWidget =<< UI.labelNew (Just $ nameOf ctl)
+        ]
+  UI.widgetSetValign box UI.AlignCenter
 
-  btn <- Gtk.buttonNewWith (Just box) $ actOf window ctl
-  Gtk.widgetGetStyleContext btn >>= flip Gtk.styleContextAddClass (styleOf ctl)
+  btn <- UI.buttonNewWith (Just box) $ actOf window ctl
+  UI.widgetGetStyleContext btn >>= flip UI.styleContextAddClass (styleOf ctl)
   pure btn
 
 main :: IO ()
@@ -84,34 +89,32 @@ main = do
     activating app = do
       Just screen <- Gdk.screenGetDefault
       css <- cssProv
-      Gtk.styleContextAddProviderForScreen screen css $ fromIntegral Gtk.STYLE_PROVIDER_PRIORITY_USER
+      UI.styleContextAddProviderForScreen screen css $ fromIntegral UI.STYLE_PROVIDER_PRIORITY_USER
 
-      window <- Gtk.applicationWindowNew app >>= Gtk.toWindow
-      Gtk.windowSetTitle window (T.pack "Pulp System Control")
-      Gtk.windowSetDefaultSize window 560 140
-      Gtk.windowSetTypeHint window Gdk.WindowTypeHintSplashscreen
-      Gtk.windowSetPosition window Gtk.WindowPositionCenterAlways
-      Gtk.windowSetKeepAbove window True
-      Gtk.windowSetSkipPagerHint window True
-      Gtk.windowSetSkipTaskbarHint window True
-      Gtk.onWidgetKeyPressEvent window $
+      window <- UI.appWindowNew app
+      UI.windowSetTitle window (T.pack "Pulp System Control")
+      UI.windowSetDefaultSize window 560 140
+      UI.windowSetTypeHint window UI.WindowTypeHintSplashscreen
+      UI.windowSetPosition window UI.WindowPositionCenterAlways
+      UI.windowSetKeepAbove window True
+      UI.windowSetSkipPagerHint window True
+      UI.windowSetSkipTaskbarHint window True
+      UI.onWidgetKeyPressEvent window $
         Gdk.getEventKeyKeyval >=> \case
-          Gdk.KEY_Escape -> True <$ Gtk.windowClose window
+          UI.KEY_Escape -> True <$ UI.windowClose window
           _ -> pure False
 
-      Gtk.windowAsTransparent window
-      Gtk.windowGrabOnMap window
+      UI.windowAsTransparent window
+      UI.windowGrabOnMap window
 
-      btns window >>= Gtk.containerAdd window
-      Gtk.widgetShowAll window
+      UI.containerAdd window =<< btns window
+      UI.widgetShowAll window
 
-    btns :: Gtk.Window -> IO Gtk.Box
+    btns :: UI.Window -> IO UI.Widget
     btns window = do
-      box <- Gtk.boxNew Gtk.OrientationHorizontal 10
-      Gtk.widgetGetStyleContext box >>= flip Gtk.styleContextAddClass (T.pack "btn-area")
-      Gtk.widgetSetHalign box Gtk.AlignFill
-      Gtk.boxSetHomogeneous box True
-
-      buttons <- traverse (ctlButton window) [minBound .. maxBound]
-      traverse_ (Gtk.containerAdd box) buttons
+      box <-
+        UI.homogBoxed UI.OrientationHorizontal 10
+          =<< traverse (ctlButton window) [minBound .. maxBound]
+      UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "btn-area")
+      UI.widgetSetHalign box UI.AlignFill
       pure box

@@ -49,8 +49,13 @@ library
   exposed-modules:
     Task
     Parse.ParseHor
-    UI.GtkCommons
     Status.HWStatus
+
+    UI.Commons
+    UI.Task
+    UI.Singles
+    UI.Containers
+    UI.Window
 
 test-suite test-pulpdesk
   import:             pulp-gtk

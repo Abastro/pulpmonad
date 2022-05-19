@@ -66,10 +66,9 @@ cpuRatios cpu@CPUStat{userTime, systemTime, idleTime} = ratioTo (userTime + syst
 cpuUsed :: Num a => CPUStat a -> a
 cpuUsed CPUStat{..} = userTime + systemTime
 
-{- |
-  Gets CPU statistics in accumulated from booting. Second of the pair is for each core.
-  Pulls from </proc/stat>.
--}
+-- |
+--  Gets CPU statistics in accumulated from booting. Second of the pair is for each core.
+--  Pulls from </proc/stat>.
 cpuStat :: IO (CPUStat Int, [CPUStat Int])
 cpuStat = parseFile cpus ("/" </> "proc" </> "stat")
   where
@@ -79,10 +78,8 @@ cpuStat = parseFile cpus ("/" </> "proc" </> "stat")
       cores <- queryAllAs ("cpu" `T.isPrefixOf`) (traverse cpuOf . M.elems)
       pure (total, cores)
 
-{- |
-  CPU time spent in each mode during specified amount of time (ms).
-  The argument should be positive.
--}
+-- | CPU time spent in each mode during specified amount of time (ms).
+-- The argument should be positive.
 cpuDelta :: Int -> IO (CPUStat Int)
 cpuDelta delay = do
   pre <- fst <$> cpuStat
@@ -90,10 +87,9 @@ cpuDelta delay = do
   post <- fst <$> cpuStat
   pure (liftA2 (-) post pre)
 
-{- |
-  Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
-  Pulls from </sys/class/hwmon/hwmon?/temp2_input>.
--}
+-- |
+--  Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
+--  Pulls from </sys/class/hwmon/hwmon?/temp2_input>.
 cpuTemp :: IO Double
 cpuTemp = do
   dirs <- map (baseDir </>) <$> listDirectory baseDir
@@ -124,10 +120,9 @@ memRatios mem@MemStat{memTotal} = ratioTo memTotal mem
 memUsed :: Num a => MemStat a -> a
 memUsed MemStat{..} = memTotal - memFree - memBuffers - memCached
 
-{- |
-  Gets Memory statistics.
-  Pulls from </proc/meminfo>.
--}
+-- |
+--  Gets Memory statistics.
+--  Pulls from </proc/meminfo>.
 memStat :: IO (MemStat Int)
 memStat = parseFile memory ("/" </> "proc" </> "meminfo")
   where
@@ -149,17 +144,16 @@ memStat = parseFile memory ("/" </> "proc" </> "meminfo")
 data BatStatus = Charging | Discharging | NotCharging | Full | Unknown
   deriving (Show)
 
-{- |
-  Battery statistics. Some components may or may not exist.
-  Units are given as follows:
-
-  * capacity: %
-  * energy: μWh
-  * charge: μAh
-  * voltage: μV
-  * power: μW
-  * current: μA
--}
+-- |
+--  Battery statistics. Some components may or may not exist.
+--  Units are given as follows:
+--
+--  * capacity: %
+--  * energy: μWh
+--  * charge: μAh
+--  * voltage: μV
+--  * power: μW
+--  * current: μA
 data BatStat = BatStat
   { batStatus :: BatStatus
   , capacity :: Int
@@ -177,10 +171,9 @@ data BatStat = BatStat
   }
   deriving (Show)
 
-{- |
-  Gets Battery statistics.
-  Pulls from </sys/class/power_supply/BAT?/uevent>.
--}
+-- |
+--  Gets Battery statistics.
+--  Pulls from </sys/class/power_supply/BAT?/uevent>.
 batStat :: IO BatStat
 batStat = do
   let path = "/" </> "sys" </> "class" </> "power_supply"
@@ -230,10 +223,9 @@ diskSpeed IOStat{..} =
     then 0 -- v MAYBE Use disk sector size instead of this
     else (4096 * 1000 * realToFrac numSectors) / realToFrac timeSpentms
 
-{- |
-  Disk statistics. Note that the units differ.
-  Consult <https://www.kernel.org/doc/html/latest/admin-guide/iostats.html>.
--}
+-- |
+--  Disk statistics. Note that the units differ.
+--  Consult <https://www.kernel.org/doc/html/latest/admin-guide/iostats.html>.
 data DiskStat a = DiskStat
   { readStat :: !(IOStat a)
   , writeStat :: !(IOStat a)
@@ -257,12 +249,11 @@ diskOf = \case
       numReqs : numMerges : numSectors : timeSpentms : _ -> Just $ IOStat{..}
       _ -> Nothing
 
-{- |
-  Gets disk statistics accumulated from booting.
-  Since multiple disks & disk partitions exist in many cases, map of non-loop disks are returned.
-
-  Pulls from </proc/diskstats>.
--}
+-- |
+--  Gets disk statistics accumulated from booting.
+--  Since multiple disks & disk partitions exist in many cases, map of non-loop disks are returned.
+--
+--  Pulls from </proc/diskstats>.
 diskStat :: IO (M.Map T.Text (DiskStat Int))
 diskStat = do
   parseFile disks ("/" </> "proc" </> "diskstats")
@@ -270,10 +261,9 @@ diskStat = do
     disks = fieldsWithHead (skipH <* identH <* identH) (many decimalH) >>= exQueryMap query
     query = queryAllAs (not . ("loop" `T.isPrefixOf`)) (traverse diskOf)
 
-{- |
-  Disk statistics as rates over certain delay(ms), for certain disk/partition.
-  The disk/partition name is analogous to the one from "df" command.
--}
+-- |
+--  Disk statistics as rates over certain delay(ms), for certain disk/partition.
+--  The disk/partition name is analogous to the one from "df" command.
 diskDelta :: Int -> IO (M.Map T.Text (DiskStat Int))
 diskDelta delay = do
   pre <- diskStat
