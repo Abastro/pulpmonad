@@ -3,6 +3,8 @@
 
 module Main (main) where
 
+import Control.Concurrent.Task
+import Control.Monad.Trans.Maybe
 import Data.Foldable
 import Data.Map qualified as M
 import Data.Maybe
@@ -11,13 +13,19 @@ import Data.Ratio ((%))
 import Data.Text qualified as T
 import Data.Traversable
 import Defines
+import GI.Gio.Interfaces.AppInfo
+import GI.Gio.Objects.DesktopAppInfo
+import GI.Gtk.Objects.IconInfo qualified as UI
 import GI.Gtk.Objects.IconTheme qualified as UI
 import Status.HWStatus
 import System.Environment
+import System.Environment.XDG.DesktopEntry
 import System.Taffybar (startTaffybar)
 import System.Taffybar.Context (TaffyIO)
 import System.Taffybar.SimpleConfig
+import System.Taffybar.Util ((<|||>))
 import System.Taffybar.Widget
+import System.Taffybar.WindowIcon
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Singles qualified as UI
@@ -25,7 +33,21 @@ import XMonad.ManageHook
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
-import Control.Concurrent.Task
+
+-- | Taffybar does it wrong way in so many degrees, DUH
+-- Band-aid for now.
+windowIconFromDEntry :: WindowIconPixbufGetter
+windowIconFromDEntry size winData = getWindowIconForAllClasses throughDEntry size (windowClass winData)
+  where
+    -- Even gi-gio betrayed me... At least, this workaround does not look overly horrible.
+    throughDEntry size cl = runMaybeT $ do
+      entryName <- deFilename <$> MaybeT (getDirectoryEntryByClass cl)
+      deskAppInfo <- MaybeT $ desktopAppInfoNewFromFilename entryName
+      gIcon <- MaybeT (appInfoGetIcon deskAppInfo)
+
+      defaultTheme <- UI.iconThemeGetDefault
+      iconInfo <- MaybeT $ UI.iconThemeLookupByGicon defaultTheme gIcon size []
+      UI.iconInfoLoadIcon iconInfo
 
 setupIcons :: FilePath -> TaffyIO ()
 setupIcons mainDir = do
@@ -117,4 +139,5 @@ main = do
         defaultWorkspacesConfig
           { showWorkspaceFn = hideEmpty <&&> ((/= scratchpadWorkspaceTag) . workspaceName)
           , labelSetter = pure . getName . workspaceName
+          , getWindowIconPixbuf = windowIconFromDEntry <|||> getWindowIconPixbuf defaultWorkspacesConfig
           }

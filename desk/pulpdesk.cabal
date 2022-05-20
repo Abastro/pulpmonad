@@ -20,7 +20,9 @@ common pulp-gtk
       base >=4.14 && <5
     , vector
     , containers
+    , transformers
     , mtl
+    , bytestring
     , text
     , filepath
     , directory
@@ -36,7 +38,7 @@ common pulp-gtk
     , broadcast-chan ==0.2.*
     , haskell-gi ==0.26.*
     , gi-glib ==2.0.*
-    , gi-gio ==2.0.*
+    , gi-gio >=2.0.29
     , gi-gtk ==3.*
     , gi-gdk ==3.*
     , gi-gtk-hs ==0.3.*
@@ -50,7 +52,9 @@ library
   exposed-modules:
     Control.Concurrent.Task
     Parse.ParseHor
+
     Status.HWStatus
+    Status.EWMHStatus
 
     UI.Commons
     UI.Task
@@ -76,6 +80,7 @@ executable pulpbar
   ghc-options:        -rtsopts -threaded +RTS -N -RTS
   build-depends:
       pulpdesk
+    , xdg-desktop-entry ==0.1.*
     , gtk-strut >=0.1.4
     , gtk-sni-tray ==0.1.*
     , taffybar ==3.4.*
