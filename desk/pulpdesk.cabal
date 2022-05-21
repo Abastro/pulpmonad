@@ -54,7 +54,7 @@ library
     Parse.ParseHor
 
     Status.HWStatus
-    Status.EWMHStatus
+    Status.WMStatus
 
     UI.Commons
     UI.Task
