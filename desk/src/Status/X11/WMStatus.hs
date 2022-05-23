@@ -10,11 +10,15 @@ module Status.X11.WMStatus (
   getProp,
   XPropQuery,
   readProp,
+  XQuerySpec (..),
+  runXQuery,
   watchXQueryWith,
+  watchXQuery,
+  DesktopState (..),
   DesktopStat (..),
   getDesktopStat,
-  WindowStats (..),
-  getWindowStats,
+  getAllWindows,
+  getActiveWindow,
   WMStateEx (..),
   WindowInfo (..),
   getWindowInfo,
@@ -100,12 +104,23 @@ data XQuerySpec a = forall p.
   , queryProps :: p -> XPropQuery a
   }
 
+-- | Simply runs X query once.
+runXQuery :: XQuerySpec a -> XEventHandle (Maybe a)
+runXQuery XQuerySpec{getProps = XPropGet getPrs, queryProps} = do
+  meh <- liftIO (newIORef [])
+  props <- x11ToEventHandle meh getPrs
+  runMaybeT (queryProps props)
+
 -- | X query that watches for X property at certain window.
 -- Any query which fail to produce result doesn't emit the task.
 -- Can also listen to other events, while it cannot emit the task.
-watchXQueryWith :: XQuerySpec a -> EventMask -> (Event -> XEventHandle ()) -> XEventHandle (Task a)
-watchXQueryWith XQuerySpec{getProps = XPropGet getPrs, queryProps} otherMask otherEv = do
-  window <- xWindow
+watchXQueryWith ::
+  Window ->
+  XQuerySpec a ->
+  EventMask ->
+  (Event -> XEventHandle ()) ->
+  XEventHandle (Task a)
+watchXQueryWith window XQuerySpec{getProps = XPropGet getPrs, queryProps} otherMask otherEv = do
   watched <- liftIO (newIORef [])
   props <- x11ToEventHandle watched getPrs
   watchSet <- S.fromList <$> liftIO (readIORef watched)
@@ -115,6 +130,10 @@ watchXQueryWith XQuerySpec{getProps = XPropGet getPrs, queryProps} otherMask oth
     PropertyEvent{ev_atom = prop}
       | prop `S.member` watchSet -> runMaybeT (queryProps props)
     event -> Nothing <$ otherEv event
+
+-- | Watch X query without additional handlers.
+watchXQuery :: Window -> XQuerySpec a -> XEventHandle (Task a)
+watchXQuery window spec = watchXQueryWith window spec 0 (\_ -> pure ())
 
 data DesktopState = DeskActive | DeskVisible | DeskHidden
 
@@ -160,29 +179,25 @@ getDesktopStat =
         pure $ V.generate numDesktops deskInfo
     }
 
--- | Encompassing Window statistics.
-data WindowStats = WindowStats
-  { allWindows :: V.Vector Window
-  , activeWindow :: Maybe Window
-  }
-
-data WindowStatsProps = WindowStatsProps
-  {propClients :: XProperty [Window], propActive :: XProperty [Window]}
-
--- | Get encompassing window statistics.
-getWindowStats :: XQuerySpec WindowStats
-getWindowStats =
+-- | Get all windows.
+getAllWindows :: XQuerySpec (V.Vector Window)
+getAllWindows =
   XQuerySpec
-    { getProps = WindowStatsProps <$> getProp "_NET_CLIENT_LIST" <*> getProp "_NET_ACTIVE_WINDOW"
-    , queryProps = \WindowStatsProps{..} -> do
-        allWindows <- V.fromList <$> readProp propClients
-        -- Empty list is considered as no active window.
-        activeWindow <- listToMaybe . filter (> 0) <$> readProp propActive
-        pure WindowStats{..}
+    { getProps = getProp @[Window] "_NET_CLIENT_LIST"
+    , queryProps = \propClients -> V.fromList <$> readProp propClients
+    }
+
+-- | Get an active window.
+getActiveWindow :: XQuerySpec (Maybe Window)
+getActiveWindow =
+  XQuerySpec
+    { getProps = getProp @[Window] "_NET_ACTIVE_WINDOW"
+    , queryProps = \propActive -> listToMaybe . filter (> 0) <$> readProp propActive
     }
 
 -- MAYBE How to deal with WM_ICON? It's quite hard.
 
+-- | Inclusive states of the window.
 data WMStateEx = WinHidden | WinDemandAttention
   deriving (Eq, Ord)
 
@@ -206,8 +221,8 @@ data WindowInfoProps = WindowInfoProps
 
 -- | Window information. Only works for non-withdrawn state.
 -- Still, the worst that could happen is giving Nothing.
-getWindowInfo :: Window -> XQuerySpec WindowInfo
-getWindowInfo _window =
+getWindowInfo :: XQuerySpec WindowInfo
+getWindowInfo =
   XQuerySpec
     { getProps =
         WindowInfoProps

@@ -10,8 +10,7 @@ module Status.X11.XHandle (
   x11ToEventHandle,
   xRunLoop,
   xListenTo,
-  xEventLoop,
-  selectXEvents,
+  xListenTo_,
 ) where
 
 import Control.Concurrent
@@ -118,19 +117,19 @@ newtype XEventHandle a = XEventHandle (X11 (IORef XListeners) a)
 x11ToEventHandle :: r -> X11 r a -> XEventHandle a
 x11ToEventHandle ext act = XEventHandle $ withXExt (\_ -> ext) act
 
--- | Runs into an X event loop, never returns.
+-- | Sets up and forks/runs the X event loop action.
 -- Note that the parameter is only run once on the root window, to register the listeners.
 -- NOTE: Currently, typical non-fatal X error during the loop is ignored.
-xRunLoop :: XEventHandle () -> X11 r ()
+xRunLoop :: XEventHandle a -> X11 r a
 xRunLoop (XEventHandle initiate) = do
   X11Env{theDisplay} <- ask
   withRunInIO $ \unliftX -> do
     listeners <- newIORef (XListeners M.empty M.empty)
     -- Is this really experimental as docs say? Let's find out.
     setErrorHandler $ \_disp _errEvent -> pure ()
-    unliftX $ withXExt (\_ -> listeners) initiate
+    initRes <- unliftX $ withXExt (\_ -> listeners) initiate
     -- Registers the listeners
-    allocaXEvent $ \evPtr -> forever $ do
+    forkIO . allocaXEvent $ \evPtr -> forever $ do
       nextEvent theDisplay evPtr
       event <- getEvent evPtr
       -- While this says get_Window, it actually grabs `event` for MapNotify/UnmapNotify.
@@ -140,6 +139,7 @@ xRunLoop (XEventHandle initiate) = do
       let perWindow = maybe [] S.toList $ perWinListener M.!? window
       let listens = mapMaybe (xListeners M.!?) perWindow
       for_ listens $ \(XListen _ listen) -> listen event
+    pure initRes
 
 -- | Listen with certain event mask at certain window.
 -- Task variable should be cared of as soon as possible, as it would put the event loop in halt.
@@ -165,17 +165,20 @@ xListenTo mask window initial handler = XEventHandle $ do
           modifyIORef' listeners $ deleteListen key
           unliftListen . liftDWIO $ \d w -> selectInput d w 0
     Task{killTask = endListen, taskVar} <$ beginListen
-  where
 
--- | Select events to listen to for the target window.
-selectXEvents :: EventMask -> X11 r ()
-selectXEvents mask = liftDWIO $ \d w -> selectInput d w mask
-
--- | Turn the current thread into event loop handler. Never returns.
-xEventLoop :: (Event -> X11 r a) -> X11 r ()
-xEventLoop handler = do
-  X11Env{theDisplay} <- ask
-  withRunInIO $ \unlifts -> do
-    allocaXEvent $ \evPtr -> forever $ do
-      nextEvent theDisplay evPtr
-      getEvent evPtr >>= unlifts . handler
+-- | Similar to xListenTo, but does not emit/report any value to the Task.
+-- NB: Subsequently, it is also impossible to stop listening on this one.
+xListenTo_ ::
+  EventMask ->
+  Window ->
+  (Event -> XEventHandle ()) ->
+  XEventHandle ()
+xListenTo_ mask window handler = XEventHandle $ do
+  X11Env{extData = listeners} <- ask
+  withRunInIO $ \unliftListen -> do
+    key <- newUnique
+    let listen = XListen window $ \event -> do
+          let XEventHandle handle = handler event
+          unliftListen (onXWindow window handle)
+    modifyIORef' listeners $ insertListen key listen
+    unliftListen . liftDWIO $ \d w -> selectInput d w mask
