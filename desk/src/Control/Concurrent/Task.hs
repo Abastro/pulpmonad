@@ -27,12 +27,13 @@ startWithRepeater repeater initial nextAct = withRunInIO $ \unlifts -> do
   pure (Task{killTask = killThread tid, taskVar = var})
 
 -- | Starts regular task with delay (ms).
-startRegular :: MonadIO m => Int -> IO a -> m (Maybe (Task a))
-startRegular delay action =
-  liftIO (try action) >>= \case
-    Left (err :: IOException) ->
-      Nothing <$ liftIO (hPutStrLn stderr $ "Error while starting task: " <> show err)
-    Right val -> liftIO $ do
+startRegular :: (MonadIO m) => Int -> IO a -> m (Maybe (Task a))
+startRegular delay action = liftIO $ do
+  try action >>= \case
+    Left (err :: IOException) -> do
+      hPutStrLn stderr $ "Error while starting task: " <> show err
+      pure Nothing
+    Right val -> do
       var <- newMVar val
       tid <- forkIO . forever $ do
         threadDelay (delay * 1000)
