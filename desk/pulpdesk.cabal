@@ -55,8 +55,8 @@ library
     Parse.ParseHor
 
     Status.HWStatus
-    Status.XHandle
-    Status.WMStatus
+    Status.X11.XHandle
+    Status.X11.WMStatus
 
     UI.Commons
     UI.Task
@@ -64,6 +64,7 @@ library
     UI.Containers
     UI.Window
     UI.Application
+    UI.X11.Workspaces
 
 test-suite test-pulpdesk
   import:             pulp-gtk

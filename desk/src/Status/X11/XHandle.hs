@@ -1,4 +1,4 @@
-module Status.XHandle (
+module Status.X11.XHandle (
   X11Env (..),
   ActX11 (..),
   X11,
@@ -18,6 +18,7 @@ import Control.Concurrent
 import Control.Concurrent.Task
 import Control.Monad.IO.Unlift
 import Control.Monad.Reader
+import Control.Monad.Trans.Maybe
 import Data.Foldable
 import Data.IORef
 import Data.Map.Strict qualified as M
@@ -35,12 +36,20 @@ data X11Env r = X11Env
   deriving (Functor)
 
 -- | Common actions for X11 monad. IO access is NOT assumed.
-class ActX11 m where
+class Functor m => ActX11 m where
+  -- | Gets the X display.
+  xDisplay :: m Display
+
   -- | Gets current/target X window.
   xWindow :: m Window
 
   -- | Queries certain X Atom.
   xAtom :: String -> m Atom
+
+instance (ActX11 m) => ActX11 (MaybeT m) where
+  xDisplay = MaybeT $ Just <$> xDisplay
+  xWindow = MaybeT $ Just <$> xWindow
+  xAtom name = MaybeT $ Just <$> xAtom name
 
 -- | Monad for X11 handling, with IO monad as base.
 newtype X11 r a = X11 (ReaderT (X11Env r) IO a)
@@ -66,6 +75,7 @@ liftDWIO act = do
   liftIO $ act theDisplay targetWindow
 
 instance ActX11 (X11 r) where
+  xDisplay = asks (\X11Env{theDisplay} -> theDisplay)
   xWindow = asks (\X11Env{targetWindow} -> targetWindow)
   xAtom name = liftDWIO $ \d _ -> internAtom d name False
 
@@ -108,7 +118,7 @@ newtype XEventHandle a = XEventHandle (X11 (IORef XListeners) a)
 x11ToEventHandle :: r -> X11 r a -> XEventHandle a
 x11ToEventHandle ext act = XEventHandle $ withXExt (\_ -> ext) act
 
--- | Runs an X event loop, never returns!
+-- | Runs into an X event loop, never returns.
 -- Note that the parameter is only run once on the root window, to register the listeners.
 -- NOTE: Currently, typical non-fatal X error during the loop is ignored.
 xRunLoop :: XEventHandle () -> X11 r ()
@@ -123,6 +133,8 @@ xRunLoop (XEventHandle initiate) = do
     allocaXEvent $ \evPtr -> forever $ do
       nextEvent theDisplay evPtr
       event <- getEvent evPtr
+      -- While this says get_Window, it actually grabs `event` for MapNotify/UnmapNotify.
+      -- This allows the substructure handling.
       window <- get_Window evPtr
       XListeners{..} <- readIORef listeners
       let perWindow = maybe [] S.toList $ perWinListener M.!? window
@@ -131,13 +143,18 @@ xRunLoop (XEventHandle initiate) = do
 
 -- | Listen with certain event mask at certain window.
 -- Task variable should be cared of as soon as possible, as it would put the event loop in halt.
--- Can ignore certain event by passing Nothing.
-xListenTo :: EventMask -> Window -> (Event -> XEventHandle (Maybe a)) -> XEventHandle (Task a)
-xListenTo mask window handler = XEventHandle $ do
+-- Begins with optional starting value, emits task when the handling yields something.
+xListenTo ::
+  EventMask ->
+  Window ->
+  (Maybe a) ->
+  (Event -> XEventHandle (Maybe a)) ->
+  XEventHandle (Task a)
+xListenTo mask window initial handler = XEventHandle $ do
   X11Env{extData = listeners} <- ask
   withRunInIO $ \unliftListen -> do
     key <- newUnique
-    taskVar <- newEmptyMVar
+    taskVar <- maybe newEmptyMVar newMVar initial
     let listen = XListen window $ \event -> do
           let XEventHandle handle = handler event
           unliftListen (onXWindow window handle) >>= traverse_ (putMVar taskVar)
@@ -146,7 +163,7 @@ xListenTo mask window handler = XEventHandle $ do
           unliftListen . liftDWIO $ \d w -> selectInput d w mask
     let endListen = do
           modifyIORef' listeners $ deleteListen key
-          unliftListen . liftDWIO $ \d w -> selectInput d w 0 -- TODO Handle BadWindow
+          unliftListen . liftDWIO $ \d w -> selectInput d w 0
     Task{killTask = endListen, taskVar} <$ beginListen
   where
 

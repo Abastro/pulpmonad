@@ -3,14 +3,14 @@
 -- | Status hook for X11 & EWMH.
 -- X11: <https://x.org/releases/X11R7.6/doc/xorg-docs/specs/ICCCM/icccm.html>
 -- EWMH: <https://specifications.freedesktop.org/wm-spec/wm-spec-1.3.html>.
-module Status.WMStatus (
+module Status.X11.WMStatus (
   XProperty,
   XPropType (..),
   XPropGet,
   getProp,
   XPropQuery,
   readProp,
-  watchXQuery,
+  watchXQueryWith,
   DesktopStat (..),
   getDesktopStat,
   WindowStats (..),
@@ -26,6 +26,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 import Data.Bitraversable
+import Data.Bits
 import Data.ByteString qualified as BS
 import Data.IORef
 import Data.Int
@@ -39,7 +40,7 @@ import Data.Word
 import Foreign.Storable
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
-import Status.XHandle
+import Status.X11.XHandle
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO: Need to subscribe on the X events
@@ -80,38 +81,40 @@ getProp name = XPropGet $ do
   liftIO $ modifyIORef' tracked (property :)
   pure (XProperty property)
 
--- | X Property query monad, which is simply MaybeT around X11 monad.
+-- | X Property query monad, which is simply MaybeT around X event handler.
 -- Make sure that no exception leaks out.
-type XPropQuery = MaybeT (X11 ())
+type XPropQuery = MaybeT XEventHandle
+-- ^ TODO MaybeT is suboptimal.
 
-readProp :: forall a n. XPropType n a => XProperty a -> MaybeT (X11 ()) a
+readProp :: forall a n. XPropType n a => XProperty a -> XPropQuery a
 readProp (XProperty prop) = do
-  X11Env{..} <- ask
+  disp <- xDisplay
+  win <- xWindow
   let size = 8 * sizeOf @n undefined
-  raw <- MaybeT . liftIO $ rawGetWindowProperty @n size theDisplay prop targetWindow
+  raw <- MaybeT . liftIO $ rawGetWindowProperty @n size disp prop win
   MaybeT . pure $ parseProp raw
 
 data XQuerySpec a = forall p.
   XQuerySpec
   { getProps :: XPropGet p
-  , queryProps :: p -> MaybeT (X11 ()) a
+  , queryProps :: p -> XPropQuery a
   }
 
 -- | X query that watches for X property at certain window.
 -- Any query which fail to produce result doesn't emit the task.
-watchXQuery :: XQuerySpec a -> XEventHandle (Task a)
-watchXQuery XQuerySpec{getProps = XPropGet getPrs, queryProps} = do
+-- Can also listen to other events, while it cannot emit the task.
+watchXQueryWith :: XQuerySpec a -> EventMask -> (Event -> XEventHandle ()) -> XEventHandle (Task a)
+watchXQueryWith XQuerySpec{getProps = XPropGet getPrs, queryProps} otherMask otherEv = do
   window <- xWindow
   watched <- liftIO (newIORef [])
   props <- x11ToEventHandle watched getPrs
   watchSet <- S.fromList <$> liftIO (readIORef watched)
-  xListenTo (propertyChangeMask) window $ \case
+  -- TODO Eh, silently not emit anything? Really?
+  initial <- runMaybeT (queryProps props)
+  xListenTo (propertyChangeMask .|. otherMask) window initial $ \case
     PropertyEvent{ev_atom = prop}
-      | prop `S.member` watchSet ->
-          x11ToEventHandle () $ runMaybeT (queryProps props)
-    _ -> pure Nothing
-
--- MAYBE MaybeT is suboptimal. Proper errors?
+      | prop `S.member` watchSet -> runMaybeT (queryProps props)
+    event -> Nothing <$ otherEv event
 
 data DesktopState = DeskActive | DeskVisible | DeskHidden
 
@@ -204,7 +207,7 @@ data WindowInfoProps = WindowInfoProps
 -- | Window information. Only works for non-withdrawn state.
 -- Still, the worst that could happen is giving Nothing.
 getWindowInfo :: Window -> XQuerySpec WindowInfo
-getWindowInfo window =
+getWindowInfo _window =
   XQuerySpec
     { getProps =
         WindowInfoProps
@@ -215,7 +218,7 @@ getWindowInfo window =
           <*> getProp "_NET_WM_STATE"
           <*> (M.fromList <$> traverse (bitraverse xAtom pure) pairs)
     , queryProps = \WindowInfoProps{..} -> do
-        mapMaybeT (onXWindow window) $ do
+        undefined $ do
           -- MAYBE bound check? May not make sense here.
           windowDesktop <- readProp propWMDesk
           windowTitle <- readProp propNameExt <|> readProp propName
