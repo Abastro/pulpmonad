@@ -2,47 +2,119 @@
 -- X11: <https://x.org/releases/X11R7.6/doc/xorg-docs/specs/ICCCM/icccm.html>
 -- EWMH: <https://specifications.freedesktop.org/wm-spec/wm-spec-1.3.html>.
 module Status.WMStatus (
+  XQEnv,
+  XQuery,
+  evalXQuery,
   DesktopStat (..),
   getDesktopStat,
-  getWindowStat,
+  getWindowStats,
   WindowInfo (..),
   getWindowInfo,
   WMStateEx (..),
 ) where
 
 import Control.Applicative
+import Control.Concurrent
+import Control.Concurrent.Task
+import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 import Data.Bitraversable
 import Data.ByteString qualified as BS
+import Data.Foldable
+import Data.IORef
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
+import Data.Traversable
 import Data.Vector qualified as V
 import Foreign.Storable
 import Graphics.X11.Types
+import Graphics.X11.Xlib.Event
 import Graphics.X11.Xlib.Extras
-import XMonad.Core
-import XMonad.ManageHook (liftX)
+import Status.XHandle
 
--- TODO: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
+-- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO: Need to subscribe on the X events
 
-getWinProp :: Storable a => Int -> Atom -> MaybeT Query [a]
-getWinProp size prop = do
-  win <- ask
-  MaybeT . liftX . withDisplay $ \display -> io $ rawGetWindowProperty size display prop win
+-- | X Query environment. Not built for thread-safety, do not share it between threads.
+newtype XQEnv = XQEnv (IORef [Atom])
 
-getWinProp32 :: Storable a => Atom -> MaybeT Query [a]
-getWinProp32 = getWinProp 32
+-- | Denotes a property ID, so that it could be listened upon.
+newtype XPropID = XPropID Atom
+  deriving (Eq, Ord)
 
-getWinPropBytes :: Atom -> MaybeT Query BS.ByteString
-getWinPropBytes prop = BS.pack <$> getWinProp 8 prop
+-- | Applicative for getting the required property atoms, and perhaps others.
+-- Wraps X11 since Resolving `Atom` requires X call.
+-- Only implements Applicative since arbitrary IO action should not happen.
+newtype XProps a = XProps (X11 (IORef [XPropID]) a)
+  deriving (Functor, Applicative)
 
-onRoot :: Query a -> X a
-onRoot query = asks theRoot >>= runQuery query
+getPropID :: String -> XProps XPropID
+getPropID name = XProps $ do
+  X11Env{extData = tracked} <- ask
+  property <- XPropID <$> xAtom name
+  liftIO $ modifyIORef' tracked (property :)
+  pure property
+
+-- | Gets non-property atom.
+getXAtom :: String -> XProps Atom
+getXAtom name = XProps (xAtom name)
+
+data XQuer a = forall p. XQuer
+  { getProps :: XProps p
+  , queryProps :: p -> MaybeT (X11 ()) a
+  }
+
+-- | Watch for X property event for changes, including one from child windows.
+--
+-- NB: When query could not be performed, no event is received.
+-- TODO From child windows?
+watchXQuery :: XQuer a -> X11 () (Maybe (Task a))
+watchXQuery XQuer{ getProps = (XProps getPrs), queryProps} = do
+  watched <- liftIO $ newIORef []
+  propBase <- withXExt (\() -> watched) getPrs
+  watchSet <- S.fromList <$> liftIO (readIORef watched)
+  init <- runMaybeT (queryProps propBase)
+  for init $ \initial -> do
+    startWithRepeater xEventLoop initial $ \case
+      PropertyEvent{ev_atom = prop} | XPropID prop `S.member` watchSet -> do
+        runMaybeT (queryProps propBase)
+      _ -> pure Nothing
+    undefined
+  undefined
+
+-- Hmm, we should always track the property atoms - instead of guarding it behind.
+
+-- MAYBE MaybeT is suboptimal. Proper errors?
+
+-- | X11 Query monad. Should NOT call exceptional code in this section.
+type XQuery = MaybeT (X11 XQEnv)
+
+runXQuery :: XQuery a -> X11 () (Maybe (a, [Atom]))
+runXQuery query = do
+  watched <- liftIO $ newIORef []
+  withXExt (\() -> XQEnv watched) (runMaybeT query) >>= \case
+    Nothing -> pure Nothing
+    Just val -> Just . (val,) <$> liftIO (readIORef watched)
+
+-- | Simply evaluate an X query.
+evalXQuery :: XQuery a -> X11 () (Maybe a)
+evalXQuery query = fmap fst <$> runXQuery query
+
+queryWinProp :: Storable a => Int -> Atom -> XQuery [a]
+queryWinProp size prop = do
+  X11Env{extData = XQEnv tracked, ..} <- ask
+  liftIO $ modifyIORef' tracked (prop :)
+  MaybeT . liftIO $ rawGetWindowProperty size theDisplay prop targetWindow
+
+queryWinProp32 :: Storable a => Atom -> XQuery [a]
+queryWinProp32 = queryWinProp 32
+
+queryWinPropBytes :: Atom -> XQuery BS.ByteString
+queryWinPropBytes prop = BS.pack <$> queryWinProp 8 prop
 
 asSingle :: Applicative m => [a] -> MaybeT m a
 asSingle = MaybeT . pure . listToMaybe
@@ -53,57 +125,62 @@ asUtf8 = either (fail . show) pure . T.decodeUtf8'
 asUtf8List :: Monad m => BS.ByteString -> MaybeT m [T.Text]
 asUtf8List = traverse asUtf8 . filter (not . BS.null) . BS.split 0
 
--- | Encompassing Desktop status/statistics. Note, more desktops could be present than its names.
+data DesktopState = DeskActive | DeskVisible | DeskHidden
+
+-- | Desktop status for each desktop.
 data DesktopStat = DesktopStat
-  { numDesktops :: !Int
-  , currentDesktop :: !Int
-  , desktopNames :: !(V.Vector T.Text)
-  , visibleDesktops :: !(V.Vector Int)
-  -- ^ Visible desktops usually provided by XMonad. If not present, defaults to all named desktops.
+  { desktopName :: Maybe T.Text
+  -- ^ Name of the desktop. May not exist.
+  , desktopState :: !DesktopState
   }
 
--- | Get the desktop statistics.
-getDesktopStat :: X (Maybe DesktopStat)
+-- | Get the vector of desktop status.
+getDesktopStat :: XQuery (V.Vector DesktopStat)
 getDesktopStat = do
-  propNumDesk <- getAtom "_NET_NUMBER_OF_DESKTOPS"
-  propCurDesk <- getAtom "_NET_CURRENT_DESKTOP"
-  propDeskNames <- getAtom "_NET_DESKTOP_NAMES"
-  propVisDesk <- getAtom "_XMONAD_VISIBLE_WORKSPACES"
-  onRoot . runMaybeT $ do
-    numDesktops <- asSingle =<< getWinProp32 @Int propNumDesk
-    currentDesktop <- asSingle =<< getWinProp32 @Int propCurDesk
-    guard $ currentDesktop >= 0 && currentDesktop < numDesktops
+  propNumDesk <- lift $ xAtom "_NET_NUMBER_OF_DESKTOPS"
+  propCurDesk <- lift $ xAtom "_NET_CURRENT_DESKTOP"
+  propDeskNames <- lift $ xAtom "_NET_DESKTOP_NAMES"
+  propVisDesk <- lift $ xAtom "_XMONAD_VISIBLE_WORKSPACES"
 
-    -- Desktop names are optional
-    desktopNames <- (<|> pure V.empty) $ do
-      bytes <- getWinPropBytes propDeskNames
-      V.fromList . take numDesktops <$> asUtf8List bytes
+  numDesktops <- asSingle =<< queryWinProp32 @Int propNumDesk
+  currentDesktop <- asSingle =<< queryWinProp32 @Int propCurDesk
+  guard $ currentDesktop >= 0 && currentDesktop < numDesktops
 
-    -- Check if visible, this is also optional
-    isVisible <- (<|> pure (const True)) $ do
-      bytes <- getWinPropBytes propVisDesk
-      flip S.member . S.fromList <$> asUtf8List bytes
-    let visibleDesktops = V.findIndices isVisible desktopNames
+  -- Desktop names are optional
+  desktopNames <- (<|> pure V.empty) $ do
+    bytes <- queryWinPropBytes propDeskNames
+    V.fromList . take numDesktops <$> asUtf8List bytes
 
-    pure DesktopStat{..}
+  -- Check if visible, this is also optional
+  isVisible <- (<|> pure (const True)) $ do
+    bytes <- queryWinPropBytes propVisDesk
+    flip S.member . S.fromList <$> asUtf8List bytes
 
--- | Encompassing Window status/statistics.
-data WindowStat = WindowStat
+  let deskInfo idx = (DesktopStat <*> deskState idx) (desktopNames V.!? idx)
+      deskState idx = \case
+        _ | idx == currentDesktop -> DeskActive
+        Just name | isVisible name -> DeskVisible
+        _ -> DeskHidden
+  pure $ V.generate numDesktops deskInfo
+
+-- | Encompassing Window statistics.
+data WindowStats = WindowStats
   { allWindows :: V.Vector Window
   , activeWindow :: Maybe Window
   }
 
-getWindowStat :: X (Maybe WindowStat)
-getWindowStat = do
-  propClients <- getAtom "_NET_CLIENT_LIST"
-  propActive <- getAtom "_NET_ACTIVE_WINDOW"
-  onRoot . runMaybeT $ do
-    allWindows <- V.fromList <$> getWinProp32 @Window propClients
-    activeWindow <- do
-      -- Only property check goes to error; empty list is considered as no active window.
-      actives <- getWinProp32 @Window propActive
-      pure (listToMaybe $ filter (> 0) actives)
-    pure WindowStat{..}
+-- | Get encompassing window statistics.
+getWindowStats :: XQuery WindowStats
+getWindowStats = do
+  propClients <- lift $ xAtom "_NET_CLIENT_LIST"
+  propActive <- lift $ xAtom "_NET_ACTIVE_WINDOW"
+
+  allWindows <- V.fromList <$> queryWinProp32 @Window propClients
+  activeWindow <- do
+    -- Only property check goes to error; empty list is considered as no active window.
+    actives <- queryWinProp32 @Window propActive
+    pure (listToMaybe $ filter (> 0) actives)
+  pure WindowStats{..}
 
 -- MAYBE How to deal with WM_ICON? It's quite hard.
 
@@ -121,20 +198,22 @@ data WindowInfo = WindowInfo
 
 -- | Window information. Only works for non-withdrawn state.
 -- Still, the worst that could happen is giving Nothing.
-getWindowInfo :: Query (Maybe WindowInfo)
-getWindowInfo = do
-  propWMDesk <- liftX $ getAtom "_NET_WM_DESKTOP"
-  propNameExt <- liftX $ getAtom "_NET_WM_NAME"
-  propName <- liftX $ getAtom "WM_NAME"
-  propClass <- liftX $ getAtom "WM_CLASS"
+getWindowInfo :: Window -> XQuery WindowInfo
+getWindowInfo window = do
+  propWMDesk <- lift $ xAtom "_NET_WM_DESKTOP"
+  propNameExt <- lift $ xAtom "_NET_WM_NAME"
+  propName <- lift $ xAtom "WM_NAME"
+  propClass <- lift $ xAtom "WM_CLASS"
 
-  propWMSt <- liftX $ getAtom "_NET_WM_STATE"
-  stMap <- liftX $ M.fromList <$> traverse (bitraverse getAtom pure) pairs
-  runMaybeT $ do
-    windowDesktop <- asSingle =<< getWinProp32 @Int propWMDesk
-    windowTitle <- (asUtf8 =<< getWinPropBytes propNameExt) <|> (asUtf8 =<< getWinPropBytes propName)
-    windowClasses <- V.fromList <$> (asUtf8List =<< getWinPropBytes propClass)
-    windowState <- S.fromList . mapMaybe (stMap M.!?) <$> getWinProp32 @Atom propWMSt
+  propWMSt <- lift $ xAtom "_NET_WM_STATE"
+  stMap <- M.fromList <$> traverse (bitraverse (lift . xAtom) pure) pairs
+
+  mapMaybeT (onXWindow window) $ do
+    -- MAYBE bound check? May not make sense here.
+    windowDesktop <- asSingle =<< queryWinProp32 @Int propWMDesk
+    windowTitle <- (asUtf8 =<< queryWinPropBytes propNameExt) <|> (asUtf8 =<< queryWinPropBytes propName)
+    windowClasses <- V.fromList <$> (asUtf8List =<< queryWinPropBytes propClass)
+    windowState <- S.fromList . mapMaybe (stMap M.!?) <$> queryWinProp32 @Atom propWMSt
     pure WindowInfo{..}
   where
     pairs =

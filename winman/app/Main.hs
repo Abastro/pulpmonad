@@ -109,7 +109,7 @@ scratchpads = [scTerm]
 
 myLayout =
   mouseResize . avoidStruts . minimize . maximize
-    . onWorkspaces [code, pics] myTab
+    . onWorkspaces [code, game] myTab
     $ tall ||| wide ||| myTab
   where
     myTabCfg = (theme adwaitaDarkTheme) {decoHeight = 50}
