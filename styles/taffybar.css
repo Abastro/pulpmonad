@@ -39,7 +39,7 @@
 
 /* Workspaces styling */
 
-.workspace-label {
+.desktop-label {
 	padding-right: 3px;
 	padding-left: 2px;
 	font-family: "Font Awesome 6 Free Solid";
@@ -118,4 +118,31 @@ button:checked, button:hover .Contents:hover {
 
 .taffy-window menuitem:hover > label, menuitem:hover > label {
 	color: #ffffff;
+}
+
+
+/* For my own desktop visualizer widget */
+
+.desktop-label {
+	padding-right: 3px;
+	padding-left: 2px;
+	font-family: "Font Awesome 6 Free Solid";
+	font-size: 12pt;
+}
+
+.window-item {
+	transition: opacity .5s, box-shadow .5s;
+	opacity: 1;
+}
+
+.window-item.active {
+	box-shadow: inset 0 -3px #ffffff;
+}
+
+.window-item.demanding {
+	box-shadow: inset 0 -3px #0c7cd5;
+}
+
+.window-item.hidden {
+	opacity: .3;
 }

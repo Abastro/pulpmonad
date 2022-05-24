@@ -14,6 +14,7 @@ module Status.X11.XHandle (
 ) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import Control.Concurrent.Task
 import Control.Monad.IO.Unlift
 import Control.Monad.Reader
@@ -78,11 +79,13 @@ instance ActX11 (X11 r) where
   xWindow = asks (\X11Env{targetWindow} -> targetWindow)
   xAtom name = liftDWIO $ \d _ -> internAtom d name False
 
-{---------------------- X Events ------------------------}
+{-------------------------------------------------------------------
+                        X Event Handling
+--------------------------------------------------------------------}
 
 data XListeners = XListeners
-  { xListeners :: !(M.Map Unique XListen)
-  , perWinListener :: !(M.Map Window (S.Set Unique))
+  { xListens :: !(M.Map Unique XListen)
+  , perWinListens :: !(M.Map Window (S.Set Unique))
   }
 
 data XListen = XListen !Window (Event -> IO ())
@@ -91,8 +94,8 @@ data XListen = XListen !Window (Event -> IO ())
 insertListen :: Unique -> XListen -> XListeners -> XListeners
 insertListen key listen@(XListen win _) XListeners{..} =
   XListeners
-    { xListeners = M.insert key listen xListeners
-    , perWinListener = M.alter (Just . S.insert key . notToEmpty) win perWinListener
+    { xListens = M.insert key listen xListens
+    , perWinListens = M.alter (Just . S.insert key . notToEmpty) win perWinListens
     }
   where
     notToEmpty = fromMaybe S.empty
@@ -100,17 +103,19 @@ insertListen key listen@(XListen win _) XListeners{..} =
 -- Internal
 deleteListen :: Unique -> XListeners -> XListeners
 deleteListen key XListeners{..}
-  | (Just (XListen win _), xListeners') <- M.updateLookupWithKey (\_ _ -> Nothing) key xListeners =
+  | (Just (XListen win _), xListens') <- M.updateLookupWithKey (\_ _ -> Nothing) key xListens =
       XListeners
-        { xListeners = xListeners'
-        , perWinListener = M.alter (>>= emptyToNot . S.delete key) win perWinListener
+        { xListens = xListens'
+        , perWinListens = M.alter (>>= emptyToNot . S.delete key) win perWinListens
         }
   | otherwise = XListeners{..}
   where
     emptyToNot set = set <$ guard (S.null set)
 
+data XEvHandleEnv = XEvHandleEnv {listeners :: IORef XListeners, actQueue :: TQueue (IO ())}
+
 -- | Monad for X event handling, should only belong to a single thread.
-newtype XEventHandle a = XEventHandle (X11 (IORef XListeners) a)
+newtype XEventHandle a = XEventHandle (X11 XEvHandleEnv a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadUnliftIO, ActX11)
 
 -- | Lift X11 to Event Handle.
@@ -124,22 +129,30 @@ xRunLoop :: XEventHandle a -> X11 r a
 xRunLoop (XEventHandle initiate) = do
   X11Env{theDisplay} <- ask
   withRunInIO $ \unliftX -> do
-    listeners <- newIORef (XListeners M.empty M.empty)
-    -- Is this really experimental as docs say? Let's find out.
-    setErrorHandler $ \_disp _errEvent -> pure ()
-    initRes <- unliftX $ withXExt (\_ -> listeners) initiate
-    -- Registers the listeners
-    forkIO . allocaXEvent $ \evPtr -> forever $ do
-      nextEvent theDisplay evPtr
-      event <- getEvent evPtr
-      -- While this says get_Window, it actually grabs `event` for MapNotify/UnmapNotify.
-      -- This allows the substructure handling.
-      window <- get_Window evPtr
-      XListeners{..} <- readIORef listeners
-      let perWindow = maybe [] S.toList $ perWinListener M.!? window
-      let listens = mapMaybe (xListeners M.!?) perWindow
-      for_ listens $ \(XListen _ listen) -> listen event
-    pure initRes
+    -- Varible to pass around initiation result
+    initResult <- newEmptyMVar
+
+    forkIO $ do
+      -- Initiate listening.
+      listeners <- newIORef (XListeners M.empty M.empty)
+      actQueue <- newTQueueIO
+      putMVar initResult =<< unliftX (withXExt (\_ -> XEvHandleEnv{..}) initiate)
+
+      -- Is this really experimental as docs say? Let's find out.
+      setErrorHandler $ \_disp _errEvent -> pure ()
+      allocaXEvent $ \evPtr -> forever $ do
+        atomically (flushTQueue actQueue) >>= traverse_ id
+        -- .^. Before handling next event, look if some tasks are in need of handling.
+        nextEvent theDisplay evPtr
+        event <- getEvent evPtr
+        -- Hope this grabs `event` for MapNotify/UnmapNotify, which allows for the substructure handling.
+        window <- get_Window evPtr
+        XListeners{..} <- readIORef listeners
+        let perWindow = maybe [] S.toList $ perWinListens M.!? window
+        let listens = mapMaybe (xListens M.!?) perWindow
+        for_ listens $ \(XListen _ listen) -> listen event
+
+    readMVar initResult
 
 -- | Listen with certain event mask at certain window.
 -- Task variable should be cared of as soon as possible, as it would put the event loop in halt.
@@ -151,7 +164,7 @@ xListenTo ::
   (Event -> XEventHandle (Maybe a)) ->
   XEventHandle (Task a)
 xListenTo mask window initial handler = XEventHandle $ do
-  X11Env{extData = listeners} <- ask
+  X11Env{extData = XEvHandleEnv{..}} <- ask
   withRunInIO $ \unliftListen -> do
     key <- newUnique
     taskVar <- maybe newEmptyMVar newMVar initial
@@ -161,11 +174,11 @@ xListenTo mask window initial handler = XEventHandle $ do
     let beginListen = do
           modifyIORef' listeners $ insertListen key listen
           unliftListen . liftDWIO $ \d w -> selectInput d w mask
-    -- FIXME endListen should be called on THIS thread.
     let endListen = do
           modifyIORef' listeners $ deleteListen key
           unliftListen . liftDWIO $ \d w -> selectInput d w 0
-    Task{killTask = endListen, taskVar} <$ beginListen
+    -- Kill task redirects it to the task.
+    Task{killTask = atomically $ writeTQueue actQueue endListen, taskVar} <$ beginListen
 
 -- | Similar to xListenTo, but does not emit/report any value to the Task.
 -- NB: Subsequently, it is also impossible to stop listening on this one.
@@ -175,7 +188,7 @@ xListenTo_ ::
   (Event -> XEventHandle ()) ->
   XEventHandle ()
 xListenTo_ mask window handler = XEventHandle $ do
-  X11Env{extData = listeners} <- ask
+  X11Env{extData = XEvHandleEnv{listeners}} <- ask
   withRunInIO $ \unliftListen -> do
     key <- newUnique
     let listen = XListen window $ \event -> do
