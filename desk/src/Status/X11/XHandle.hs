@@ -109,7 +109,7 @@ deleteListen key XListeners{..}
   where
     emptyToNot set = set <$ guard (S.null set)
 
--- | Monad for X event handling.
+-- | Monad for X event handling, should only belong to a single thread.
 newtype XEventHandle a = XEventHandle (X11 (IORef XListeners) a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadUnliftIO, ActX11)
 
@@ -161,6 +161,7 @@ xListenTo mask window initial handler = XEventHandle $ do
     let beginListen = do
           modifyIORef' listeners $ insertListen key listen
           unliftListen . liftDWIO $ \d w -> selectInput d w mask
+    -- FIXME endListen should be called on THIS thread.
     let endListen = do
           modifyIORef' listeners $ deleteListen key
           unliftListen . liftDWIO $ \d w -> selectInput d w 0

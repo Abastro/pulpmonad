@@ -136,6 +136,7 @@ watchXQuery :: Window -> XQuerySpec a -> XEventHandle (Task a)
 watchXQuery window spec = watchXQueryWith window spec 0 (\_ -> pure ())
 
 data DesktopState = DeskActive | DeskVisible | DeskHidden
+  deriving (Eq, Ord, Enum, Bounded)
 
 -- | Desktop status for each desktop.
 data DesktopStat = DesktopStat
@@ -199,7 +200,7 @@ getActiveWindow =
 
 -- | Inclusive states of the window.
 data WMStateEx = WinHidden | WinDemandAttention
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Enum, Bounded)
 
 -- | Information on the specific window.
 data WindowInfo = WindowInfo
