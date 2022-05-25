@@ -3,7 +3,9 @@
 
 module Main (main) where
 
+import Control.Concurrent
 import Control.Concurrent.Task
+import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 import Data.Foldable
 import Data.Map qualified as M
@@ -21,7 +23,8 @@ import Status.HWStatus
 import System.Environment
 import System.Environment.XDG.DesktopEntry
 import System.Taffybar (startTaffybar)
-import System.Taffybar.Context (TaffyIO)
+import System.Taffybar.Context (Context (..), TaffyIO)
+import System.Taffybar.Information.X11DesktopInfo (X11Context (..))
 import System.Taffybar.SimpleConfig
 import System.Taffybar.Util ((<|||>))
 import System.Taffybar.Widget
@@ -29,6 +32,7 @@ import System.Taffybar.WindowIcon
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Singles qualified as UI
+import UI.X11.Desktops qualified as UI
 import XMonad.ManageHook
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
@@ -141,3 +145,10 @@ main = do
           , labelSetter = pure . getName . workspaceName
           , getWindowIconPixbuf = windowIconFromDEntry <|||> getWindowIconPixbuf defaultWorkspacesConfig
           }
+
+    _desktopVis :: TaffyIO UI.Widget
+    _desktopVis = do
+      ctxtVar <- asks x11ContextVar
+      X11Context{..} <- liftIO $ readMVar ctxtVar
+      let mayLabel n = T.pack <$> workspaceMaps M.!? T.unpack n
+      UI.deskVisNew contextDisplay _contextRoot (fromMaybe "NONE" . (>>= mayLabel)) UI.defImageSetter

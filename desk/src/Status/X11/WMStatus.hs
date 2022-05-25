@@ -75,19 +75,19 @@ instance XPropType Word8 [T.Text] where parseProp = parseProp >=> asUtf8List
 -- | Applicative for getting the required property atoms, and perhaps others.
 -- Wraps X11 since Resolving `Atom` requires X call.
 -- Only implements Applicative since failure-capable monadic should not happen.
-newtype XPropGet a = XPropGet (X11 (IORef [Atom]) a)
+newtype XPropGet a = XPropGet (XIO (IORef [Atom]) a)
   deriving (Functor, Applicative, ActX11)
 
 getProp :: forall a. String -> XPropGet (XProperty a)
 getProp name = XPropGet $ do
-  X11Env{extData = tracked} <- ask
+  tracked <- xGetExt
   property <- xAtom name
   liftIO $ modifyIORef' tracked (property :)
   pure (XProperty property)
 
 -- | X Property query monad, which is simply MaybeT around X event handler.
 -- Make sure that no exception leaks out.
-type XPropQuery = MaybeT XEventHandle
+type XPropQuery = MaybeT (XIO ())
 -- ^ TODO MaybeT is suboptimal.
 
 readProp :: forall a n. XPropType n a => XProperty a -> XPropQuery a
@@ -105,10 +105,10 @@ data XQuerySpec a = forall p.
   }
 
 -- | Simply runs X query once.
-runXQuery :: XQuerySpec a -> XEventHandle (Maybe a)
+runXQuery :: XQuerySpec a -> XIO () (Maybe a)
 runXQuery XQuerySpec{getProps = XPropGet getPrs, queryProps} = do
   meh <- liftIO (newIORef [])
-  props <- x11ToEventHandle meh getPrs
+  props <- xWithExt (\() -> meh) getPrs
   runMaybeT (queryProps props)
 
 -- | X query that watches for X property at certain window.
@@ -118,11 +118,11 @@ watchXQueryWith ::
   Window ->
   XQuerySpec a ->
   EventMask ->
-  (Event -> XEventHandle ()) ->
-  XEventHandle (Task a)
+  (Event -> XIO () ()) ->
+  XIO () (Task a)
 watchXQueryWith window XQuerySpec{getProps = XPropGet getPrs, queryProps} otherMask otherEv = do
   watched <- liftIO (newIORef [])
-  props <- x11ToEventHandle watched getPrs
+  props <- xWithExt (\() -> watched) getPrs
   watchSet <- S.fromList <$> liftIO (readIORef watched)
   -- TODO Eh, silently not emit anything? Really?
   initial <- runMaybeT (queryProps props)
@@ -132,7 +132,7 @@ watchXQueryWith window XQuerySpec{getProps = XPropGet getPrs, queryProps} otherM
     event -> Nothing <$ otherEv event
 
 -- | Watch X query without additional handlers.
-watchXQuery :: Window -> XQuerySpec a -> XEventHandle (Task a)
+watchXQuery :: Window -> XQuerySpec a -> XIO () (Task a)
 watchXQuery window spec = watchXQueryWith window spec 0 (\_ -> pure ())
 
 data DesktopState = DeskActive | DeskVisible | DeskHidden
@@ -234,13 +234,12 @@ getWindowInfo =
           <*> getProp "_NET_WM_STATE"
           <*> (M.fromList <$> traverse (bitraverse xAtom pure) pairs)
     , queryProps = \WindowInfoProps{..} -> do
-        undefined $ do
-          -- MAYBE bound check? May not make sense here.
-          windowDesktop <- readProp propWMDesk
-          windowTitle <- readProp propNameExt <|> readProp propName
-          windowClasses <- V.fromList <$> readProp propClass
-          windowState <- S.fromList . mapMaybe (propSTMap M.!?) <$> readProp propWMState
-          pure WindowInfo{..}
+        -- MAYBE bound check? May not make sense here.
+        windowDesktop <- readProp propWMDesk
+        windowTitle <- readProp propNameExt <|> readProp propName
+        windowClasses <- V.fromList <$> readProp propClass
+        windowState <- S.fromList . mapMaybe (propSTMap M.!?) <$> readProp propWMState
+        pure WindowInfo{..}
     }
   where
     pairs =

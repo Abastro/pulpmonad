@@ -1,14 +1,11 @@
 module Status.X11.XHandle (
   X11Env (..),
   ActX11 (..),
-  X11,
-  runXWith,
-  withXExt,
-  mapX11,
-  onXWindow,
-  XEventHandle,
-  x11ToEventHandle,
-  xRunLoop,
+  XIO,
+  xGetExt,
+  xWithExt,
+  startXIO,
+  xQueueJob,
   xListenTo,
   xListenTo_,
 ) where
@@ -16,6 +13,7 @@ module Status.X11.XHandle (
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Concurrent.Task
+import Control.Exception
 import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
@@ -51,36 +49,15 @@ instance (ActX11 m) => ActX11 (MaybeT m) where
   xWindow = MaybeT $ Just <$> xWindow
   xAtom name = MaybeT $ Just <$> xAtom name
 
--- | Monad for X11 handling, with IO monad as base.
-newtype X11 r a = X11 (ReaderT (X11Env r) IO a)
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (X11Env r), MonadUnliftIO)
-
-runXWith :: Display -> Window -> X11 () a -> IO a
-runXWith display rwin (X11 act) = runReaderT act (X11Env display rwin ())
-
-withXExt :: (r -> r') -> X11 r' a -> X11 r a
-withXExt ext (X11 run) = X11 $ withReaderT (fmap ext) run
-
-mapX11 :: (IO a -> IO b) -> (X11 r a -> X11 r b)
-mapX11 f (X11 run) = X11 (mapReaderT f run)
-
--- | Usually, the X11 monad work on the root window.
--- This one is for running actions for certain target window.
-onXWindow :: Window -> X11 r a -> X11 r a
-onXWindow window (X11 run) = X11 $ withReaderT (\X11Env{..} -> X11Env{targetWindow = window, ..}) run
-
-liftDWIO :: (Display -> Window -> IO a) -> X11 r a
-liftDWIO act = do
-  X11Env{theDisplay, targetWindow} <- ask
-  liftIO $ act theDisplay targetWindow
-
-instance ActX11 (X11 r) where
-  xDisplay = asks (\X11Env{theDisplay} -> theDisplay)
-  xWindow = asks (\X11Env{targetWindow} -> targetWindow)
-  xAtom name = liftDWIO $ \d _ -> internAtom d name False
+-- | Lift IO action involving display & window.
+liftDWIO :: (MonadIO m, ActX11 m) => (Display -> Window -> IO a) -> m a
+liftDWIO io = do
+  disp <- xDisplay
+  win <- xWindow
+  liftIO $ io disp win
 
 {-------------------------------------------------------------------
-                        X Event Handling
+                            Listeners
 --------------------------------------------------------------------}
 
 data XListeners = XListeners
@@ -112,47 +89,93 @@ deleteListen key XListeners{..}
   where
     emptyToNot set = set <$ guard (S.null set)
 
-data XEvHandleEnv = XEvHandleEnv {listeners :: IORef XListeners, actQueue :: TQueue (IO ())}
+{-------------------------------------------------------------------
+                            XIO Monad
+--------------------------------------------------------------------}
 
--- | Monad for X event handling, should only belong to a single thread.
-newtype XEventHandle a = XEventHandle (X11 XEvHandleEnv a)
-  deriving (Functor, Applicative, Monad, MonadIO, MonadUnliftIO, ActX11)
+data XHandle r = XHandle
+  { xhDisplay :: !Display
+  , xhWindow :: !Window
+  , xhListeners :: !(IORef XListeners)
+  , xhActQueue :: TQueue (IO ())
+  , xhExtends :: !r
+  }
 
--- | Lift X11 to Event Handle.
-x11ToEventHandle :: r -> X11 r a -> XEventHandle a
-x11ToEventHandle ext act = XEventHandle $ withXExt (\_ -> ext) act
+newtype XIO r a = XIO (ReaderT (XHandle r) IO a)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadUnliftIO)
 
--- | Sets up and forks/runs the X event loop action.
--- Note that the parameter is only run once on the root window, to register the listeners.
--- NOTE: Currently, typical non-fatal X error during the loop is ignored.
-xRunLoop :: XEventHandle a -> X11 r a
-xRunLoop (XEventHandle initiate) = do
-  X11Env{theDisplay} <- ask
-  withRunInIO $ \unliftX -> do
-    -- Varible to pass around initiation result
-    initResult <- newEmptyMVar
+instance ActX11 (XIO r) where
+  xDisplay = XIO . asks $ \XHandle{xhDisplay} -> xhDisplay
+  xWindow = XIO . asks $ \XHandle{xhWindow} -> xhWindow
+  xAtom name = liftDWIO $ \d _ -> liftIO $ internAtom d name False
 
-    forkIO $ do
-      -- Initiate listening.
-      listeners <- newIORef (XListeners M.empty M.empty)
-      actQueue <- newTQueueIO
-      putMVar initResult =<< unliftX (withXExt (\_ -> XEvHandleEnv{..}) initiate)
+-- Internal
+xListeners :: XIO r (IORef XListeners)
+xListeners = XIO . asks $ \XHandle{xhListeners} -> xhListeners
 
-      -- Is this really experimental as docs say? Let's find out.
+-- Internal
+xActQueue :: XIO r (TQueue (IO ()))
+xActQueue = XIO . asks $ \XHandle{xhActQueue} -> xhActQueue
+
+-- | Get external.
+xGetExt :: XIO r r
+xGetExt = XIO . asks $ \XHandle{xhExtends} -> xhExtends
+
+-- Internal
+xOnWindow :: Window -> XIO r a -> XIO r a
+xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
+  where
+    withNewWin XHandle{..} = XHandle{xhWindow = newWin, ..}
+
+-- | Run with extension function.
+xWithExt :: (r' -> r) -> XIO r a -> XIO r' a
+xWithExt extF (XIO act) = XIO (withReaderT withF act)
+  where
+    withF XHandle{..} = XHandle{xhExtends = extF xhExtends, ..}
+
+-- | Starts X handler using initiate action.
+-- NOTE: non-fatal X error is ignored.
+startXIO :: XIO () a -> IO a
+startXIO initiate = do
+  -- TODO Initiation action should NOT be XIO
+  initResult <- newEmptyMVar
+
+  _ <- forkIO . bracket (openDisplay "") closeDisplay $ \xhDisplay -> do
+    let xhScreen = defaultScreen xhDisplay
+    xhWindow <- rootWindow xhDisplay xhScreen
+    xhListeners <- newIORef (XListeners M.empty M.empty)
+    xhActQueue <- newTQueueIO
+    let runX (XIO act) = runReaderT act XHandle{xhExtends = (), ..}
+    runX $ do
+      initiate >>= liftIO . putMVar initResult
+      startingX
+  takeMVar initResult
+  where
+    startingX = withRunInIO $ \unliftX -> do
+      display <- unliftX xDisplay
+      listeners <- unliftX xListeners
+      actQueue <- unliftX xActQueue
+
       setErrorHandler $ \_disp _errEvent -> pure ()
       allocaXEvent $ \evPtr -> forever $ do
         atomically (flushTQueue actQueue) >>= traverse_ id
-        -- .^. Before handling next event, look if some tasks are in need of handling.
-        nextEvent theDisplay evPtr
+        -- .^. Before handling next X event, performs tasks in need of handling.
+        nextEvent display evPtr
         event <- getEvent evPtr
-        -- Hope this grabs `event` for MapNotify/UnmapNotify, which allows for the substructure handling.
-        window <- get_Window evPtr
+        -- Hope this grabs `event` for MapNotify/UnmapNotify,
+        -- which allows for the substructure handling.
+        evWindow <- get_Window evPtr
+
         XListeners{..} <- readIORef listeners
-        let perWindow = maybe [] S.toList $ perWinListens M.!? window
+        let perWindow = maybe [] S.toList $ perWinListens M.!? evWindow
         let listens = mapMaybe (xListens M.!?) perWindow
         for_ listens $ \(XListen _ listen) -> listen event
 
-    readMVar initResult
+-- | Queues a job to execute on next cycle.
+xQueueJob :: XIO r () -> XIO r ()
+xQueueJob job = do
+  actQueue <- xActQueue
+  withRunInIO $ \unliftX -> atomically (writeTQueue actQueue $ unliftX job)
 
 -- | Listen with certain event mask at certain window.
 -- Task variable should be cared of as soon as possible, as it would put the event loop in halt.
@@ -161,38 +184,35 @@ xListenTo ::
   EventMask ->
   Window ->
   (Maybe a) ->
-  (Event -> XEventHandle (Maybe a)) ->
-  XEventHandle (Task a)
-xListenTo mask window initial handler = XEventHandle $ do
-  X11Env{extData = XEvHandleEnv{..}} <- ask
-  withRunInIO $ \unliftListen -> do
-    key <- newUnique
-    taskVar <- maybe newEmptyMVar newMVar initial
-    let listen = XListen window $ \event -> do
-          let XEventHandle handle = handler event
-          unliftListen (onXWindow window handle) >>= traverse_ (putMVar taskVar)
-    let beginListen = do
-          modifyIORef' listeners $ insertListen key listen
-          unliftListen . liftDWIO $ \d w -> selectInput d w mask
-    let endListen = do
-          modifyIORef' listeners $ deleteListen key
-          unliftListen . liftDWIO $ \d w -> selectInput d w 0
-    -- Kill task redirects it to the task.
-    Task{killTask = atomically $ writeTQueue actQueue endListen, taskVar} <$ beginListen
+  (Event -> XIO r (Maybe a)) ->
+  XIO r (Task a)
+xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
+  listeners <- unliftX xListeners
+  key <- newUnique
+  taskVar <- maybe newEmptyMVar newMVar initial
+  let listen = XListen window $ \event ->
+        unliftX (xOnWindow window $ handler event) >>= traverse_ (putMVar taskVar)
+  let beginListen = do
+        modifyIORef' listeners $ insertListen key listen
+        unliftX . liftDWIO $ \d w -> selectInput d w mask
+  let endListen = do
+        modifyIORef' listeners $ deleteListen key
+        unliftX . liftDWIO $ \d w -> selectInput d w 0
+  let killTask = unliftX $ xQueueJob (liftIO endListen)
+  -- Kill task redirects it to the task.
+  Task{..} <$ beginListen
 
 -- | Similar to xListenTo, but does not emit/report any value to the Task.
 -- NB: Subsequently, it is also impossible to stop listening on this one.
 xListenTo_ ::
   EventMask ->
   Window ->
-  (Event -> XEventHandle ()) ->
-  XEventHandle ()
-xListenTo_ mask window handler = XEventHandle $ do
-  X11Env{extData = XEvHandleEnv{listeners}} <- ask
-  withRunInIO $ \unliftListen -> do
-    key <- newUnique
-    let listen = XListen window $ \event -> do
-          let XEventHandle handle = handler event
-          unliftListen (onXWindow window handle)
-    modifyIORef' listeners $ insertListen key listen
-    unliftListen . liftDWIO $ \d w -> selectInput d w mask
+  (Event -> XIO r ()) ->
+  XIO r ()
+xListenTo_ mask window handler = withRunInIO $ \unliftX -> do
+  listeners <- unliftX xListeners
+  key <- newUnique
+  let listen = XListen window $ \event -> do
+        unliftX (xOnWindow window $ handler event)
+  modifyIORef' listeners $ insertListen key listen
+  unliftX . liftDWIO $ \d w -> selectInput d w mask
