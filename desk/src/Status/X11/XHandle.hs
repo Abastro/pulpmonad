@@ -1,6 +1,7 @@
 module Status.X11.XHandle (
   X11Env (..),
   ActX11 (..),
+  liftDWIO,
   XIO,
   xGetExt,
   xWithExt,
@@ -25,6 +26,8 @@ import Data.Set qualified as S
 import Data.Unique
 import Graphics.X11.Xlib
 import Graphics.X11.Xlib.Extras
+import Data.Bits
+import Data.Functor.Compose
 
 data X11Env r = X11Env
   { theDisplay :: !Display
@@ -49,6 +52,11 @@ instance (ActX11 m) => ActX11 (MaybeT m) where
   xWindow = MaybeT $ Just <$> xWindow
   xAtom name = MaybeT $ Just <$> xAtom name
 
+instance (ActX11 m, Applicative f) => ActX11 (Compose m f) where
+  xDisplay = Compose $ pure <$> xDisplay
+  xWindow = Compose $ pure <$> xWindow
+  xAtom name = Compose $ pure <$> xAtom name
+
 -- | Lift IO action involving display & window.
 liftDWIO :: (MonadIO m, ActX11 m) => (Display -> Window -> IO a) -> m a
 liftDWIO io = do
@@ -65,11 +73,16 @@ data XListeners = XListeners
   , perWinListens :: !(M.Map Window (S.Set Unique))
   }
 
-data XListen = XListen !Window (Event -> IO ())
+data XListen = XListen !EventMask !Window (Event -> IO ())
+
+-- Internal
+getWinListen :: Window -> XListeners -> [XListen]
+getWinListen window XListeners{..} =
+  mapMaybe (xListens M.!?) $ maybe [] S.toList $ perWinListens M.!? window
 
 -- Internal
 insertListen :: Unique -> XListen -> XListeners -> XListeners
-insertListen key listen@(XListen win _) XListeners{..} =
+insertListen key listen@(XListen _ win _) XListeners{..} =
   XListeners
     { xListens = M.insert key listen xListens
     , perWinListens = M.alter (Just . S.insert key . notToEmpty) win perWinListens
@@ -80,7 +93,7 @@ insertListen key listen@(XListen win _) XListeners{..} =
 -- Internal
 deleteListen :: Unique -> XListeners -> XListeners
 deleteListen key XListeners{..}
-  | (Just (XListen win _), xListens') <- M.updateLookupWithKey (\_ _ -> Nothing) key xListens =
+  | (Just (XListen _ win _), xListens') <- M.updateLookupWithKey (\_ _ -> Nothing) key xListens =
       XListeners
         { xListens = xListens'
         , perWinListens = M.alter (>>= emptyToNot . S.delete key) win perWinListens
@@ -166,10 +179,8 @@ startXIO initiate = do
         -- which allows for the substructure handling.
         evWindow <- get_Window evPtr
 
-        XListeners{..} <- readIORef listeners
-        let perWindow = maybe [] S.toList $ perWinListens M.!? evWindow
-        let listens = mapMaybe (xListens M.!?) perWindow
-        for_ listens $ \(XListen _ listen) -> listen event
+        listens <- getWinListen evWindow <$> readIORef listeners
+        for_ listens $ \(XListen _ _ listen) -> listen event
 
 -- | Queues a job to execute on next cycle.
 xQueueJob :: XIO r () -> XIO r ()
@@ -190,17 +201,22 @@ xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
   listeners <- unliftX xListeners
   key <- newUnique
   taskVar <- maybe newEmptyMVar newMVar initial
-  let listen = XListen window $ \event ->
+  let listen = XListen mask window $ \event ->
         unliftX (xOnWindow window $ handler event) >>= traverse_ (putMVar taskVar)
   let beginListen = do
         modifyIORef' listeners $ insertListen key listen
-        unliftX . liftDWIO $ \d w -> selectInput d w mask
+        unliftX $ updateMask listeners
   let endListen = do
         modifyIORef' listeners $ deleteListen key
-        unliftX . liftDWIO $ \d w -> selectInput d w 0
+        unliftX $ updateMask listeners
   let killTask = unliftX $ xQueueJob (liftIO endListen)
   -- Kill task redirects it to the task.
   Task{..} <$ beginListen
+  where
+    updateMask listeners = liftDWIO $ \disp win -> do
+      Ior newMask <- foldMap (Ior . maskOf) . getWinListen win <$> readIORef listeners
+      selectInput disp win newMask
+    maskOf (XListen mask _ _) = mask
 
 -- | Similar to xListenTo, but does not emit/report any value to the Task.
 -- NB: Subsequently, it is also impossible to stop listening on this one.
@@ -212,7 +228,7 @@ xListenTo_ ::
 xListenTo_ mask window handler = withRunInIO $ \unliftX -> do
   listeners <- unliftX xListeners
   key <- newUnique
-  let listen = XListen window $ \event -> do
+  let listen = XListen mask window $ \event -> do
         unliftX (xOnWindow window $ handler event)
   modifyIORef' listeners $ insertListen key listen
   unliftX . liftDWIO $ \d w -> selectInput d w mask

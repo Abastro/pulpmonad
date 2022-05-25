@@ -38,6 +38,7 @@ common pulp-gtk
     , xmonad-contrib >=0.14
     , enclosed-exceptions ==1.0.*
     , broadcast-chan ==0.2.*
+    , hslogger ==1.3.*
     , haskell-gi ==0.26.*
     , gi-glib ==2.0.*
     , gi-gio >=2.0.29
@@ -53,6 +54,7 @@ library
   hs-source-dirs:     src
   exposed-modules:
     Control.Concurrent.Task
+    Data.Validation
     Parse.ParseHor
 
     Status.HWStatus

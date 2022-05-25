@@ -3,9 +3,8 @@
 
 module Main (main) where
 
-import Control.Concurrent
 import Control.Concurrent.Task
-import Control.Monad.Reader
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import Data.Foldable
 import Data.Map qualified as M
@@ -22,9 +21,9 @@ import GI.Gtk.Objects.IconTheme qualified as UI
 import Status.HWStatus
 import System.Environment
 import System.Environment.XDG.DesktopEntry
+import System.Log.Logger
 import System.Taffybar (startTaffybar)
-import System.Taffybar.Context (Context (..), TaffyIO)
-import System.Taffybar.Information.X11DesktopInfo (X11Context (..))
+import System.Taffybar.Context (TaffyIO)
 import System.Taffybar.SimpleConfig
 import System.Taffybar.Util ((<|||>))
 import System.Taffybar.Widget
@@ -37,6 +36,8 @@ import XMonad.ManageHook
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
+import System.Log.Handler.Simple
+import System.IO
 
 -- | Taffybar does it wrong way in so many degrees, DUH
 -- Band-aid for now.
@@ -125,7 +126,7 @@ main = do
       defaultSimpleTaffyConfig
         { startupHook = setupIcons mainDir
         , startWidgets = [workspaces]
-        , centerWidgets = [clock]
+        , centerWidgets = [clock, _desktopVis]
         , endWidgets = [mainboardWidget, batWidget, sniTrayNew]
         , barPosition = Top
         , barHeight = read "ExactSize 40"
@@ -146,9 +147,13 @@ main = do
           , getWindowIconPixbuf = windowIconFromDEntry <|||> getWindowIconPixbuf defaultWorkspacesConfig
           }
 
+    mayLabel n = T.pack <$> workspaceMaps M.!? T.unpack n
     _desktopVis :: TaffyIO UI.Widget
     _desktopVis = do
-      ctxtVar <- asks x11ContextVar
-      X11Context{..} <- liftIO $ readMVar ctxtVar
-      let mayLabel n = T.pack <$> workspaceMaps M.!? T.unpack n
-      UI.deskVisNew contextDisplay _contextRoot (fromMaybe "NONE" . (>>= mayLabel)) UI.defImageSetter
+      liftIO $ do
+        -- Wat in tarnation, having to do just for logging?
+        logger <- getLogger "DeskVis"
+        handler <- streamHandler stderr INFO
+        saveGlobalLogger $ setLevel INFO . setHandlers [handler] $ logger
+      liftIO $ infoM "DeskVis" "Starting desktop visualizer..."
+      UI.deskVisNew (fromMaybe "NONE" . (>>= mayLabel)) UI.defImageSetter

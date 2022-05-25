@@ -31,13 +31,10 @@ import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Status.X11.WMStatus
 import Status.X11.XHandle
-import System.IO
+import System.Log.Logger
 import UI.Commons qualified as UI
 import UI.Singles qualified as UI
 import UI.Task qualified as UI
-
--- FIXME !! Proper logging !!
--- Some kind of slowdown/deadlock is still happening somewhere
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -105,22 +102,22 @@ deskVisNew labeling setImg = do
         desktops <- readIORef deskRef
         -- Out of bounds: was already removed, no need to care
         for_ (desktops V.!? deskOld) $ \DesktopUI{desktopUI} -> do
-          hPutStrLn stderr "Removing window UI"
+          infoM "DeskVis" "Container - removing window UI"
           UI.containerRemove desktopUI winUI
-          hPutStrLn stderr "Removed window UI"
+          infoM "DeskVis" "Container - removed window UI"
         -- For now, let's not care about out of bounds from new.
         -- That is likely a sync issue, so it needs proper logging later.
         for_ (desktops V.!? deskNew) $ \DesktopUI{desktopUI} -> do
-          hPutStrLn stderr "Adding window UI"
+          infoM "DeskVis" "Container - adding window UI"
           UI.containerAdd desktopUI winUI
-          hPutStrLn stderr "Added window UI"
+          infoM "DeskVis" "Container - added window UI"
 
   desktopVisualizer <- UI.boxNew UI.OrientationHorizontal 0
   deskWindows <- dVisWindowCont setImg switchDesktop windowChanges windowActive
   deskVis <- dVisDesktopCont labeling deskRef desktopStats
 
   traverse_ (UI.containerAdd desktopVisualizer) [deskWindows, deskVis]
-  liftIO $ hPutStrLn stderr "Visualizer booted up"
+  liftIO $ infoM "DeskVis" "Visualizer booted up"
   UI.widgetShowAll desktopVisualizer
   UI.toWidget desktopVisualizer
 
@@ -144,7 +141,6 @@ dVisDesktopCont labeling desks statTask = do
   deskVis <- UI.boxNew UI.OrientationHorizontal 5
   UI.widgetGetStyleContext deskVis >>= flip UI.styleContextAddClass (T.pack "desktop-cont")
   _ <- UI.onWidgetRealize deskVis $ do
-    hPutStrLn stderr "Realizing desktop container"
     kill <- UI.uiTask statTask (dVisDesktopUpdate deskVis labeling desks)
     () <$ UI.onWidgetUnrealize deskVis kill
   UI.toWidget deskVis
@@ -189,9 +185,8 @@ dVisDesktopUpdate parent labeling desksRef curDesks = do
       UI.containerAdd deskBox deskName
       desktopUI <- UI.toContainer deskBox
 
-      hPutStrLn stderr $ "Adding desktop UI, named: " <> show desktopName
+      infoM "DeskVis" $ "UI: Desktop " <> show desktopName
       UI.containerAdd parent desktopUI
-      hPutStrLn stderr "Added desktop UI"
       UI.widgetGetStyleContext desktopUI >>= \ctxt -> do
         UI.styleContextAddClass ctxt (T.pack "desktop-item")
         updateDeskState [desktopState] ctxt
@@ -226,7 +221,6 @@ dVisWindowCont ::
 dVisWindowCont setImg switcher taskWinChange taskActive = do
   placeholder <- UI.imageNew
   UI.onWidgetRealize placeholder $ do
-    hPutStrLn stderr "Realizing window container"
     winsRef <- newIORef M.empty
     activeRef <- newIORef Nothing
     killUpd <- UI.uiTask taskWinChange (structureUpd winsRef)
@@ -237,11 +231,9 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
   where
     structureUpd winsRef = \case
       DWindowMap win winTask -> do
-        liftIO $ hPutStrLn stderr $ "Window mapping: " <> show win
         winUI <- dVisWindowItem setImg switcher win winTask
         modifyIORef' winsRef (M.insert win $ DeskWindowUI winTask winUI)
       DWindowUnmap win -> do
-        liftIO $ hPutStrLn stderr $ "Window unmapping: " <> show win
         mayWin <-
           atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) win
         for_ mayWin $ \(DeskWindowUI Task{killTask} winUI) -> do
@@ -275,6 +267,7 @@ dVisWindowItem setImg switcher _window infoTask = do
   UI.toWidget winImage
   where
     updateWindow winImage curDesk winInfo@WindowInfo{..} = do
+      infoM "DeskVis" $ "UI: New Window " <> show _window
       let newDesk = windowDesktop
       -- Switches the desktop
       oldDesk <- atomicModifyIORef' curDesk $ (newDesk,)
@@ -310,32 +303,33 @@ deskVisInitiate = do
   rootWin <- xWindow
 
   -- For now.. let's just start empty if not successful.
-  allWins <- maybe [] V.toList <$> runXQuery getAllWindows
-
-  liftIO $ hPutStrLn stderr "Initiate Begin"
+  -- allWins <- maybe [] V.toList <$> runXQuery getAllWindows
 
   -- Sends window map event over to UI.
   -- Let me think later about out-of-sync issue..
   winChs <- liftIO newEmptyMVar
   -- This hands the (ownership of) Task over to UI side.
   let onWindowMap window = do
-        mapEvent <- DWindowMap window <$> watchXQuery window getWindowInfo
-        liftIO $ hPutStrLn stderr $ "Mapping " <> show window
-        liftIO $ putMVar winChs mapEvent
-        liftIO $ hPutStrLn stderr $ "Mapped " <> show window
+        watchXQuery window getWindowInfo pure >>= \case
+          Left err -> do
+            liftIO $ errorM "DeskVis" (formatXQError window err)
+          Right winInfo -> liftIO $ putMVar winChs (DWindowMap window winInfo)
       onWindowUnmap window = liftIO $ putMVar winChs (DWindowUnmap window)
   let windowChanges = Task (pure ()) winChs
 
   -- FIXME This is bad. Better way?
-  xQueueJob $ traverse_ onWindowMap allWins
+  -- xQueueJob $ traverse_ onWindowMap allWins -- This is required to map existing windows. Duh
   -- Watch for the windows Mapped/Unmapped.
   xListenTo_ substructureNotifyMask rootWin $ \case
+    -- TODO Why is this not getting called?
     MapNotifyEvent{ev_window = window} -> onWindowMap window
     UnmapEvent{ev_window = window} -> onWindowUnmap window
     _ -> pure ()
 
-  windowActive <- watchXQuery rootWin getActiveWindow
-  desktopStats <- watchXQuery rootWin getDesktopStat
-
-  liftIO $ hPutStrLn stderr "Initiate End"
+  windowActive <- errorAct rootWin $ watchXQuery rootWin getActiveWindow pure
+  desktopStats <- errorAct rootWin $ watchXQuery rootWin getDesktopStat pure
   pure DeskVisRcvs{..}
+  where
+    onError window err = do
+      liftIO (fail $ formatXQError window err)
+    errorAct window act = act >>= either (onError window) pure

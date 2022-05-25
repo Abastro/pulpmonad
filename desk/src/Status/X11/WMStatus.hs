@@ -1,18 +1,17 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE FunctionalDependencies #-}
 
 -- | Status hook for X11 & EWMH.
 -- X11: <https://x.org/releases/X11R7.6/doc/xorg-docs/specs/ICCCM/icccm.html>
 -- EWMH: <https://specifications.freedesktop.org/wm-spec/wm-spec-1.3.html>.
 module Status.X11.WMStatus (
-  XProperty,
   XPropType (..),
-  XPropGet,
-  getProp,
-  XPropQuery,
-  readProp,
-  XQuerySpec (..),
+  XQueryError(..),
+  formatXQError,
+  XPQuery,
+  queryProp,
+  prepareForQuery,
   runXQuery,
-  watchXQueryWith,
   watchXQuery,
   DesktopState (..),
   DesktopStat (..),
@@ -26,12 +25,10 @@ module Status.X11.WMStatus (
 
 import Control.Applicative
 import Control.Concurrent.Task
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import Control.Monad.Trans.Maybe
+import Control.Monad.Except
 import Data.Bitraversable
-import Data.Bits
 import Data.ByteString qualified as BS
+import Data.Functor.Compose
 import Data.IORef
 import Data.Int
 import Data.Map.Strict qualified as M
@@ -39,101 +36,117 @@ import Data.Maybe
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
+import Data.Validation
 import Data.Vector qualified as V
 import Data.Word
 import Foreign.Storable
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Status.X11.XHandle
+import Text.Printf
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO: Need to subscribe on the X events
 
-asUtf8 :: MonadFail m => BS.ByteString -> m T.Text
-asUtf8 = either (fail . show) pure . T.decodeUtf8'
+asUtf8 :: MonadError T.Text m => BS.ByteString -> m T.Text
+asUtf8 = either (throwError . T.pack . show) pure . T.decodeUtf8'
 
 -- | As Utf8 list separated by '\0'.
-asUtf8List :: MonadFail m => BS.ByteString -> m [T.Text]
+asUtf8List :: MonadError T.Text m => BS.ByteString -> m [T.Text]
 asUtf8List = traverse asUtf8 . filter (not . BS.null) . BS.split 0
 
--- | Denotes a property, with type attached with parsing capability.
-data XProperty a = XProperty Atom
+asSingle :: MonadError T.Text m => [a] -> m a
+asSingle = \case
+  [] -> throwError $ T.pack "empty list"
+  x : _ -> pure x
 
 -- | Property type that can be parsed from native.
 class Storable n => XPropType n a | a -> n where
-  parseProp :: [n] -> Maybe a
+  parseProp :: [n] -> Either T.Text a
 
-instance XPropType Int32 Int where parseProp = fmap fromIntegral . listToMaybe
-instance XPropType Word32 XID where parseProp = fmap fromIntegral . listToMaybe
+instance XPropType Int32 Int where parseProp = fmap fromIntegral . asSingle
+instance XPropType Word32 XID where parseProp = fmap fromIntegral . asSingle
 
-instance XPropType Word32 [XID] where parseProp = Just . fmap fromIntegral
+instance XPropType Word32 [XID] where parseProp = Right . fmap fromIntegral
 
-instance XPropType Word8 BS.ByteString where parseProp = Just . BS.pack
+instance XPropType Word8 BS.ByteString where parseProp = Right . BS.pack
 instance XPropType Word8 T.Text where parseProp = parseProp >=> asUtf8
 instance XPropType Word8 [T.Text] where parseProp = parseProp >=> asUtf8List
 
--- | Applicative for getting the required property atoms, and perhaps others.
--- Wraps X11 since Resolving `Atom` requires X call.
--- Only implements Applicative since failure-capable monadic should not happen.
-newtype XPropGet a = XPropGet (XIO (IORef [Atom]) a)
-  deriving (Functor, Applicative, ActX11)
+-- | Query error type.
+data XQueryError = XMissingProperty String | XParseError String T.Text
+  deriving (Show)
 
-getProp :: forall a. String -> XPropGet (XProperty a)
-getProp name = XPropGet $ do
-  tracked <- xGetExt
-  property <- xAtom name
-  liftIO $ modifyIORef' tracked (property :)
-  pure (XProperty property)
+-- | Format list of query errors with window. WIP.
+formatXQError :: Window -> [XQueryError] -> String
+formatXQError window errors = printf "Query error[%d]: %s" window (show errors)
 
--- | X Property query monad, which is simply MaybeT around X event handler.
+-- TODO Make the reference to property atoms optional
+
+-- | X Property query applicative, which accumulates all the errors.
 -- Make sure that no exception leaks out.
-type XPropQuery = MaybeT (XIO ())
--- ^ TODO MaybeT is suboptimal.
+newtype XPQuery a = XPQuery (XIO (IORef [Atom]) (Validation [XQueryError] a))
+  deriving (Functor, Applicative, ActX11) via (Compose (XIO (IORef [Atom])) (Validation [XQueryError]))
 
-readProp :: forall a n. XPropType n a => XProperty a -> XPropQuery a
-readProp (XProperty prop) = do
-  disp <- xDisplay
-  win <- xWindow
-  let size = 8 * sizeOf @n undefined
-  raw <- MaybeT . liftIO $ rawGetWindowProperty @n size disp prop win
-  MaybeT . pure $ parseProp raw
+instance Alternative XPQuery where
+  empty = XPQuery (pure empty)
+  XPQuery qa <|> XPQuery qb = XPQuery (liftA2 (<|>) qa qb)
 
-data XQuerySpec a = forall p.
-  XQuerySpec
-  { getProps :: XPropGet p
-  , queryProps :: p -> XPropQuery a
-  }
+queryProp :: forall a n. (XPropType n a) => String -> XPQuery a
+queryProp name = XPQuery $ do
+  tracked <- xGetExt
+  prop <- xAtom name
+  liftIO $ modifyIORef' tracked (prop :)
+  mayRaw <- liftDWIO $ \disp win -> rawGetWindowProperty @n bitSize disp prop win
+  pure (either (Failure . (: [])) Success $ handleParse mayRaw)
+  where
+    bitSize = 8 * sizeOf @n undefined
+    handleParse mayRaw = do
+      raw <- maybe (throwError $ XMissingProperty name) pure mayRaw
+      either (throwError . XParseError name) pure (parseProp @n @a raw)
+
+-- | A bit of a hack, interns some atoms for the query action.
+{-# WARNING prepareForQuery "Hack for interning more atoms. Could be removed" #-}
+prepareForQuery :: XIO () a -> (a -> XPQuery b) -> XPQuery b
+prepareForQuery prepare getQuery = XPQuery $ do
+  prepared <- xWithExt (\_ -> ()) prepare
+  let XPQuery query = getQuery prepared in query
+
+-- INTERNAL for query run
+runXInt :: XPQuery a -> XIO () (Either [XQueryError] a, S.Set Atom)
+runXInt (XPQuery query) = do
+  watched <- liftIO (newIORef [])
+  val <- xWithExt (\() -> watched) query
+  watchSet <- S.fromList <$> liftIO (readIORef watched)
+  pure (validToEither val, watchSet)
 
 -- | Simply runs X query once.
-runXQuery :: XQuerySpec a -> XIO () (Maybe a)
-runXQuery XQuerySpec{getProps = XPropGet getPrs, queryProps} = do
-  meh <- liftIO (newIORef [])
-  props <- xWithExt (\() -> meh) getPrs
-  runMaybeT (queryProps props)
+runXQuery :: XPQuery a -> XIO () (Either [XQueryError] a)
+runXQuery (XPQuery query) = do
+  placeholder <- liftIO (newIORef [])
+  validToEither <$> xWithExt (\() -> placeholder) query
 
--- | X query that watches for X property at certain window.
--- Any query which fail to produce result doesn't emit the task.
--- Can also listen to other events, while it cannot emit the task.
-watchXQueryWith ::
+-- | Watch X query at the given window.
+-- Note, allows some modifier process in between.
+-- Immediately runs query to get current property right away.
+--
+-- Only the first query deliver error message,
+-- and any other query which fail to produce result doesn't emit the task.
+watchXQuery ::
   Window ->
-  XQuerySpec a ->
-  EventMask ->
-  (Event -> XIO () ()) ->
-  XIO () (Task a)
-watchXQueryWith window XQuerySpec{getProps = XPropGet getPrs, queryProps} otherMask otherEv = do
-  watched <- liftIO (newIORef [])
-  props <- xWithExt (\() -> watched) getPrs
-  watchSet <- S.fromList <$> liftIO (readIORef watched)
-  -- TODO Eh, silently not emit anything? Really?
-  initial <- runMaybeT (queryProps props)
-  xListenTo (propertyChangeMask .|. otherMask) window initial $ \case
-    PropertyEvent{ev_atom = prop}
-      | prop `S.member` watchSet -> runMaybeT (queryProps props)
-    event -> Nothing <$ otherEv event
-
--- | Watch X query without additional handlers.
-watchXQuery :: Window -> XQuerySpec a -> XIO () (Task a)
-watchXQuery window spec = watchXQueryWith window spec 0 (\_ -> pure ())
+  XPQuery a ->
+  (a -> ExceptT [XQueryError] (XIO ()) b) ->
+  XIO () (Either [XQueryError] (Task b))
+watchXQuery window query modifier = do
+  (inited, watchSet) <- runXInt query
+  applyModify inited >>= traverse \initial -> do
+    xListenTo propertyChangeMask window (Just initial) $ \case
+      PropertyEvent{ev_atom = prop}
+        | prop `S.member` watchSet -> failing <$> (runXQuery query >>= applyModify)
+      _ -> pure Nothing
+  where
+    failing = either (fail . show) pure
+    applyModify pre = runExceptT (either throwError modifier pre)
 
 data DesktopState = DeskActive | DeskVisible | DeskHidden
   deriving (Eq, Ord, Enum, Bounded)
@@ -145,56 +158,35 @@ data DesktopStat = DesktopStat
   , desktopState :: !DesktopState
   }
 
-data DeskStatProps = DeskStatProps
-  { propNumDesk :: XProperty Int
-  , propCurDesk :: XProperty Int
-  , propDeskNames :: XProperty [T.Text]
-  , propVisDesk :: XProperty [T.Text]
-  }
-
 -- | Get the vector of desktop status.
-getDesktopStat :: XQuerySpec (V.Vector DesktopStat)
+getDesktopStat :: XPQuery (V.Vector DesktopStat)
 getDesktopStat =
-  XQuerySpec
-    { getProps =
-        DeskStatProps
-          <$> getProp "_NET_NUMBER_OF_DESKTOPS"
-          <*> getProp "_NET_CURRENT_DESKTOP"
-          <*> getProp "_NET_DESKTOP_NAMES"
-          <*> getProp "_XMONAD_VISIBLE_WORKSPACES"
-    , queryProps = \DeskStatProps{..} -> do
-        numDesktops <- readProp propNumDesk
-        currentDesktop <- readProp propCurDesk
-        guard $ currentDesktop >= 0 && currentDesktop < numDesktops
-
-        desktopNames <- (<|> pure V.empty) $ do
-          V.fromList . take numDesktops <$> readProp propDeskNames
-        isVisible <- (<|> pure (const True)) $ do
-          flip S.member . S.fromList <$> readProp propVisDesk
-
-        let deskInfo idx = (DesktopStat <*> deskState idx) (desktopNames V.!? idx)
-            deskState idx = \case
-              _ | idx == currentDesktop -> DeskActive
-              Just name | isVisible name -> DeskVisible
-              _ -> DeskHidden
-        pure $ V.generate numDesktops deskInfo
-    }
+  asStat
+    <$> numDesktops
+    <*> curDesktop
+    <*> (allDeskNames <|> pure V.empty)
+    <*> (flip S.member <$> allVisibles <|> pure (const True))
+  where
+    -- TODO Bound check?
+    numDesktops = queryProp @Int "_NET_NUMBER_OF_DESKTOPS"
+    curDesktop = queryProp @Int "_NET_CURRENT_DESKTOP"
+    allDeskNames = V.fromList <$> queryProp @[T.Text] "_NET_DESKTOP_NAMES"
+    allVisibles = S.fromList <$> queryProp @[T.Text] "_XMONAD_VISIBLE_WORKSPACES"
+    asStat numDesk curDesk allNames isVisible = V.generate numDesk deskInfo
+      where
+        deskInfo idx = (DesktopStat <*> deskState idx) (allNames V.!? idx)
+        deskState idx = \case
+          _ | idx == curDesk -> DeskActive
+          Just name | isVisible name -> DeskVisible
+          _ -> DeskHidden
 
 -- | Get all windows.
-getAllWindows :: XQuerySpec (V.Vector Window)
-getAllWindows =
-  XQuerySpec
-    { getProps = getProp @[Window] "_NET_CLIENT_LIST"
-    , queryProps = \propClients -> V.fromList <$> readProp propClients
-    }
+getAllWindows :: XPQuery (V.Vector Window)
+getAllWindows = V.fromList <$> queryProp @[Window] "_NET_CLIENT_LIST"
 
 -- | Get an active window.
-getActiveWindow :: XQuerySpec (Maybe Window)
-getActiveWindow =
-  XQuerySpec
-    { getProps = getProp @[Window] "_NET_ACTIVE_WINDOW"
-    , queryProps = \propActive -> listToMaybe . filter (> 0) <$> readProp propActive
-    }
+getActiveWindow :: XPQuery (Maybe Window)
+getActiveWindow = listToMaybe . filter (> 0) <$> queryProp @[Window] "_NET_ACTIVE_WINDOW"
 
 -- MAYBE How to deal with WM_ICON? It's quite hard.
 
@@ -211,37 +203,17 @@ data WindowInfo = WindowInfo
   , windowState :: !(S.Set WMStateEx)
   }
 
-data WindowInfoProps = WindowInfoProps
-  { propWMDesk :: XProperty Int
-  , propNameExt :: XProperty T.Text
-  , propName :: XProperty T.Text
-  , propClass :: XProperty [T.Text]
-  , propWMState :: XProperty [Atom]
-  , propSTMap :: M.Map Atom WMStateEx
-  }
-
 -- | Window information. Only works for non-withdrawn state.
 -- Still, the worst that could happen is giving Nothing.
-getWindowInfo :: XQuerySpec WindowInfo
-getWindowInfo =
-  XQuerySpec
-    { getProps =
-        WindowInfoProps
-          <$> getProp "_NET_WM_DESKTOP"
-          <*> getProp "_NET_WM_NAME"
-          <*> getProp "WM_NAME"
-          <*> getProp "WM_CLASS"
-          <*> getProp "_NET_WM_STATE"
-          <*> (M.fromList <$> traverse (bitraverse xAtom pure) pairs)
-    , queryProps = \WindowInfoProps{..} -> do
-        -- MAYBE bound check? May not make sense here.
-        windowDesktop <- readProp propWMDesk
-        windowTitle <- readProp propNameExt <|> readProp propName
-        windowClasses <- V.fromList <$> readProp propClass
-        windowState <- S.fromList . mapMaybe (propSTMap M.!?) <$> readProp propWMState
-        pure WindowInfo{..}
-    }
+getWindowInfo :: XPQuery WindowInfo
+getWindowInfo = WindowInfo <$> wmDesktop <*> wmTitle <*> wmClass <*> wmState
   where
+    wmDesktop = queryProp @Int "_NET_WM_DESKTOP"
+    wmTitle = queryProp @T.Text "_NET_WM_NAME" <|> queryProp @T.Text "WM_NAME"
+    wmClass = V.fromList <$> queryProp @[T.Text] "WM_CLASS"
+    wmState = prepareForQuery stateAtoms $ \stMap -> S.fromList . mapMaybe (stMap M.!?) <$> wmStateRaw
+    wmStateRaw = queryProp @[Atom] "_NET_WM_STATE"
+    stateAtoms = M.fromList <$> traverse (bitraverse xAtom pure) pairs
     pairs =
       [ ("_NET_WM_STATE_HIDDEN", WinHidden)
       , ("_NET_WM_STATE_DEMANDS_ATTENTION", WinDemandAttention)
