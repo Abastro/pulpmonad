@@ -147,7 +147,7 @@ main = do
           , getWindowIconPixbuf = windowIconFromDEntry <|||> getWindowIconPixbuf defaultWorkspacesConfig
           }
 
-    mayLabel n = T.pack <$> workspaceMaps M.!? T.unpack n
+    mayLabel n = fromMaybe n $ T.pack <$> workspaceMaps M.!? T.unpack n
     -- TODO This requires more fixes. e.g. just got complete deadlock
     _desktopVis :: TaffyIO UI.Widget
     _desktopVis = do
@@ -157,4 +157,4 @@ main = do
         handler <- streamHandler stderr INFO
         saveGlobalLogger $ setLevel INFO . setHandlers [handler] $ logger
       liftIO $ infoM "DeskVis" "Starting desktop visualizer..."
-      UI.deskVisNew (fromMaybe "NONE" . (>>= mayLabel)) UI.defImageSetter
+      UI.deskVisNew (maybe "NONE" mayLabel) UI.defImageSetter

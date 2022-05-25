@@ -117,7 +117,6 @@ deskVisNew labeling setImg = do
   deskVis <- dVisDesktopCont labeling deskRef desktopStats
 
   traverse_ (UI.containerAdd desktopVisualizer) [deskWindows, deskVis]
-  liftIO $ infoM "DeskVis" "Visualizer booted up"
   UI.widgetShowAll desktopVisualizer
   UI.toWidget desktopVisualizer
 
@@ -141,6 +140,7 @@ dVisDesktopCont labeling desks statTask = do
   deskVis <- UI.boxNew UI.OrientationHorizontal 5
   UI.widgetGetStyleContext deskVis >>= flip UI.styleContextAddClass (T.pack "desktop-cont")
   _ <- UI.onWidgetRealize deskVis $ do
+    liftIO $ infoM "DeskVis" $ "UI: Realizing Desktop Container"
     kill <- UI.uiTask statTask (dVisDesktopUpdate deskVis labeling desks)
     () <$ UI.onWidgetUnrealize deskVis kill
   UI.toWidget deskVis
@@ -190,6 +190,7 @@ dVisDesktopUpdate parent labeling desksRef curDesks = do
       UI.widgetGetStyleContext desktopUI >>= \ctxt -> do
         UI.styleContextAddClass ctxt (T.pack "desktop-item")
         updateDeskState [desktopState] ctxt
+      UI.widgetShowAll desktopUI
       pure DesktopUI{..}
 
     destroyDeskUI DesktopUI{desktopUI} = UI.widgetDestroy desktopUI
@@ -223,6 +224,7 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
   UI.onWidgetRealize placeholder $ do
     winsRef <- newIORef M.empty
     activeRef <- newIORef Nothing
+    liftIO $ infoM "DeskVis" $ "UI: Realizing Window Container"
     killUpd <- UI.uiTask taskWinChange (structureUpd winsRef)
     killAct <- UI.uiTask taskActive (changeActivate winsRef activeRef)
     () <$ UI.onWidgetUnrealize placeholder (killAct >> killUpd)
@@ -232,6 +234,8 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
     structureUpd winsRef = \case
       DWindowMap win winTask -> do
         winUI <- dVisWindowItem setImg switcher win winTask
+        UI.widgetShowAll winUI
+        liftIO $ infoM "DeskVis" $ "UI: Showed Window " <> show win
         modifyIORef' winsRef (M.insert win $ DeskWindowUI winTask winUI)
       DWindowUnmap win -> do
         mayWin <-
@@ -261,13 +265,13 @@ dVisWindowItem setImg switcher _window infoTask = do
   UI.widgetGetStyleContext winImage >>= flip UI.styleContextAddClass (T.pack "window-item")
   -- TODO Button press -> activate
   _ <- UI.onWidgetRealize winImage $ do
+    liftIO $ infoM "DeskVis" $ "UI: New Window " <> show _window
     curDesk <- newIORef @Int (-1) -- Leveraging that it should not be -1.
     kill <- UI.uiTask infoTask (updateWindow winImage curDesk)
     () <$ UI.onWidgetUnrealize winImage kill
   UI.toWidget winImage
   where
     updateWindow winImage curDesk winInfo@WindowInfo{..} = do
-      infoM "DeskVis" $ "UI: New Window " <> show _window
       let newDesk = windowDesktop
       -- Switches the desktop
       oldDesk <- atomicModifyIORef' curDesk $ (newDesk,)
