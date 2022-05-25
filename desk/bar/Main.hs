@@ -126,7 +126,7 @@ main = do
       defaultSimpleTaffyConfig
         { startupHook = setupIcons mainDir
         , startWidgets = [workspaces]
-        , centerWidgets = [clock, _desktopVis]
+        , centerWidgets = [clock]
         , endWidgets = [mainboardWidget, batWidget, sniTrayNew]
         , barPosition = Top
         , barHeight = read "ExactSize 40"
@@ -148,6 +148,7 @@ main = do
           }
 
     mayLabel n = T.pack <$> workspaceMaps M.!? T.unpack n
+    -- TODO This requires more fixes. e.g. just got complete deadlock
     _desktopVis :: TaffyIO UI.Widget
     _desktopVis = do
       liftIO $ do

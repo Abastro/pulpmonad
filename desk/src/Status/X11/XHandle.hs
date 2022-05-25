@@ -5,6 +5,7 @@ module Status.X11.XHandle (
   XIO,
   xGetExt,
   xWithExt,
+  xOnWindow,
   startXIO,
   xQueueJob,
   xListenTo,
@@ -134,7 +135,7 @@ xActQueue = XIO . asks $ \XHandle{xhActQueue} -> xhActQueue
 xGetExt :: XIO r r
 xGetExt = XIO . asks $ \XHandle{xhExtends} -> xhExtends
 
--- Internal
+-- | Run on certain window. It is advised not to use this function.
 xOnWindow :: Window -> XIO r a -> XIO r a
 xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
   where

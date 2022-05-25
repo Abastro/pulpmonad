@@ -138,7 +138,7 @@ watchXQuery ::
   (a -> ExceptT [XQueryError] (XIO ()) b) ->
   XIO () (Either [XQueryError] (Task b))
 watchXQuery window query modifier = do
-  (inited, watchSet) <- runXInt query
+  (inited, watchSet) <- xOnWindow window $ runXInt query
   applyModify inited >>= traverse \initial -> do
     xListenTo propertyChangeMask window (Just initial) $ \case
       PropertyEvent{ev_atom = prop}
@@ -208,11 +208,13 @@ data WindowInfo = WindowInfo
 getWindowInfo :: XPQuery WindowInfo
 getWindowInfo = WindowInfo <$> wmDesktop <*> wmTitle <*> wmClass <*> wmState
   where
-    wmDesktop = queryProp @Int "_NET_WM_DESKTOP"
-    wmTitle = queryProp @T.Text "_NET_WM_NAME" <|> queryProp @T.Text "WM_NAME"
+    -- Missing location on desktop: -1
+    wmDesktop = queryProp @Int "_NET_WM_DESKTOP" <|> pure (-1)
+    -- Let's tolerate empty title.
+    wmTitle = (queryProp @T.Text "_NET_WM_NAME" <|> queryProp @T.Text "WM_NAME") <|> pure T.empty
     wmClass = V.fromList <$> queryProp @[T.Text] "WM_CLASS"
     wmState = prepareForQuery stateAtoms $ \stMap -> S.fromList . mapMaybe (stMap M.!?) <$> wmStateRaw
-    wmStateRaw = queryProp @[Atom] "_NET_WM_STATE"
+    wmStateRaw = queryProp @[Atom] "_NET_WM_STATE" <|> pure [] -- State is optional
     stateAtoms = M.fromList <$> traverse (bitraverse xAtom pure) pairs
     pairs =
       [ ("_NET_WM_STATE_HIDDEN", WinHidden)

@@ -312,7 +312,7 @@ deskVisInitiate = do
   let onWindowMap window = do
         watchXQuery window getWindowInfo pure >>= \case
           Left err -> do
-            liftIO $ errorM "DeskVis" (formatXQError window err)
+            liftIO $ infoM "DeskVis" ("invalid window: " <> formatXQError window err)
           Right winInfo -> liftIO $ putMVar winChs (DWindowMap window winInfo)
       onWindowUnmap window = liftIO $ putMVar winChs (DWindowUnmap window)
   let windowChanges = Task (pure ()) winChs
