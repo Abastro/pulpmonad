@@ -151,9 +151,9 @@ xWithExt extF (XIO act) = XIO (withReaderT withF act)
 -- NOTE: non-fatal X error is ignored.
 startXIO :: XIO () a -> IO a
 startXIO initiate = do
-  -- TODO Initiation action should NOT be XIO
-  initResult <- newEmptyMVar
-
+  -- TODO Initiation action should NOT be XIO.
+  -- Need to stop Initiation action from waiting for the task received.
+  initResult <- newEmptyMVar -- Only use of MVar.
   _ <- forkIO . bracket (openDisplay "") closeDisplay $ \xhDisplay -> do
     let xhScreen = defaultScreen xhDisplay
     xhWindow <- rootWindow xhDisplay xhScreen

@@ -30,7 +30,6 @@ import Data.Bitraversable
 import Data.ByteString qualified as BS
 import Data.Functor.Compose
 import Data.IORef
-import Data.Int
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Set qualified as S
@@ -38,12 +37,14 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
 import Data.Validation
 import Data.Vector qualified as V
-import Data.Word
 import Foreign.Storable
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Status.X11.XHandle
 import Text.Printf
+import System.Log.Logger
+import Foreign.C.Types
+import Data.Proxy
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO: Need to subscribe on the X events
@@ -60,18 +61,25 @@ asSingle = \case
   [] -> throwError $ T.pack "empty list"
   x : _ -> pure x
 
+-- | Since the format X emits is somewhat intricate.
+class Storable n => XPropRaw n where bitSize :: proxy n -> Int
+
+instance XPropRaw CChar where bitSize _ = 8
+instance XPropRaw CShort where bitSize _ = 16
+instance XPropRaw CLong where bitSize _ = 32 -- Yeah, I don't get why even is this..
+
 -- | Property type that can be parsed from native.
-class Storable n => XPropType n a | a -> n where
+class XPropRaw n => XPropType n a | a -> n where
   parseProp :: [n] -> Either T.Text a
 
-instance XPropType Int32 Int where parseProp = fmap fromIntegral . asSingle
-instance XPropType Word32 XID where parseProp = fmap fromIntegral . asSingle
+instance XPropType CLong Int where parseProp = fmap fromIntegral . asSingle
+instance XPropType CLong XID where parseProp = fmap fromIntegral . asSingle
 
-instance XPropType Word32 [XID] where parseProp = Right . fmap fromIntegral
+instance XPropType CLong [XID] where parseProp = Right . fmap fromIntegral
 
-instance XPropType Word8 BS.ByteString where parseProp = Right . BS.pack
-instance XPropType Word8 T.Text where parseProp = parseProp >=> asUtf8
-instance XPropType Word8 [T.Text] where parseProp = parseProp >=> asUtf8List
+instance XPropType CChar BS.ByteString where parseProp = Right . BS.pack . fmap fromIntegral
+instance XPropType CChar T.Text where parseProp = parseProp >=> asUtf8
+instance XPropType CChar [T.Text] where parseProp = parseProp >=> asUtf8List
 
 -- | Query error type.
 data XQueryError = XMissingProperty String | XParseError String T.Text
@@ -97,10 +105,10 @@ queryProp name = XPQuery $ do
   tracked <- xGetExt
   prop <- xAtom name
   liftIO $ modifyIORef' tracked (prop :)
-  mayRaw <- liftDWIO $ \disp win -> rawGetWindowProperty @n bitSize disp prop win
+  let bits = bitSize $ Proxy @n
+  mayRaw <- liftDWIO $ \disp win -> rawGetWindowProperty @n bits disp prop win
   pure (either (Failure . (: [])) Success $ handleParse mayRaw)
   where
-    bitSize = 8 * sizeOf @n undefined
     handleParse mayRaw = do
       raw <- maybe (throwError $ XMissingProperty name) pure mayRaw
       either (throwError . XParseError name) pure (parseProp @n @a raw)
@@ -138,8 +146,11 @@ watchXQuery ::
   (a -> ExceptT [XQueryError] (XIO ()) b) ->
   XIO () (Either [XQueryError] (Task b))
 watchXQuery window query modifier = do
+  liftIO $ infoM "DeskVis" $ "Query-0 on " <> show window
   (inited, watchSet) <- xOnWindow window $ runXInt query
+  liftIO $ infoM "DeskVis" $ "Query-1 on " <> show window
   applyModify inited >>= traverse \initial -> do
+    liftIO $ infoM "DeskVis" $ "Query-2 on " <> show window
     xListenTo propertyChangeMask window (Just initial) $ \case
       PropertyEvent{ev_atom = prop}
         | prop `S.member` watchSet -> failing <$> (runXQuery query >>= applyModify)
