@@ -8,6 +8,7 @@ import Control.Concurrent.Task
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Data.Foldable
 import Data.IORef
@@ -16,7 +17,6 @@ import Data.Maybe
 import Data.Monoid
 import Data.Set qualified as S
 import Data.Text qualified as T
-import Data.Tuple (swap)
 import Data.Vector qualified as V
 import GI.GLib (castTo)
 import GI.Gio.Interfaces.AppInfo
@@ -27,14 +27,13 @@ import GI.Gtk.Objects.Container qualified as UI
 import GI.Gtk.Objects.IconTheme qualified as UI
 import GI.Gtk.Objects.Image qualified as UI
 import Graphics.X11.Types
-import Graphics.X11.Xlib.Extras
 import Status.X11.WMStatus
 import Status.X11.XHandle
 import System.Log.Logger
 import UI.Commons qualified as UI
 import UI.Singles qualified as UI
 import UI.Task qualified as UI
-import Control.Concurrent.STM
+import Data.Tuple (swap)
 
 -- FIXME Need to make this deadlock-free
 
@@ -115,7 +114,7 @@ deskVisNew labeling setImg = do
           infoM "DeskVis" "Container - added window UI"
 
   desktopVisualizer <- UI.boxNew UI.OrientationHorizontal 0
-  deskWindows <- dVisWindowCont setImg switchDesktop windowChanges windowActive
+  deskWindows <- dVisWindowCont setImg switchDesktop windowsChange windowActive
   deskVis <- dVisDesktopCont labeling deskRef desktopStats
 
   traverse_ (UI.containerAdd desktopVisualizer) [deskWindows, deskVis]
@@ -220,7 +219,7 @@ dVisWindowCont ::
   MonadIO m =>
   (WindowInfo -> IO ImageSet) ->
   (Int -> Int -> UI.Widget -> IO ()) ->
-  Task DVWindowRcv ->
+  Task DWindowChange ->
   Task (Maybe Window) ->
   m UI.Widget
 dVisWindowCont setImg switcher taskWinChange taskActive = do
@@ -236,16 +235,21 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
   UI.toWidget placeholder
   where
     structureUpd winsRef = \case
-      DWindowMap win winTask -> do
-        winUI <- dVisWindowItem setImg switcher win winTask
-        UI.widgetShowAll winUI
-        liftIO $ infoM "DeskVis" $ "UI: Showed Window " <> show win
-        modifyIORef' winsRef (M.insert win $ DeskWindowUI winTask winUI)
-      DWindowUnmap win -> do
-        mayWin <-
-          atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) win
-        for_ mayWin $ \(DeskWindowUI task winUI) -> do
-          taskStop task >> UI.widgetDestroy winUI
+      DWindowChange addWins removed -> do
+        -- Removes window
+        for_ (S.toList removed) $ \window -> do
+          mayUI <- atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) window
+          for_ mayUI $ \(DeskWindowUI task winUI) -> do
+            taskStop task >> UI.widgetDestroy winUI
+
+        -- Adds window
+        for_ (M.toList addWins) $ \(window, winTask) -> do
+          existed <- (window `M.member`) <$> readIORef winsRef
+          unless existed $ do
+            winUI <- dVisWindowItem setImg switcher window winTask
+            UI.widgetShowAll winUI
+            liftIO $ infoM "DeskVis" $ "UI: Showed Window " <> show window
+            modifyIORef' winsRef (M.insert window $ DeskWindowUI winTask winUI)
 
     changeActivate winsRef activeRef nextActive = do
       windows <- readIORef winsRef
@@ -295,11 +299,14 @@ dVisWindowItem setImg switcher _window infoTask = do
                         Communication
 --------------------------------------------------------------------}
 
-data DVWindowRcv = DWindowMap Window (Task WindowInfo) | DWindowUnmap Window
+-- | Window changes, with added & removed
+data DWindowChange = DWindowChange (M.Map Window (Task WindowInfo)) (S.Set Window)
+
+-- data DVWindowRcv = DWindowMap Window (Task WindowInfo) | DWindowUnmap Window
 
 data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)
-  , windowChanges :: Task DVWindowRcv
+  , windowsChange :: Task DWindowChange
   , windowActive :: Task (Maybe Window)
   }
 
@@ -311,34 +318,18 @@ deskVisInitiate :: XIO () DeskVisRcvs
 deskVisInitiate = do
   rootWin <- xWindow
 
-  -- allWins <- errorAct rootWin $ runXQuery getAllWindows
-
-  -- Sends window map event over to UI.
-  -- Let me think later about out-of-sync issue..
-  winChs <- liftIO newTQueueIO
-  let writeCh val = atomically $ writeTQueue winChs val
-  let onWindowMap window = do
-        watchXQuery window getWindowInfo pure >>= \case
-          Left err -> do
-            liftIO $ infoM "DeskVis" ("invalid window: " <> formatXQError window err)
-          Right winInfo -> liftIO $ writeCh (DWindowMap window winInfo)
-      onWindowUnmap window = liftIO $ writeCh (DWindowUnmap window)
-  let windowChanges = taskCreate winChs $ pure ()
-
-  -- X11 handling should be happening on the same thread.
-  windowRef <- liftIO $ newIORef V.empty
+  -- Reference to hold current data of windows.
+  -- IORef, since X11 handling should be happening on the same thread.
+  windowRef <- liftIO $ newIORef S.empty
   -- Detects difference between windows and handle it.
-  watchXQuery rootWin getAllWindows $ \windows -> do
-    
-    undefined
-
-  -- FIXME This is bad. Better way?
-  -- xQueueJob $ traverse_ onWindowMap allWins -- This is required to map existing windows. Duh
-  -- Watch for the windows Mapped/Unmapped.
-  xListenTo_ substructureNotifyMask rootWin $ \case
-    MapNotifyEvent{ev_window = window} -> onWindowMap window
-    UnmapEvent{ev_window = window} -> onWindowUnmap window
-    _ -> pure ()
+  windowsChange <- errorAct rootWin $
+    watchXQuery rootWin getAllWindows $ \newWindows -> do
+      oldWindows <- liftIO $ atomicModifyIORef' windowRef $ \oldWindows -> (newWindows, oldWindows)
+      let removed = oldWindows S.\\ newWindows
+      let added = newWindows S.\\ oldWindows
+      -- "Invalid" windows are ignored from here
+      addWins <- M.traverseMaybeWithKey (\_ -> lift . watchWindow) (M.fromSet id added)
+      pure $ DWindowChange addWins removed
 
   windowActive <- errorAct rootWin $ watchXQuery rootWin getActiveWindow pure
   -- MAYBE Also implement desktop messages
@@ -348,3 +339,8 @@ deskVisInitiate = do
     onError window err = do
       liftIO (fail $ formatXQError window err)
     errorAct window act = act >>= either (onError window) pure
+    watchWindow window = do
+      watchXQuery window getWindowInfo pure >>= \case
+        Left err -> do
+          liftIO $ Nothing <$ infoM "DeskVis" ("invalid window: " <> formatXQError window err)
+        Right winInfo -> pure (Just winInfo)

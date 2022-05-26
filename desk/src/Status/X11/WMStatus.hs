@@ -181,8 +181,8 @@ getDesktopStat =
           _ -> DeskHidden
 
 -- | Get all windows.
-getAllWindows :: XPQuery (V.Vector Window)
-getAllWindows = V.fromList <$> queryProp @[Window] "_NET_CLIENT_LIST"
+getAllWindows :: XPQuery (S.Set Window)
+getAllWindows = S.fromList <$> queryProp @[Window] "_NET_CLIENT_LIST"
 
 -- | Get an active window.
 getActiveWindow :: XPQuery (Maybe Window)

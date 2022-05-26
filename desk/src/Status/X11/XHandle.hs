@@ -189,6 +189,8 @@ xQueueJob job = do
   actQueue <- xActQueue
   withRunInIO $ \unliftX -> atomically (writeTQueue actQueue $ unliftX job)
 
+-- MAYBE Use streaming library here
+
 -- | Listen with certain event mask at certain window.
 -- Task variable should be cared of as soon as possible, as it would put the event loop in halt.
 -- Begins with optional starting value, emits task when the handling yields something.
