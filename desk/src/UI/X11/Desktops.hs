@@ -35,8 +35,6 @@ import UI.Singles qualified as UI
 import UI.Task qualified as UI
 import Control.Exception.Enclosed
 
--- FIXME Need to make this deadlock-free
-
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
   DeskActive -> T.pack "active"
@@ -112,6 +110,7 @@ deskVisNew labeling setImg = do
       -- Out of bounds: was already removed, no need to care
       for_ (desktops V.!? deskOld) $ \DesktopUI{desktopUI} -> do
         infoM "DeskVis" "Container - removing window UI"
+        UI.widgetHide winUI
         UI.containerRemove desktopUI winUI
         infoM "DeskVis" "Container - removed window UI"
       -- For now, let's not care about out of bounds from new.
@@ -119,6 +118,7 @@ deskVisNew labeling setImg = do
       for_ (desktops V.!? deskNew) $ \DesktopUI{desktopUI} -> do
         infoM "DeskVis" "Container - adding window UI"
         UI.containerAdd desktopUI winUI
+        UI.widgetShowAll winUI
         infoM "DeskVis" "Container - added window UI"
 
 {-------------------------------------------------------------------

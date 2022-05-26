@@ -42,7 +42,6 @@ import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Status.X11.XHandle
 import Text.Printf
-import System.Log.Logger
 import Foreign.C.Types
 import Data.Proxy
 
@@ -146,11 +145,8 @@ watchXQuery ::
   (a -> ExceptT [XQueryError] (XIO ()) b) ->
   XIO () (Either [XQueryError] (Task b))
 watchXQuery window query modifier = do
-  liftIO $ infoM "DeskVis" $ "Query-0 on " <> show window
   (inited, watchSet) <- xOnWindow window $ runXInt query
-  liftIO $ infoM "DeskVis" $ "Query-1 on " <> show window
   applyModify inited >>= traverse \initial -> do
-    liftIO $ infoM "DeskVis" $ "Query-2 on " <> show window
     xListenTo propertyChangeMask window (Just initial) $ \case
       PropertyEvent{ev_atom = prop}
         | prop `S.member` watchSet -> failing <$> (runXQuery query >>= applyModify)
