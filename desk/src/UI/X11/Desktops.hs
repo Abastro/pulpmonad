@@ -5,6 +5,7 @@ module UI.X11.Desktops where
 
 import Control.Applicative
 import Control.Concurrent.Task
+import Control.Exception.Enclosed
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans
@@ -33,7 +34,6 @@ import System.Log.Logger
 import UI.Commons qualified as UI
 import UI.Singles qualified as UI
 import UI.Task qualified as UI
-import Control.Exception.Enclosed
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -106,20 +106,18 @@ deskVisNew labeling setImg = do
   UI.toWidget desktopVisualizer
   where
     switchDesktop deskRef deskOld deskNew (winUI :: UI.Widget) = liftIO $ do
+      -- TODO Handle window ordering
+      infoM "DeskVis" ("Switching desktop from " <> show deskOld <> " to " <> show deskNew)
       desktops <- readIORef deskRef
       -- Out of bounds: was already removed, no need to care
       for_ (desktops V.!? deskOld) $ \DesktopUI{desktopUI} -> do
-        infoM "DeskVis" "Container - removing window UI"
         UI.widgetHide winUI
         UI.containerRemove desktopUI winUI
-        infoM "DeskVis" "Container - removed window UI"
       -- For now, let's not care about out of bounds from new.
       -- That is likely a sync issue, so it needs proper logging later.
       for_ (desktops V.!? deskNew) $ \DesktopUI{desktopUI} -> do
-        infoM "DeskVis" "Container - adding window UI"
         UI.containerAdd desktopUI winUI
         UI.widgetShowAll winUI
-        infoM "DeskVis" "Container - added window UI"
 
 {-------------------------------------------------------------------
                     For each desktop (workspace)
@@ -178,7 +176,7 @@ dVisDesktopUpdate parent labeling desksRef curDesks = do
   modifyIORef' desksRef (uiCom <>)
   where
     newDeskUI DesktopStat{..} = do
-      deskBox <- UI.boxNew UI.OrientationHorizontal 5
+      deskBox <- UI.boxNew UI.OrientationHorizontal 0
       deskName <- UI.labelNew Nothing
       UI.widgetGetStyleContext deskName >>= flip UI.styleContextAddClass (T.pack "desktop-label")
 
@@ -283,11 +281,13 @@ dVisWindowItem setImg switcher _window infoTask = do
       let newDesk = windowDesktop
       -- Switches the desktop
       oldDesk <- atomicModifyIORef' curDesk $ (newDesk,)
-      UI.toWidget winImage >>= switcher oldDesk newDesk
+      when (newDesk /= oldDesk) $
+        UI.toWidget winImage >>= switcher oldDesk newDesk
 
       -- Update the icon
-      let size = fromIntegral $ fromEnum UI.IconSizeDnd
+      let size = fromIntegral $ fromEnum UI.IconSizeLargeToolbar
       setImg winInfo >>= \case
+        -- MAYBE use pixel size to reset.
         ImgSName name -> UI.imageSetFromIconName winImage (Just name) size
         ImgSGIcon icon -> UI.imageSetFromGicon winImage icon size
 
@@ -325,19 +325,15 @@ deskVisInitiate = do
   -- Detects difference between windows and handle it.
   windowsChange <- errorAct $
     watchXQuery rootWin getAllWindows $ \newWindows -> do
-      liftIO $ infoM "DeskVis" $ "Window list updated: " <> show newWindows
       oldWindows <- liftIO $ atomicModifyIORef' windowRef $ \oldWindows -> (newWindows, oldWindows)
       let removed = oldWindows S.\\ newWindows
       let added = newWindows S.\\ oldWindows
       -- "Invalid" windows are ignored from here
       addWins <- M.traverseMaybeWithKey (\_ -> lift . watchWindow) (M.fromSet id added)
-      liftIO $ infoM "DeskVis" $ "Window list sending changes"
       pure $ DWindowChange addWins removed
 
-  liftIO $ infoM "DeskVis" "Initiating 2"
   windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
   -- MAYBE Also implement desktop messages
-  liftIO $ infoM "DeskVis" "Initiating 3"
   desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
 
   liftIO $ infoM "DeskVis" "DeskVis Initiated."
