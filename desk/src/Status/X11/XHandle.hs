@@ -201,9 +201,11 @@ xListenTo ::
 xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
   listeners <- unliftX xListeners
   key <- newUnique
-  taskVar <- maybe newEmptyMVar newMVar initial
+  listenQueue <- newTQueueIO
+  let writeListen val = atomically $ writeTQueue listenQueue val
+  traverse_ writeListen initial
   let listen = XListen mask window $ \event ->
-        unliftX (xOnWindow window $ handler event) >>= traverse_ (putMVar taskVar)
+        unliftX (xOnWindow window $ handler event) >>= traverse_ writeListen
   let beginListen = do
         modifyIORef' listeners $ insertListen key listen
         unliftX $ updateMask listeners
@@ -211,8 +213,7 @@ xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
         modifyIORef' listeners $ deleteListen key
         unliftX $ updateMask listeners
   let killTask = unliftX $ xQueueJob (liftIO endListen)
-  -- Kill task redirects it to the task.
-  Task{..} <$ beginListen
+  taskCreate listenQueue killTask <$ beginListen
   where
     updateMask listeners = liftDWIO $ \disp win -> do
       Ior newMask <- foldMap (Ior . maskOf) . getWinListen win <$> readIORef listeners

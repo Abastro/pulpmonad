@@ -6,7 +6,6 @@ module UI.Singles (
   barNewTask,
 ) where
 
-import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
@@ -38,14 +37,15 @@ iconNewTask iconSize task naming = iconNewWith iconSize realize unrealize
     unrealize kill = kill
 
 barNewTask :: MonadIO m => RationalRect -> (Double, Double, Double) -> Task a -> (a -> Double) -> m Widget
-barNewTask relative color task@(Task _ var) asFill = do
+barNewTask relative color task asFill = do
   -- Uses images as base and render on the image.
   bar <- imageNew
   setWidgetHalign bar AlignFill
   setWidgetValign bar AlignFill
   -- Uses TVar as well to allow rendering
   _ <- onWidgetRealize bar $ do
-    tvar <- takeMVar var >>= atomically . newTVar
+    -- MAYBE avoid blocking?
+    tvar <- taskNextWait task >>= atomically . newTVar
     killTask <- uiTask task $ \val ->
       atomically (writeTVar tvar val) *> widgetQueueDraw bar
     _ <- onWidgetDraw bar $ \ctx -> do

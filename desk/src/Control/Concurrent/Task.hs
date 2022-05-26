@@ -1,32 +1,45 @@
-module Control.Concurrent.Task where
+module Control.Concurrent.Task (
+  Task,
+  taskCreate,
+  taskStop,
+  taskNext,
+  taskNextWait,
+  startRegular,
+) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import Control.Exception
 import Control.Exception.Enclosed (tryAny)
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.IO.Unlift
 import Data.Foldable
 import System.IO
 
--- | Represents a repeatedly run Task.
--- The taskVar needs to be put out repeatedly, unless, the task would not resume.
-data Task a = Task {killTask :: IO (), taskVar :: MVar a}
+-- | Represents a repeatedly run Task. Emits result each time task is run. Can be killed.
+data Task a = Task {killTask :: IO (), emitQueue :: TQueue a}
 
--- | Task with a repeater and initial value provided.
-startWithRepeater ::
-  (MonadIO m, MonadUnliftIO m) =>
-  ((r -> m ()) -> m ()) ->
-  a ->
-  (r -> m (Maybe a)) ->
-  m (Task a)
-startWithRepeater repeater initial nextAct = withRunInIO $ \unlifts -> do
-  var <- newMVar initial
-  tid <- forkIO . unlifts . repeater $ \inp ->
-    nextAct inp >>= traverse_ (liftIO . putMVar var)
-  pure (Task{killTask = killThread tid, taskVar = var})
+-- | Primitive function to create a task with a given task variable and a way to kill it.
+-- killing(stopping) the task should stop the provider from working on the taskVar.
+taskCreate :: TQueue a -> IO () -> Task a
+taskCreate emitQueue killTask = Task{..}
+
+-- | Stops the task.
+-- Should stop the provider from working on the task.
+taskStop :: Task a -> IO ()
+taskStop Task{killTask} = killTask
+
+-- | Gives the next emitted result if it exists.
+taskNext :: Task a -> IO (Maybe a)
+taskNext Task{emitQueue} = atomically $ tryReadTQueue emitQueue
+
+-- | Waits until next task is done, and return the emitted result.
+-- Can cause deadlock.
+taskNextWait :: Task a -> IO a
+taskNextWait Task{emitQueue} = atomically $ readTQueue emitQueue
 
 -- | Starts regular task with delay (ms).
+-- Runs the task once to test its validity.
 startRegular :: (MonadIO m) => Int -> IO a -> m (Maybe (Task a))
 startRegular delay action = liftIO $ do
   try action >>= \case
@@ -34,8 +47,9 @@ startRegular delay action = liftIO $ do
       hPutStrLn stderr $ "Error while starting task: " <> show err
       pure Nothing
     Right val -> do
-      var <- newMVar val
+      var <- newTQueueIO
+      atomically $ writeTQueue var val
       tid <- forkIO . forever $ do
         threadDelay (delay * 1000)
-        tryAny action >>= traverse_ (putMVar var)
-      pure (Just $ Task{killTask = killThread tid, taskVar = var})
+        tryAny action >>= traverse_ (atomically . writeTQueue var)
+      pure (Just $ Task{killTask = killThread tid, emitQueue = var})

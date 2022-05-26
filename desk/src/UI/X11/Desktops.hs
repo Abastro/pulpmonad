@@ -4,7 +4,6 @@
 module UI.X11.Desktops where
 
 import Control.Applicative
-import Control.Concurrent
 import Control.Concurrent.Task
 import Control.Exception
 import Control.Monad
@@ -35,6 +34,9 @@ import System.Log.Logger
 import UI.Commons qualified as UI
 import UI.Singles qualified as UI
 import UI.Task qualified as UI
+import Control.Concurrent.STM
+
+-- FIXME Need to make this deadlock-free
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -128,6 +130,8 @@ data DesktopUI = DesktopUI
   { desktopUI :: !UI.Container
   , deskNameChange :: Maybe T.Text -> IO ()
   }
+
+-- TODO: Feature, desktop visibility
 
 -- | Create UI for desktops.
 dVisDesktopCont ::
@@ -240,8 +244,8 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
       DWindowUnmap win -> do
         mayWin <-
           atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) win
-        for_ mayWin $ \(DeskWindowUI Task{killTask} winUI) -> do
-          killTask >> UI.widgetDestroy winUI
+        for_ mayWin $ \(DeskWindowUI task winUI) -> do
+          taskStop task >> UI.widgetDestroy winUI
 
     changeActivate winsRef activeRef nextActive = do
       windows <- readIORef winsRef
@@ -264,9 +268,10 @@ dVisWindowItem setImg switcher _window infoTask = do
   winImage <- UI.imageNew
   UI.widgetGetStyleContext winImage >>= flip UI.styleContextAddClass (T.pack "window-item")
   -- TODO Button press -> activate
+  -- PROBLEM: for realize to work, it needs to belong to certain widget.
   _ <- UI.onWidgetRealize winImage $ do
     liftIO $ infoM "DeskVis" $ "UI: New Window " <> show _window
-    curDesk <- newIORef @Int (-1) -- Leveraging that it should not be -1.
+    curDesk <- newIORef @Int (-1) -- When desktop is -1, it should not be showed.
     kill <- UI.uiTask infoTask (updateWindow winImage curDesk)
     () <$ UI.onWidgetUnrealize winImage kill
   UI.toWidget winImage
@@ -306,31 +311,37 @@ deskVisInitiate :: XIO () DeskVisRcvs
 deskVisInitiate = do
   rootWin <- xWindow
 
-  -- For now.. let's just start empty if not successful.
-  -- allWins <- maybe [] V.toList <$> runXQuery getAllWindows
+  -- allWins <- errorAct rootWin $ runXQuery getAllWindows
 
   -- Sends window map event over to UI.
   -- Let me think later about out-of-sync issue..
-  winChs <- liftIO newEmptyMVar
-  -- This hands the (ownership of) Task over to UI side.
+  winChs <- liftIO newTQueueIO
+  let writeCh val = atomically $ writeTQueue winChs val
   let onWindowMap window = do
         watchXQuery window getWindowInfo pure >>= \case
           Left err -> do
             liftIO $ infoM "DeskVis" ("invalid window: " <> formatXQError window err)
-          Right winInfo -> liftIO $ putMVar winChs (DWindowMap window winInfo)
-      onWindowUnmap window = liftIO $ putMVar winChs (DWindowUnmap window)
-  let windowChanges = Task (pure ()) winChs
+          Right winInfo -> liftIO $ writeCh (DWindowMap window winInfo)
+      onWindowUnmap window = liftIO $ writeCh (DWindowUnmap window)
+  let windowChanges = taskCreate winChs $ pure ()
+
+  -- X11 handling should be happening on the same thread.
+  windowRef <- liftIO $ newIORef V.empty
+  -- Detects difference between windows and handle it.
+  watchXQuery rootWin getAllWindows $ \windows -> do
+    
+    undefined
 
   -- FIXME This is bad. Better way?
   -- xQueueJob $ traverse_ onWindowMap allWins -- This is required to map existing windows. Duh
   -- Watch for the windows Mapped/Unmapped.
   xListenTo_ substructureNotifyMask rootWin $ \case
-    -- TODO Why is this not getting called?
     MapNotifyEvent{ev_window = window} -> onWindowMap window
     UnmapEvent{ev_window = window} -> onWindowUnmap window
     _ -> pure ()
 
   windowActive <- errorAct rootWin $ watchXQuery rootWin getActiveWindow pure
+  -- MAYBE Also implement desktop messages
   desktopStats <- errorAct rootWin $ watchXQuery rootWin getDesktopStat pure
   pure DeskVisRcvs{..}
   where

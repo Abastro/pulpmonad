@@ -1,6 +1,5 @@
 module UI.Task where
 
-import Control.Concurrent.MVar
 import Data.Foldable
 import GI.GLib.Constants
 import GI.GLib.Structs.Source
@@ -13,7 +12,7 @@ uiSingleRun task = () <$ Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE (False <$ task
 
 -- | Adds UI Task, returns the kill action.
 uiTask :: Task a -> (a -> IO b) -> IO (IO ())
-uiTask (Task kill var) actWith = do
-  let action = True <$ (tryTakeMVar var >>= traverse_ actWith)
+uiTask task actWith = do
+  let action = True <$ (taskNext task >>= traverse_ actWith)
   sourceId <- Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE action
-  pure $ kill <* sourceRemove sourceId
+  pure $ taskStop task <* sourceRemove sourceId
