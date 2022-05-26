@@ -126,7 +126,7 @@ main = do
       defaultSimpleTaffyConfig
         { startupHook = setupIcons mainDir
         , startWidgets = [workspaces]
-        , centerWidgets = [clock, _desktopVis]
+        , centerWidgets = [clock]
         , endWidgets = [mainboardWidget, batWidget, sniTrayNew]
         , barPosition = Top
         , barHeight = read "ExactSize 40"

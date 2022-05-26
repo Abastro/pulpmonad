@@ -206,18 +206,21 @@ xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
   listenQueue <- newTQueueIO
   let writeListen val = atomically $ writeTQueue listenQueue val
   traverse_ writeListen initial
+  -- For some reason, window is just not working.
   let listen = XListen mask window $ \event ->
-        unliftX (xOnWindow window $ handler event) >>= traverse_ writeListen
+        (unliftX . xOnWindow window) (handler event) >>= traverse_ writeListen
   let beginListen = do
         modifyIORef' listeners $ insertListen key listen
-        unliftX $ updateMask listeners
+        (unliftX . xOnWindow window) (updateMask listeners)
   let endListen = do
         modifyIORef' listeners $ deleteListen key
-        unliftX $ updateMask listeners
+        (unliftX . xOnWindow window) (updateMask listeners)
   let killTask = unliftX $ xQueueJob (liftIO endListen)
   taskCreate listenQueue killTask <$ beginListen
   where
     updateMask listeners = liftDWIO $ \disp win -> do
+      -- Somehow selecting input on windows make it stop working..
+      -- Why, why deadlock?
       Ior newMask <- foldMap (Ior . maskOf) . getWinListen win <$> readIORef listeners
       selectInput disp win newMask
     maskOf (XListen mask _ _) = mask

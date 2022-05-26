@@ -144,11 +144,11 @@ watchXQuery ::
   XPQuery a ->
   (a -> ExceptT [XQueryError] (XIO ()) b) ->
   XIO () (Either [XQueryError] (Task b))
-watchXQuery window query modifier = xOnWindow window $ do
-  (inited, watchSet) <- runXInt query
+watchXQuery window query modifier = do
+  -- FIXME Deadlock again!
+  (inited, watchSet) <- xOnWindow window $ runXInt query
   applyModify inited >>= traverse \initial -> do
     xListenTo propertyChangeMask window (Just initial) $ \case
-      -- TODO Seems like some properties are not handled as "properties"
       PropertyEvent{ev_atom = prop}
         | prop `S.member` watchSet -> failing <$> (runXQuery query >>= applyModify)
       _ -> pure Nothing
