@@ -38,6 +38,6 @@ executable pulpmonad
   import:             pulp-xmonad
   main-is:            Main.hs
   hs-source-dirs:     app
-  ghc-options:         -threaded +RTS -N -RTS
+  ghc-options:         -threaded "-with-rtsopts=-N"
   build-depends:
     pulpmonad

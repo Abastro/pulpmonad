@@ -107,7 +107,9 @@ queryProp name = XPQuery $ do
   prop <- xAtom name
   liftIO $ modifyIORef' tracked (prop :)
   let bits = bitSize $ Proxy @n
+  liftDWIO $ \_ w -> infoM "DeskVis" ("Querying [" <> show w <> "]: " <> name)
   mayRaw <- liftDWIO $ \disp win -> rawGetWindowProperty @n bits disp prop win
+  liftDWIO $ \_ w -> infoM "DeskVis" ("Queryied [" <> show w <> "]: " <> name)
   pure (either (Failure . (: [])) Success $ handleParse mayRaw)
   where
     handleParse mayRaw = do

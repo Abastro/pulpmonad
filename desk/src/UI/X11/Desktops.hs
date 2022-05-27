@@ -100,7 +100,7 @@ deskVisNew labeling setImg = do
 
   -- FIXME This verifies that the entire threading system halts.. duh
   -- Happens whenever something is closed.
-  liftIO . forkIO . forever $ do
+  liftIO . forkOn 2 . forever $ do
     hPutStrLn stderr "Periodic print"
     threadDelay 1000000
 

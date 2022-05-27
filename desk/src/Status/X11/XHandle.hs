@@ -29,6 +29,8 @@ import Data.Set qualified as S
 import Data.Unique
 import Graphics.X11.Xlib
 import Graphics.X11.Xlib.Extras
+import System.Log.Logger
+import XMonad.Core (installSignalHandlers, uninstallSignalHandlers)
 
 data X11Env r = X11Env
   { theDisplay :: !Display
@@ -154,7 +156,17 @@ startXIO initiate = do
   -- TODO Initiation action should NOT be XIO.
   -- Need to stop Initiation action from waiting for the task received.
   initResult <- newEmptyMVar -- Only use of MVar.
-  _ <- forkIO . bracket (openDisplay "") closeDisplay $ \xhDisplay -> do
+
+  inf <- myThreadId >>= threadCapability
+  numCapa <- getNumCapabilities
+  infoM "DeskVis" $ "Current thread capability: " <> show inf
+  infoM "DeskVis" $ "Number of capabilities: " <> show numCapa
+
+  _ <- forkOn 0 . bracket (openDisplay "") closeDisplay $ \xhDisplay ->
+    bracket_ installSignalHandlers uninstallSignalHandlers $ do
+      inf <- myThreadId >>= threadCapability
+      infoM "DeskVis" $ "X11 thread capability: " <> show inf
+
       let xhScreen = defaultScreen xhDisplay
       xhWindow <- rootWindow xhDisplay xhScreen
       xhListeners <- newIORef (XListeners M.empty M.empty)
@@ -171,15 +183,13 @@ startXIO initiate = do
       actQueue <- unliftX xActQueue
 
       -- setErrorHandler: Expermental?
-      -- setErrorHandler $ \_disp _errEvent -> pure ()
-      xSetErrorHandler
+      -- setErrorHandler $ \_disp _errEvent -> infoM "DeskVis" "error happened"
+      -- xSetErrorHandler
       allocaXEvent $ \evPtr -> forever $ do
         atomically (flushTQueue actQueue) >>= traverse_ id
         -- .^. Before handling next X event, performs tasks in need of handling.
         nextEvent display evPtr
         event <- getEvent evPtr
-        -- Hope this grabs `event` for MapNotify/UnmapNotify,
-        -- which allows for the substructure handling.
         evWindow <- get_Window evPtr
 
         listens <- getWinListen evWindow <$> readIORef listeners

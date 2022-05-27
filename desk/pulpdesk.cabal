@@ -83,7 +83,7 @@ executable pulpbar
   import:             pulp-gtk
   main-is:            Main.hs
   hs-source-dirs:     bar
-  ghc-options:        -rtsopts -threaded +RTS -N -RTS
+  ghc-options:        -threaded -rtsopts "-with-rtsopts=-N"
   build-depends:
       pulpdesk
     , xdg-desktop-entry ==0.1.*
@@ -95,6 +95,6 @@ executable pulp-sysctl
   import:             pulp-gtk
   main-is:            Main.hs
   hs-source-dirs:     sysctl
-  ghc-options:        -rtsopts -threaded +RTS -N -RTS
+  ghc-options:        -threaded -rtsopts "-with-rtsopts=-N"
   build-depends:
       pulpdesk
