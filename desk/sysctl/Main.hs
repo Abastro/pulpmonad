@@ -99,7 +99,7 @@ main = do
           UI.KEY_Escape -> True <$ UI.windowClose window
           _ -> pure False
 
-      UI.windowAsTransparent window
+      UI.windowSetTransparent window
       UI.windowGrabOnMap window
 
       UI.containerAdd window =<< btns window
