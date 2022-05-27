@@ -44,8 +44,6 @@ import Status.X11.XHandle
 import Text.Printf
 import Foreign.C.Types
 import Data.Proxy
-import System.Log.Logger
-import Graphics.X11.Xlib.Atom
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO: Need to subscribe on the X events
@@ -107,9 +105,7 @@ queryProp name = XPQuery $ do
   prop <- xAtom name
   liftIO $ modifyIORef' tracked (prop :)
   let bits = bitSize $ Proxy @n
-  liftDWIO $ \_ w -> infoM "DeskVis" ("Querying [" <> show w <> "]: " <> name)
   mayRaw <- liftDWIO $ \disp win -> rawGetWindowProperty @n bits disp prop win
-  liftDWIO $ \_ w -> infoM "DeskVis" ("Queryied [" <> show w <> "]: " <> name)
   pure (either (Failure . (: [])) Success $ handleParse mayRaw)
   where
     handleParse mayRaw = do
@@ -154,14 +150,7 @@ watchXQuery window query modifier = do
   applyModify inited >>= traverse \initial -> do
     xListenTo propertyChangeMask window (Just initial) $ \case
       PropertyEvent{ev_atom = prop}
-        | prop `S.member` watchSet -> do
-          propName <- liftDWIO $ \d _ -> getAtomName d prop
-          liftIO $ infoM "DeskVis" $ "Property begin [" <> show window <> "] "  <> show propName
-          -- Mysteriously stuck here. Likely due to wrong query. 
-          -- Also, GHC threading system freezes as well. Eeh
-          res <- failing <$> (runXQuery query >>= applyModify)
-          liftIO $ infoM "DeskVis" $ "Property end [" <> show window <> "] "  <> show propName
-          pure res
+        | prop `S.member` watchSet -> failing <$> (runXQuery query >>= applyModify)
       _ -> pure Nothing
   where
     failing = either (fail . show) pure
