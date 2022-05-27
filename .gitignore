@@ -12,6 +12,7 @@ Setup.hs
 
 *.eventlog
 *.eventlog.html
+*.prof
 *.hp
 *.ps
 *.pdf

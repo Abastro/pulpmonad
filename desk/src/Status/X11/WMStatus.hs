@@ -44,6 +44,8 @@ import Status.X11.XHandle
 import Text.Printf
 import Foreign.C.Types
 import Data.Proxy
+import System.Log.Logger
+import Graphics.X11.Xlib.Atom
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO: Need to subscribe on the X events
@@ -145,12 +147,19 @@ watchXQuery ::
   (a -> ExceptT [XQueryError] (XIO ()) b) ->
   XIO () (Either [XQueryError] (Task b))
 watchXQuery window query modifier = do
-  -- FIXME Deadlock again!
+  -- FIXME Deadlock(?), see below.
   (inited, watchSet) <- xOnWindow window $ runXInt query
   applyModify inited >>= traverse \initial -> do
     xListenTo propertyChangeMask window (Just initial) $ \case
       PropertyEvent{ev_atom = prop}
-        | prop `S.member` watchSet -> failing <$> (runXQuery query >>= applyModify)
+        | prop `S.member` watchSet -> do
+          propName <- liftDWIO $ \d _ -> getAtomName d prop
+          liftIO $ infoM "DeskVis" $ "Property begin [" <> show window <> "] "  <> show propName
+          -- Mysteriously stuck here. Likely due to wrong query. 
+          -- Also, GHC threading system freezes as well. Eeh
+          res <- failing <$> (runXQuery query >>= applyModify)
+          liftIO $ infoM "DeskVis" $ "Property end [" <> show window <> "] "  <> show propName
+          pure res
       _ -> pure Nothing
   where
     failing = either (fail . show) pure

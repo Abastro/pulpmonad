@@ -4,6 +4,7 @@
 module UI.X11.Desktops where
 
 import Control.Applicative
+import Control.Concurrent
 import Control.Concurrent.Task
 import Control.Exception.Enclosed
 import Control.Monad
@@ -34,6 +35,7 @@ import System.Log.Logger
 import UI.Commons qualified as UI
 import UI.Singles qualified as UI
 import UI.Task qualified as UI
+import System.IO
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -96,6 +98,12 @@ deskVisNew ::
 deskVisNew labeling setImg = do
   DeskVisRcvs{..} <- liftIO $ startXIO deskVisInitiate
 
+  -- FIXME This verifies that the entire threading system halts.. duh
+  -- Happens whenever something is closed.
+  liftIO . forkIO . forever $ do
+    hPutStrLn stderr "Periodic print"
+    threadDelay 1000000
+
   deskRef <- liftIO $ newIORef V.empty
   desktopVisualizer <- UI.boxNew UI.OrientationHorizontal 0
   deskWindows <- dVisWindowCont setImg (switchDesktop deskRef) windowsChange windowActive
@@ -105,19 +113,21 @@ deskVisNew labeling setImg = do
   UI.widgetShowAll desktopVisualizer
   UI.toWidget desktopVisualizer
   where
-    switchDesktop deskRef deskOld deskNew (winUI :: UI.Widget) = liftIO $ do
+    switchDesktop deskRef deskOld deskNew DeskWindowUI{..} = liftIO $ do
       -- TODO Handle window ordering
-      infoM "DeskVis" ("Switching desktop from " <> show deskOld <> " to " <> show deskNew)
+      infoM "DeskVis" (show windowId <> ": Switching desktop from " <> show deskOld <> " to " <> show deskNew)
       desktops <- readIORef deskRef
       -- Out of bounds: was already removed, no need to care
       for_ (desktops V.!? deskOld) $ \DesktopUI{desktopUI} -> do
-        UI.widgetHide winUI
-        UI.containerRemove desktopUI winUI
+        UI.widgetHide windowUI
+        UI.containerRemove desktopUI windowUI
       -- For now, let's not care about out of bounds from new.
       -- That is likely a sync issue, so it needs proper logging later.
       for_ (desktops V.!? deskNew) $ \DesktopUI{desktopUI} -> do
-        UI.containerAdd desktopUI winUI
-        UI.widgetShowAll winUI
+        UI.containerAdd desktopUI windowUI
+        UI.widgetShowAll windowUI
+
+-- TODO More immediate feedback on switch
 
 {-------------------------------------------------------------------
                     For each desktop (workspace)
@@ -128,7 +138,7 @@ data DesktopUI = DesktopUI
   , deskNameChange :: Maybe T.Text -> IO ()
   }
 
--- TODO: Feature, desktop visibility
+-- TODO Desktop visibility
 
 -- | Create UI for desktops.
 dVisDesktopCont ::
@@ -209,14 +219,15 @@ dVisDesktopUpdate parent labeling desksRef curDesks = do
 --------------------------------------------------------------------}
 
 data DeskWindowUI = DeskWindowUI
-  { windowUI :: !UI.Widget
+  { windowId :: Window
+  , windowUI :: !UI.Widget
   }
 
 -- | Create placeholder widget which manages window widgets.
 dVisWindowCont ::
   MonadIO m =>
   (WindowInfo -> IO ImageSet) ->
-  (Int -> Int -> UI.Widget -> IO ()) ->
+  (Int -> Int -> DeskWindowUI -> IO ()) ->
   Task DWindowChange ->
   Task (Maybe Window) ->
   m UI.Widget
@@ -237,8 +248,8 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
         -- Removes window
         for_ (S.toList removed) $ \window -> do
           mayUI <- atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) window
-          for_ mayUI $ \(DeskWindowUI winUI) -> do
-            UI.widgetDestroy winUI
+          for_ mayUI $ \DeskWindowUI{windowUI} -> do
+            UI.widgetDestroy windowUI
 
         -- Adds window
         for_ (M.toList addWins) $ \(window, winTask) -> do
@@ -261,7 +272,7 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
 dVisWindowItem ::
   MonadIO m =>
   (WindowInfo -> IO ImageSet) ->
-  (Int -> Int -> UI.Widget -> IO ()) ->
+  (Int -> Int -> DeskWindowUI -> IO ()) ->
   Window ->
   Task WindowInfo ->
   m DeskWindowUI
@@ -275,14 +286,14 @@ dVisWindowItem setImg switcher _window infoTask = do
     kill <- UI.uiTask infoTask (updateWindow winImage curDesk)
     UI.onWidgetDestroy winImage kill
 
-  DeskWindowUI <$> UI.toWidget winImage
+  DeskWindowUI _window <$> UI.toWidget winImage
   where
     updateWindow winImage curDesk winInfo@WindowInfo{..} = do
       let newDesk = windowDesktop
       -- Switches the desktop
       oldDesk <- atomicModifyIORef' curDesk $ (newDesk,)
       when (newDesk /= oldDesk) $
-        UI.toWidget winImage >>= switcher oldDesk newDesk
+        UI.toWidget winImage >>= switcher oldDesk newDesk . DeskWindowUI _window
 
       -- Update the icon
       let size = fromIntegral $ fromEnum UI.IconSizeLargeToolbar
@@ -349,6 +360,4 @@ deskVisInitiate = do
       watchXQuery window getWindowInfo pure >>= \case
         Left err -> do
           liftIO $ Nothing <$ infoM "DeskVis" ("invalid window: " <> formatXQError window err)
-        Right winInfo -> do
-          liftIO $ Nothing <$ infoM "DeskVis" ("window queried " <> show window)
-          pure (Just winInfo)
+        Right winInfo -> pure (Just winInfo)

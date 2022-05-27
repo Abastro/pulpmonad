@@ -21,6 +21,8 @@ import GI.Gtk.Objects.IconTheme qualified as UI
 import Status.HWStatus
 import System.Environment
 import System.Environment.XDG.DesktopEntry
+import System.IO
+import System.Log.Handler.Simple
 import System.Log.Logger
 import System.Taffybar (startTaffybar)
 import System.Taffybar.Context (TaffyIO)
@@ -36,8 +38,6 @@ import XMonad.ManageHook
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run
-import System.Log.Handler.Simple
-import System.IO
 
 -- | Taffybar does it wrong way in so many degrees, DUH
 -- Band-aid for now.
@@ -121,8 +121,19 @@ workspaceMaps =
 main :: IO ()
 main = do
   mainDir <- getEnv "XMONAD_CONFIG_DIR"
-  startTaffybar $
-    toTaffyConfig
+  getArgs >>= \case
+    "wip":_ -> do
+      startTaffybar $
+        toTaffyConfig
+          (simpleCfg mainDir)
+            { startWidgets = []
+            , centerWidgets = [_desktopVis]
+            , endWidgets = []
+            , barPosition = Bottom
+            }
+    _ -> startTaffybar $ toTaffyConfig (simpleCfg mainDir)
+  where
+    simpleCfg mainDir =
       defaultSimpleTaffyConfig
         { startupHook = setupIcons mainDir
         , startWidgets = [workspaces]
@@ -132,7 +143,6 @@ main = do
         , barHeight = read "ExactSize 40"
         , cssPaths = [mainDir </> "styles" </> "taffybar.css"]
         }
-  where
     clock =
       textClockNewWith
         defaultClockConfig

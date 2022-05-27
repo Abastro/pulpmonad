@@ -19,7 +19,9 @@ import Control.Exception
 import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
+import Data.Bits
 import Data.Foldable
+import Data.Functor.Compose
 import Data.IORef
 import Data.Map.Strict qualified as M
 import Data.Maybe
@@ -27,8 +29,6 @@ import Data.Set qualified as S
 import Data.Unique
 import Graphics.X11.Xlib
 import Graphics.X11.Xlib.Extras
-import Data.Bits
-import Data.Functor.Compose
 
 data X11Env r = X11Env
   { theDisplay :: !Display
@@ -155,14 +155,14 @@ startXIO initiate = do
   -- Need to stop Initiation action from waiting for the task received.
   initResult <- newEmptyMVar -- Only use of MVar.
   _ <- forkIO . bracket (openDisplay "") closeDisplay $ \xhDisplay -> do
-    let xhScreen = defaultScreen xhDisplay
-    xhWindow <- rootWindow xhDisplay xhScreen
-    xhListeners <- newIORef (XListeners M.empty M.empty)
-    xhActQueue <- newTQueueIO
-    let runX (XIO act) = runReaderT act XHandle{xhExtends = (), ..}
-    runX $ do
-      initiate >>= liftIO . putMVar initResult
-      startingX
+      let xhScreen = defaultScreen xhDisplay
+      xhWindow <- rootWindow xhDisplay xhScreen
+      xhListeners <- newIORef (XListeners M.empty M.empty)
+      xhActQueue <- newTQueueIO
+      let runX (XIO act) = runReaderT act XHandle{xhExtends = (), ..}
+      runX $ do
+        initiate >>= liftIO . putMVar initResult
+        startingX
   takeMVar initResult
   where
     startingX = withRunInIO $ \unliftX -> do
@@ -170,7 +170,9 @@ startXIO initiate = do
       listeners <- unliftX xListeners
       actQueue <- unliftX xActQueue
 
-      setErrorHandler $ \_disp _errEvent -> pure ()
+      -- setErrorHandler: Expermental?
+      -- setErrorHandler $ \_disp _errEvent -> pure ()
+      xSetErrorHandler
       allocaXEvent $ \evPtr -> forever $ do
         atomically (flushTQueue actQueue) >>= traverse_ id
         -- .^. Before handling next X event, performs tasks in need of handling.
@@ -206,7 +208,6 @@ xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
   listenQueue <- newTQueueIO
   let writeListen val = atomically $ writeTQueue listenQueue val
   traverse_ writeListen initial
-  -- For some reason, window is just not working.
   let listen = XListen mask window $ \event ->
         (unliftX . xOnWindow window) (handler event) >>= traverse_ writeListen
   let beginListen = do
@@ -219,8 +220,6 @@ xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
   taskCreate listenQueue killTask <$ beginListen
   where
     updateMask listeners = liftDWIO $ \disp win -> do
-      -- Somehow selecting input on windows make it stop working..
-      -- Why, why deadlock?
       Ior newMask <- foldMap (Ior . maskOf) . getWinListen win <$> readIORef listeners
       selectInput disp win newMask
     maskOf (XListen mask _ _) = mask
