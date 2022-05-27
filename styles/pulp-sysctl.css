@@ -4,18 +4,19 @@ window {
 
 box.btn-area {
   padding: 10px 15px;
-  border: 10px inset rgba(70, 70, 70, 0.8);
+  border: 10px inset rgba(56, 32, 72, 0.7);
   border-radius: 20px;
-  background-color: rgba(120, 120, 120, 0.8);
+  background-color: rgba(96, 64, 120, 0.7);
 }
 
 button {
   background-image: none;
-  border-width: 1.5px;
+  border-width: 3px;
+  border-radius: 30px;
 }
 
 button:focus {
-  box-shadow: inset 0 -6px rgb(75, 100, 180);
+  box-shadow: inset 0 -6px rgba(200, 200, 200, 0.5);
 }
 
 .btn-sys {
@@ -24,16 +25,16 @@ button:focus {
 }
 
 .btn-logout {
-  border-color: rgb(150, 120, 0);
-  background-color: rgb(180, 150, 0);
+  border-color: rgb(150, 120, 80);
+  background-color: rgb(180, 150, 100);
 }
 
 .btn-reboot {
-  border-color: rgb(0, 105, 0);
-  background-color: rgb(0, 125, 0);
+  border-color: rgb(80, 105, 80);
+  background-color: rgb(100, 125, 100);
 }
 
 .btn-poweroff {
-  border-color: rgb(135, 0, 0);
-  background-color: rgb(180, 0, 0);
+  border-color: rgb(135, 60, 60);
+  background-color: rgb(180, 80, 80);
 }
