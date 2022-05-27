@@ -1,0 +1,68 @@
+/* Copied from taffybar default */
+
+/* Top level styling */
+
+.taskbar-box {
+	border-radius: 5px 5px 0px 0px;
+	border-width: 3px 3px 0px 3px;
+	border-style: solid;
+	border-color: rgba(72, 32, 96, 0.7);
+	padding: 3px 2px 3px 2px;
+	background-color: rgba(56, 24, 72, 0.7);
+}
+
+/* Button styling */
+
+button {
+	background-color: rgba(0, 0, 0, 0);
+	border-width: 0px;
+	border-radius: 0px;
+}
+
+button:checked, button:hover .Contents:hover {
+	box-shadow: inset 0 -3px #0c7cd5;
+}
+
+/* Desktop Visualizer Widget */
+
+/* TODO Padding */
+.desktop-item {
+	padding-bottom: 2px;
+	padding-top: 2px;
+	padding-right: 2px;
+	padding-left: 2px;
+	transition: background-color .5s;
+	border-radius: 5px;
+}
+
+.desktop-item.active {
+	background-color: rgba(0, 0, 0, 0.8);
+}
+
+.desktop-item.visible {
+	background-color: rgba(0, 0, 0, 0.5);
+}
+
+.desktop-label {
+	padding-right: 3px;
+	padding-left: 2px;
+	font-family: "Font Awesome 6 Free Solid";
+	font-size: 12pt;
+}
+
+.window-item {
+	transition: opacity .5s, box-shadow .5s;
+	opacity: 1;
+}
+
+.window-item.active {
+	box-shadow: inset 0 -3px #ffffff;
+}
+
+.window-item.demanding {
+	box-shadow: inset 0 -3px #0c7cd5;
+}
+
+.window-item.hidden {
+	opacity: .3;
+}

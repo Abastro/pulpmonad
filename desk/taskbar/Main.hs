@@ -17,6 +17,7 @@ import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Window qualified as UI
 import UI.X11.Desktops qualified as UI
+import qualified GI.Gtk.Objects.Box as UI
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -42,18 +43,18 @@ main = do
     desktopVis = do
       liftIO $ do
         -- Wat in tarnation, having to do just for logging?
-        logger <- getLogger "DeskVis"
-        handler <- streamHandler stderr INFO
-        saveGlobalLogger $ setLevel INFO . setHandlers [handler] $ logger
+        -- Will get rid of it once I got time
+        updateGlobalLogger rootLoggerName removeHandler
+        handler <- streamHandler stdout INFO
+        updateGlobalLogger "DeskVis" $ setLevel INFO . setHandlers [handler]
       liftIO $ infoM "DeskVis" "Starting desktop visualizer..."
-      hPutStrLn stderr "Hmmm"
       UI.deskVisNew (maybe (T.pack "NONE") mayLabel) UI.defImageSetter
 
     cssProv :: IO Gtk.CssProvider
     cssProv = do
       css <- Gtk.cssProviderNew
       cfgDir <- getEnv "XMONAD_CONFIG_DIR"
-      Gtk.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "taffybar.css")
+      Gtk.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-taskbar.css")
       pure css
 
     activating :: UI.Application -> IO ()
@@ -69,6 +70,12 @@ main = do
 
       UI.windowSetTransparent window
 
-      UI.containerAdd window =<< desktopVis
+      UI.containerAdd window =<< barBox
 
       UI.widgetShowAll window
+
+    barBox = do
+      box <- UI.boxNew UI.OrientationHorizontal 5
+      UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "taskbar-box")
+      UI.boxSetCenterWidget box . Just =<< desktopVis
+      UI.toWidget box
