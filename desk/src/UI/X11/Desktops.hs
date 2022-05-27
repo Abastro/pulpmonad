@@ -4,7 +4,6 @@
 module UI.X11.Desktops where
 
 import Control.Applicative
-import Control.Concurrent
 import Control.Concurrent.Task
 import Control.Exception.Enclosed
 import Control.Monad
@@ -35,7 +34,6 @@ import System.Log.Logger
 import UI.Commons qualified as UI
 import UI.Singles qualified as UI
 import UI.Task qualified as UI
-import System.IO
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -97,12 +95,6 @@ deskVisNew ::
   m UI.Widget
 deskVisNew labeling setImg = do
   DeskVisRcvs{..} <- liftIO $ startXIO deskVisInitiate
-
-  -- FIXME This verifies that the entire threading system halts.. duh
-  -- Happens whenever something is closed.
-  liftIO . forkOn 2 . forever $ do
-    hPutStrLn stderr "Periodic print"
-    threadDelay 1000000
 
   deskRef <- liftIO $ newIORef V.empty
   desktopVisualizer <- UI.boxNew UI.OrientationHorizontal 0

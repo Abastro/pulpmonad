@@ -90,7 +90,7 @@ main = do
       UI.windowSetTitle window (T.pack "Pulp System Control")
       UI.windowSetDefaultSize window 560 140
       UI.windowSetTypeHint window UI.WindowTypeHintSplashscreen
-      UI.windowSetPosition window UI.WindowPositionCenterAlways
+      UI.windowSetPosition window UI.WindowPositionCenter
       UI.windowSetKeepAbove window True
       UI.windowSetSkipPagerHint window True
       UI.windowSetSkipTaskbarHint window True
