@@ -190,6 +190,7 @@ dVisDesktopUpdate parent labeling showDesk desksRef curDesks = do
       (oldDesks, persists) <$ writeIORef desksRef added
     EQ -> (oldDesks, curDesks) <$ writeIORef desksRef V.empty
 
+  -- TODO Ordering
   -- Update the common part of UI, and then add common part back to the desksRef.
   uiCom <- V.zipWithM updateDeskUI oldCom newCom
   modifyIORef' desksRef (uiCom <>)
@@ -267,7 +268,7 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
   UI.toWidget placeholder
   where
     structureUpd winsRef = \case
-      DWindowChange addWins removed -> do
+      DWindowChange _newOrder addWins removed -> do
         -- Removes window
         for_ (S.toList removed) $ \window -> do
           mayUI <- atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) window
@@ -279,7 +280,7 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
           existed <- (window `M.member`) <$> readIORef winsRef
           unless existed $ do
             winUI <- dVisWindowItem setImg switcher window winTask
-            liftIO $ infoM "DeskVis" $ "UI: Showed Window " <> show window
+            liftIO $ infoM "DeskVis" $ "UI: Added Window " <> show window
             modifyIORef' winsRef (M.insert window winUI)
 
     changeActivate winsRef activeRef nextActive = do
@@ -331,8 +332,8 @@ dVisWindowItem setImg switcher _window infoTask = do
                         Communication
 --------------------------------------------------------------------}
 
--- | Window changes, with added & removed
-data DWindowChange = DWindowChange (M.Map Window (Task WindowInfo)) (S.Set Window)
+-- | Window changes, with new order, added & removed
+data DWindowChange = DWindowChange (M.Map Window Int) (M.Map Window (Task WindowInfo)) (S.Set Window)
 
 -- data DVWindowRcv = DWindowMap Window (Task WindowInfo) | DWindowUnmap Window
 
@@ -357,16 +358,17 @@ deskVisInitiate = do
   windowRef <- liftIO $ newIORef S.empty
   -- Detects difference between windows and handle it.
   windowsChange <- errorAct $
-    watchXQuery rootWin getAllWindows $ \newWindows -> do
+    watchXQuery rootWin getAllWindows $ \newWindowsVec -> do
+      let order = M.fromList $ zip (V.toList newWindowsVec) [0..]
+      let newWindows = S.fromList $ V.toList newWindowsVec
       oldWindows <- liftIO $ atomicModifyIORef' windowRef $ \oldWindows -> (newWindows, oldWindows)
       let removed = oldWindows S.\\ newWindows
       let added = newWindows S.\\ oldWindows
       -- "Invalid" windows are ignored from here
       addWins <- M.traverseMaybeWithKey (\_ -> lift . watchWindow) (M.fromSet id added)
-      pure $ DWindowChange addWins removed
+      pure $ DWindowChange order addWins removed
 
   windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
-  -- MAYBE Also implement desktop messages
   desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
 
   liftIO $ infoM "DeskVis" "DeskVis Initiated."
