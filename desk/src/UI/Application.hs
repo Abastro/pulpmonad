@@ -3,5 +3,5 @@ module UI.Application (
   module GI.Gtk.Objects.Application,
 ) where
 
-import GI.Gio.Objects.Application (applicationRun, onApplicationActivate)
+import GI.Gio.Objects.Application (applicationRun, applicationQuit, onApplicationActivate)
 import GI.Gtk.Objects.Application

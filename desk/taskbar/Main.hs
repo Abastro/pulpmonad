@@ -18,6 +18,8 @@ import UI.Containers qualified as UI
 import UI.Styles qualified as UI
 import UI.Window qualified as UI
 import UI.X11.DesktopVisual qualified as UI
+import qualified GI.GLib as UI
+import System.Posix.Signals (sigINT)
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -35,6 +37,7 @@ main :: IO ()
 main = do
   Just app <- UI.applicationNew (Just $ T.pack "pulp.ui.taskbar") []
   UI.onApplicationActivate app (activating app)
+  UI.unixSignalAdd UI.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ UI.applicationQuit app
   status <- UI.applicationRun app Nothing
   when (status /= 0) $ exitWith (ExitFailure $ fromIntegral status)
   where
