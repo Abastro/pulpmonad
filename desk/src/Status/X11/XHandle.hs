@@ -172,7 +172,7 @@ startXIO initiate = do
       allocaXEvent $ \evPtr -> forever $ do
         atomically (flushTQueue actQueue) >>= traverse_ id
         -- .^. Before handling next X event, performs tasks in need of handling.
-        unliftX $ loopHandle evPtr
+        unliftX $ loopHandle evPtr -- MAYBE some wait here to lessen CPU load
 
     loopHandle evPtr = withRunInIO $ \unliftX -> do
       display <- unliftX xDisplay
