@@ -68,7 +68,7 @@ library
     UI.Containers
     UI.Window
     UI.Application
-    UI.X11.Desktops
+    UI.X11.DesktopVisual
 
 test-suite test-pulpdesk
   import:             pulp-gtk

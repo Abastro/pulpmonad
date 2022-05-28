@@ -17,7 +17,7 @@ import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Styles qualified as UI
 import UI.Window qualified as UI
-import UI.X11.Desktops qualified as UI
+import UI.X11.DesktopVisual qualified as UI
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -40,6 +40,13 @@ main = do
   where
     mayLabel n = fromMaybe n $ T.pack <$> workspaceMaps M.!? T.unpack n
 
+    deskVisDeskSetup =
+      UI.DesktopSetup
+        { UI.desktopLabeling = maybe (T.pack "X") mayLabel
+        , UI.showDesktop = UI.defShowFn
+        }
+    deskVisWinSetup = UI.WindowSetup UI.defImageSetter
+
     desktopVis :: IO UI.Widget
     desktopVis = do
       liftIO $ do
@@ -49,7 +56,7 @@ main = do
         handler <- streamHandler stdout INFO
         updateGlobalLogger "DeskVis" $ setLevel INFO . setHandlers [handler]
       liftIO $ infoM "DeskVis" "Starting desktop visualizer..."
-      UI.deskVisNew (maybe (T.pack "X") mayLabel) UI.defShowFn UI.defImageSetter
+      UI.deskVisualizerNew deskVisDeskSetup deskVisWinSetup
 
     cssProv :: IO UI.CssProvider
     cssProv = do
