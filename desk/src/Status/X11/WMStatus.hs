@@ -6,7 +6,7 @@
 -- EWMH: <https://specifications.freedesktop.org/wm-spec/wm-spec-1.3.html>.
 module Status.X11.WMStatus (
   XPropType (..),
-  XQueryError(..),
+  XQueryError (..),
   formatXQError,
   XPQuery,
   queryProp,
@@ -32,18 +32,18 @@ import Data.Functor.Compose
 import Data.IORef
 import Data.Map.Strict qualified as M
 import Data.Maybe
+import Data.Proxy
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
 import Data.Validation
 import Data.Vector qualified as V
+import Foreign.C.Types
 import Foreign.Storable
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Status.X11.XHandle
 import Text.Printf
-import Foreign.C.Types
-import Data.Proxy
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO: Need to subscribe on the X events
@@ -145,7 +145,6 @@ watchXQuery ::
   (a -> ExceptT [XQueryError] (XIO ()) b) ->
   XIO () (Either [XQueryError] (Task b))
 watchXQuery window query modifier = do
-  -- FIXME Deadlock(?), see below.
   (inited, watchSet) <- xOnWindow window $ runXInt query
   applyModify inited >>= traverse \initial -> do
     xListenTo propertyChangeMask window (Just initial) $ \case
@@ -156,7 +155,13 @@ watchXQuery window query modifier = do
     failing = either (fail . show) pure
     applyModify pre = runExceptT (either throwError modifier pre)
 
-data DesktopState = DeskActive | DeskVisible | DeskHidden
+data DesktopState
+  = -- | Active desktop
+    DeskActive
+  | -- | Visible desktop from other screens in Xinerama
+    DeskVisible
+  | -- | Other hidden desktops
+    DeskHidden
   deriving (Eq, Ord, Enum, Bounded)
 
 -- | Desktop status for each desktop.
@@ -175,7 +180,7 @@ getDesktopStat =
     <*> (allDeskNames <|> pure V.empty)
     <*> (flip S.member <$> allVisibles <|> pure (const True))
   where
-    -- TODO Bound check?
+    -- MAYBE Bound check? Admittedly, that is quite unnecessary
     numDesktops = queryProp @Int "_NET_NUMBER_OF_DESKTOPS"
     curDesktop = queryProp @Int "_NET_CURRENT_DESKTOP"
     allDeskNames = V.fromList <$> queryProp @[T.Text] "_NET_DESKTOP_NAMES"
@@ -218,7 +223,7 @@ getWindowInfo = WindowInfo <$> wmDesktop <*> wmTitle <*> wmClass <*> wmState
   where
     -- Missing location on desktop: -1
     wmDesktop = queryProp @Int "_NET_WM_DESKTOP" <|> pure (-1)
-    -- Let's tolerate empty title.
+    -- Let's tolerate missing title.
     wmTitle = (queryProp @T.Text "_NET_WM_NAME" <|> queryProp @T.Text "WM_NAME") <|> pure T.empty
     wmClass = V.fromList <$> queryProp @[T.Text] "WM_CLASS"
     wmState = prepareForQuery stateAtoms $ \stMap -> S.fromList . mapMaybe (stMap M.!?) <$> wmStateRaw

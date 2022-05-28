@@ -39,6 +39,7 @@ main = do
   when (status /= 0) $ exitWith (ExitFailure $ fromIntegral status)
   where
     mayLabel n = fromMaybe n $ T.pack <$> workspaceMaps M.!? T.unpack n
+
     desktopVis :: IO UI.Widget
     desktopVis = do
       liftIO $ do
@@ -48,7 +49,7 @@ main = do
         handler <- streamHandler stdout INFO
         updateGlobalLogger "DeskVis" $ setLevel INFO . setHandlers [handler]
       liftIO $ infoM "DeskVis" "Starting desktop visualizer..."
-      UI.deskVisNew (maybe (T.pack "NONE") mayLabel) UI.defImageSetter
+      UI.deskVisNew (maybe (T.pack "X") mayLabel) UI.defShowFn UI.defImageSetter
 
     cssProv :: IO Gtk.CssProvider
     cssProv = do
