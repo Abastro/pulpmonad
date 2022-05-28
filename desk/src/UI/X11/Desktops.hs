@@ -27,7 +27,7 @@ import Data.Tuple (swap)
 import Data.Vector qualified as V
 import GI.GLib (castTo)
 import GI.Gio.Interfaces.AppInfo
-import GI.Gio.Interfaces.Icon qualified as UI
+import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gio.Objects.DesktopAppInfo
 import GI.Gtk.Objects.Box qualified as UI
 import GI.Gtk.Objects.IconTheme qualified as UI
@@ -39,6 +39,7 @@ import System.Log.Logger
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Singles qualified as UI
+import UI.Styles qualified as UI
 import UI.Task qualified as UI
 
 deskCssClass :: DesktopState -> T.Text
@@ -57,15 +58,8 @@ windowCssClass = \case
   WinHidden -> T.pack "hidden"
   WinDemandAttention -> T.pack "demanding"
 
--- | Update to have certain CSS classes from the state.
-updateCssClass ::
-  (Enum s, Bounded s, MonadIO m) => (s -> T.Text) -> [s] -> UI.StyleContext -> m ()
-updateCssClass asClass state ctxt = do
-  traverse_ (UI.styleContextRemoveClass ctxt) (asClass <$> [minBound .. maxBound])
-  traverse_ (UI.styleContextAddClass ctxt) (asClass <$> state)
-
 -- | Image set message.
-data ImageSet = ImgSName T.Text | ImgSGIcon UI.Icon
+data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon
 
 appInfoImageSetter :: WindowInfo -> MaybeT IO ImageSet
 appInfoImageSetter WindowInfo{..} = do
@@ -218,7 +212,7 @@ dVisDesktopUpdate parent labeling showDesk desksRef curDesks = do
 
     updateDeskUI deskUI@DesktopUI{..} deskStat@DesktopStat{..} = do
       deskNameChange desktopName
-      UI.widgetGetStyleContext desktopUI >>= updateCssClass deskCssClass [desktopState]
+      UI.widgetGetStyleContext desktopUI >>= UI.updateCssClass deskCssClass [desktopState]
       writeIORef curDeskStat deskStat
       updateVisible deskUI
       pure deskUI
@@ -289,9 +283,9 @@ dVisWindowCont setImg switcher reqActivate taskWinChange taskActive = do
       prevActive <- atomicModifyIORef' activeRef (nextActive,)
       -- Little hack(?)
       for_ (prevActive >>= (windows M.!?)) $ \DeskWindowUI{windowUI} -> do
-        UI.widgetGetStyleContext windowUI >>= updateCssClass winActiveCssClass []
+        UI.widgetGetStyleContext windowUI >>= UI.updateCssClass winActiveCssClass []
       for_ (nextActive >>= (windows M.!?)) $ \DeskWindowUI{windowUI} -> do
-        UI.widgetGetStyleContext windowUI >>= updateCssClass winActiveCssClass [()]
+        UI.widgetGetStyleContext windowUI >>= UI.updateCssClass winActiveCssClass [()]
 
 dVisWindowItem ::
   MonadIO m =>
@@ -332,7 +326,7 @@ dVisWindowItem setImg switcher reqActivate window infoTask = do
         ImgSGIcon icon -> UI.imageSetFromGicon winImage icon size
 
       -- Update the class
-      UI.widgetGetStyleContext windowUI >>= updateCssClass windowCssClass (S.toList windowState)
+      UI.widgetGetStyleContext windowUI >>= UI.updateCssClass windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------
                         Communication
@@ -348,6 +342,7 @@ data DeskVisRcvs = DeskVisRcvs
   , windowsChange :: Task DWindowChange
   , windowActive :: Task (Maybe Window)
   , reqActivate :: Window -> IO ()
+  , reqToDesktop :: Int -> IO ()
   }
 
 -- | Desktop visualizer event handle initiate.
@@ -378,6 +373,7 @@ deskVisInitiate = do
   windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
   desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
   reqActivate <- reqActiveWindow True
+  reqToDesktop <- reqCurrentDesktop
 
   liftIO $ infoM "DeskVis" "DeskVis Initiated."
 

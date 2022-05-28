@@ -6,7 +6,7 @@ import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Text qualified as T
 import Defines
-import GI.Gtk.Objects.CssProvider qualified as Gtk
+import GI.Gtk.Objects.Box qualified as UI
 import System.Environment
 import System.Exit
 import System.IO
@@ -15,9 +15,9 @@ import System.Log.Logger
 import UI.Application qualified as UI
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
+import UI.Styles qualified as UI
 import UI.Window qualified as UI
 import UI.X11.Desktops qualified as UI
-import qualified GI.Gtk.Objects.Box as UI
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -51,16 +51,16 @@ main = do
       liftIO $ infoM "DeskVis" "Starting desktop visualizer..."
       UI.deskVisNew (maybe (T.pack "X") mayLabel) UI.defShowFn UI.defImageSetter
 
-    cssProv :: IO Gtk.CssProvider
+    cssProv :: IO UI.CssProvider
     cssProv = do
-      css <- Gtk.cssProviderNew
+      css <- UI.cssProviderNew
       cfgDir <- getEnv "XMONAD_CONFIG_DIR"
-      Gtk.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-taskbar.css")
+      UI.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-taskbar.css")
       pure css
 
     activating :: UI.Application -> IO ()
     activating app = do
-      cssProv >>= flip UI.defscreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
+      cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
 
       window <- UI.appWindowNew app
       UI.windowSetTitle window (T.pack "Pulp Taskbar")

@@ -4,14 +4,14 @@ import Control.Monad
 import Data.Text qualified as T
 import Defines
 import GI.Gdk.Structs.EventKey qualified as Gdk
-import GI.Gtk.Objects.CssProvider qualified as Gtk
 import System.Environment (getEnv)
 import System.Exit
+import UI.Application qualified as UI
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Singles qualified as UI
+import UI.Styles qualified as UI
 import UI.Window qualified as UI
-import UI.Application qualified as UI
 import XMonad.Util.Run (safeSpawn)
 
 data SysCtl = Build | Refresh | Logout | Reboot | Poweroff
@@ -75,16 +75,16 @@ main = do
   status <- UI.applicationRun app Nothing
   when (status /= 0) $ exitWith (ExitFailure $ fromIntegral status)
   where
-    cssProv :: IO Gtk.CssProvider
+    cssProv :: IO UI.CssProvider
     cssProv = do
-      css <- Gtk.cssProviderNew
+      css <- UI.cssProviderNew
       cfgDir <- getEnv "XMONAD_CONFIG_DIR"
-      Gtk.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-sysctl.css")
+      UI.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-sysctl.css")
       pure css
 
     activating :: UI.Application -> IO ()
     activating app = do
-      cssProv >>= flip UI.defscreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
+      cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
 
       window <- UI.appWindowNew app
       UI.windowSetTitle window (T.pack "Pulp System Control")
