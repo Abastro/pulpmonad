@@ -16,8 +16,10 @@ module Status.X11.WMStatus (
   DesktopState (..),
   DesktopStat (..),
   getDesktopStat,
+  reqCurrentDesktop,
   getAllWindows,
   getActiveWindow,
+  reqActiveWindow,
   WMStateEx (..),
   WindowInfo (..),
   getWindowInfo,
@@ -193,6 +195,15 @@ getDesktopStat =
           Just name | isVisible name -> DeskVisible
           _ -> DeskHidden
 
+-- | Request current desktop to change. Must be called from root window.
+reqCurrentDesktop :: XIO () (Int -> IO ())
+reqCurrentDesktop = do
+  root <- xWindow
+  typCurDesk <- xAtom "_NET_CURRENT_DESKTOP"
+  xSendTo structureNotifyMask root $ \event idx -> liftIO $ do
+    setEventType event clientMessage
+    setClientMessageEvent' event root typCurDesk 32 [fromIntegral idx, fromIntegral currentTime]
+
 -- | Get all windows.
 getAllWindows :: XPQuery (V.Vector Window)
 getAllWindows = V.fromList <$> queryProp @[Window] "_NET_CLIENT_LIST"
@@ -201,7 +212,19 @@ getAllWindows = V.fromList <$> queryProp @[Window] "_NET_CLIENT_LIST"
 getActiveWindow :: XPQuery (Maybe Window)
 getActiveWindow = listToMaybe . filter (> 0) <$> queryProp @[Window] "_NET_ACTIVE_WINDOW"
 
--- MAYBE How to deal with WM_ICON? It's quite hard.
+-- | Request active window. flag should be True if you are a pager.
+-- Must be called from root window.
+reqActiveWindow :: Bool -> XIO () (Window -> IO ())
+reqActiveWindow flag = do
+  root <- xWindow
+  typActive <- xAtom "_NET_ACTIVE_WINDOW"
+  xSendTo structureNotifyMask root $ \event target -> liftIO $ do
+    let srcInd = if flag then 2 else 1
+    setEventType event clientMessage
+    -- Is this "currentTime" thing right?
+    setClientMessageEvent' event target typActive 32 [srcInd, fromIntegral currentTime]
+
+-- MAYBE How to deal with _NET_WM_ICON? It's quite hard.
 
 -- | Inclusive states of the window.
 data WMStateEx = WinHidden | WinDemandAttention

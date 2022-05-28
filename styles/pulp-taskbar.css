@@ -13,8 +13,11 @@
 
 /* Button styling */
 
+/* TODO needs separate invisible button */
 button {
 	background-color: rgba(0, 0, 0, 0);
+	background-image: none;
+	padding: 0px;
 	border-width: 0px;
 	border-radius: 0px;
 }

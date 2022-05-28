@@ -7,9 +7,9 @@ module Status.X11.XHandle (
   xWithExt,
   xOnWindow,
   startXIO,
-  xQueueJob,
   xListenTo,
   xListenTo_,
+  xSendTo,
 ) where
 
 import Control.Concurrent
@@ -155,7 +155,6 @@ startXIO initiate = do
   -- TODO Initiation action should NOT be XIO.
   -- Need to stop Initiation action from waiting for the task received.
   initResult <- newEmptyMVar -- Only use of MVar.
-
   _ <- forkOS . bracket (openDisplay "") closeDisplay $ \xhDisplay ->
     bracket_ installSignalHandlers uninstallSignalHandlers $ do
       let xhScreen = defaultScreen xhDisplay
@@ -169,25 +168,31 @@ startXIO initiate = do
   takeMVar initResult
   where
     startingX = withRunInIO $ \unliftX -> do
-      display <- unliftX xDisplay
-      listeners <- unliftX xListeners
       actQueue <- unliftX xActQueue
-
       allocaXEvent $ \evPtr -> forever $ do
         atomically (flushTQueue actQueue) >>= traverse_ id
         -- .^. Before handling next X event, performs tasks in need of handling.
-        nextEvent display evPtr
-        event <- getEvent evPtr
-        evWindow <- get_Window evPtr
+        unliftX $ loopHandle evPtr
 
-        listens <- getWinListen evWindow <$> readIORef listeners
-        for_ listens $ \(XListen _ _ listen) -> listen event
+    loopHandle evPtr = withRunInIO $ \unliftX -> do
+      display <- unliftX xDisplay
+      listeners <- unliftX xListeners
+      eventsQueued display queuedAfterFlush >>= \case
+        0 -> pure () -- Nothing in queue
+        _ -> do
+          nextEvent display evPtr
+          event <- getEvent evPtr
+          evWindow <- get_Window evPtr
+
+          listens <- getWinListen evWindow <$> readIORef listeners
+          for_ listens $ \(XListen _ _ listen) -> listen event
+          unliftX $ loopHandle evPtr
 
 -- | Queues a job to execute on next cycle.
-xQueueJob :: XIO r () -> XIO r ()
+xQueueJob :: IO () -> XIO r ()
 xQueueJob job = do
   actQueue <- xActQueue
-  withRunInIO $ \unliftX -> atomically (writeTQueue actQueue $ unliftX job)
+  liftIO $ atomically (writeTQueue actQueue job)
 
 -- MAYBE Use streaming library here
 
@@ -214,15 +219,14 @@ xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
   let endListen = do
         modifyIORef' listeners $ deleteListen key
         (unliftX . xOnWindow window) (updateMask listeners)
-  let killTask = unliftX $ xQueueJob (liftIO endListen)
-  taskCreate listenQueue killTask <$ beginListen
+  taskCreate listenQueue (unliftX $ xQueueJob endListen) <$ beginListen
   where
     updateMask listeners = liftDWIO $ \disp win -> do
       Ior newMask <- foldMap (Ior . maskOf) . getWinListen win <$> readIORef listeners
       selectInput disp win newMask
     maskOf (XListen mask _ _) = mask
 
--- | Similar to xListenTo, but does not emit/report any value to the Task.
+-- | Similar to 'xListenTo', but does not emit/report any value to the Task.
 -- NB: Subsequently, it is also impossible to stop listening on this one.
 xListenTo_ ::
   EventMask ->
@@ -236,3 +240,21 @@ xListenTo_ mask window handler = withRunInIO $ \unliftX -> do
         unliftX (xOnWindow window $ handler event)
   modifyIORef' listeners $ insertListen key listen
   unliftX . liftDWIO $ \d w -> selectInput d w mask
+
+-- | Send event with certain mask to certain window, through the X11 thread.
+--
+-- Note that the third parameter is used to specify the event.
+-- During the specifying process, the target window is set to the second parameter.
+--
+-- This one does not support event propagation.
+xSendTo ::
+  EventMask ->
+  Window ->
+  (XEventPtr -> a -> XIO r ()) ->
+  XIO r (a -> IO ())
+-- MAYBE Further flesh this out when I got time
+xSendTo mask window factory = withRunInIO $ \unliftX -> do
+  pure $ \arg -> unliftX . xQueueJob $ do
+    allocaXEvent $ \event -> unliftX . xOnWindow window $ do
+      factory event arg
+      liftDWIO $ \d w -> sendEvent d w True mask event

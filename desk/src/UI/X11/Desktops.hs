@@ -30,7 +30,6 @@ import GI.Gio.Interfaces.AppInfo
 import GI.Gio.Interfaces.Icon qualified as UI
 import GI.Gio.Objects.DesktopAppInfo
 import GI.Gtk.Objects.Box qualified as UI
-import GI.Gtk.Objects.Container qualified as UI
 import GI.Gtk.Objects.IconTheme qualified as UI
 import GI.Gtk.Objects.Image qualified as UI
 import Graphics.X11.Types
@@ -38,6 +37,7 @@ import Status.X11.WMStatus
 import Status.X11.XHandle
 import System.Log.Logger
 import UI.Commons qualified as UI
+import UI.Containers qualified as UI
 import UI.Singles qualified as UI
 import UI.Task qualified as UI
 
@@ -117,7 +117,7 @@ deskVisNew labeling showDesk setImg = do
 
   deskRef <- liftIO $ newIORef V.empty
   desktopVisualizer <- UI.boxNew UI.OrientationHorizontal 0
-  deskWindows <- dVisWindowCont setImg (switchDesktop deskRef) windowsChange windowActive
+  deskWindows <- dVisWindowCont setImg (switchDesktop deskRef) reqActivate windowsChange windowActive
   deskVis <- dVisDesktopCont labeling showDesk deskRef desktopStats
 
   traverse_ (UI.containerAdd desktopVisualizer) [deskWindows, deskVis]
@@ -253,10 +253,11 @@ dVisWindowCont ::
   MonadIO m =>
   (WindowInfo -> IO ImageSet) ->
   (Int -> Int -> DeskWindowUI -> IO ()) ->
+  (Window -> IO ()) ->
   Task DWindowChange ->
   Task (Maybe Window) ->
   m UI.Widget
-dVisWindowCont setImg switcher taskWinChange taskActive = do
+dVisWindowCont setImg switcher reqActivate taskWinChange taskActive = do
   placeholder <- UI.imageNew
   UI.onWidgetRealize placeholder $ do
     winsRef <- newIORef M.empty
@@ -279,7 +280,7 @@ dVisWindowCont setImg switcher taskWinChange taskActive = do
         for_ (M.toList addWins) $ \(window, winTask) -> do
           existed <- (window `M.member`) <$> readIORef winsRef
           unless existed $ do
-            winUI <- dVisWindowItem setImg switcher window winTask
+            winUI <- dVisWindowItem setImg switcher reqActivate window winTask
             liftIO $ infoM "DeskVis" $ "UI: Added Window " <> show window
             modifyIORef' winsRef (M.insert window winUI)
 
@@ -296,27 +297,32 @@ dVisWindowItem ::
   MonadIO m =>
   (WindowInfo -> IO ImageSet) ->
   (Int -> Int -> DeskWindowUI -> IO ()) ->
+  (Window -> IO ()) ->
   Window ->
   Task WindowInfo ->
   m DeskWindowUI
-dVisWindowItem setImg switcher _window infoTask = do
+dVisWindowItem setImg switcher reqActivate window infoTask = do
   winImage <- UI.imageNew
   UI.widgetGetStyleContext winImage >>= flip UI.styleContextAddClass (T.pack "window-item")
+
+  winImg <- UI.toWidget winImage
+  winBtn <- UI.buttonNewWith (Just winImg) $ reqActivate window
+  let dWinUI = DeskWindowUI window winBtn
+  -- FIXME Takes too long
 
   -- Cannot rely on realization, since window widgets would be floating
   liftIO $ do
     curDesk <- newIORef @Int (-1) -- When desktop is -1, it should not be showed.
-    kill <- UI.uiTask infoTask (updateWindow winImage curDesk)
+    kill <- UI.uiTask infoTask (updateWindow dWinUI winImage curDesk)
     UI.onWidgetDestroy winImage kill
 
-  DeskWindowUI _window <$> UI.toWidget winImage
+  pure $ DeskWindowUI window winBtn
   where
-    updateWindow winImage curDesk winInfo@WindowInfo{..} = do
+    updateWindow dWinUI@DeskWindowUI{windowUI} winImage curDesk winInfo@WindowInfo{..} = do
       let newDesk = windowDesktop
       -- Switches the desktop
       oldDesk <- atomicModifyIORef' curDesk $ (newDesk,)
-      when (newDesk /= oldDesk) $
-        UI.toWidget winImage >>= switcher oldDesk newDesk . DeskWindowUI _window
+      when (newDesk /= oldDesk) $ switcher oldDesk newDesk dWinUI
 
       -- Update the icon
       let size = fromIntegral $ fromEnum UI.IconSizeLargeToolbar
@@ -326,7 +332,7 @@ dVisWindowItem setImg switcher _window infoTask = do
         ImgSGIcon icon -> UI.imageSetFromGicon winImage icon size
 
       -- Update the class
-      UI.widgetGetStyleContext winImage >>= updateCssClass windowCssClass (S.toList windowState)
+      UI.widgetGetStyleContext windowUI >>= updateCssClass windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------
                         Communication
@@ -341,6 +347,7 @@ data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)
   , windowsChange :: Task DWindowChange
   , windowActive :: Task (Maybe Window)
+  , reqActivate :: Window -> IO ()
   }
 
 -- | Desktop visualizer event handle initiate.
@@ -359,7 +366,7 @@ deskVisInitiate = do
   -- Detects difference between windows and handle it.
   windowsChange <- errorAct $
     watchXQuery rootWin getAllWindows $ \newWindowsVec -> do
-      let order = M.fromList $ zip (V.toList newWindowsVec) [0..]
+      let order = M.fromList $ zip (V.toList newWindowsVec) [0 ..]
       let newWindows = S.fromList $ V.toList newWindowsVec
       oldWindows <- liftIO $ atomicModifyIORef' windowRef $ \oldWindows -> (newWindows, oldWindows)
       let removed = oldWindows S.\\ newWindows
@@ -370,6 +377,7 @@ deskVisInitiate = do
 
   windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
   desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
+  reqActivate <- reqActiveWindow True
 
   liftIO $ infoM "DeskVis" "DeskVis Initiated."
 
