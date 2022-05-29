@@ -1,20 +1,21 @@
 module UI.X11.DesktopVisual.View (
   ImageSet (..),
-  DeskVisualView,
-  DeskVisualViewOp (..),
+  widgetUpdateClass,
+  DeskVisual,
+  DeskVisualOp (..),
   deskVisualWidget,
   deskVisualItemAt,
-  deskVisualViewNew,
-  deskVisualViewCtrl,
-  DeskItemView,
-  DeskItemViewOp (..),
+  deskVisualNew,
+  deskVisualCtrl,
+  DeskItem,
+  DeskItemOp (..),
   deskItemWidget,
-  deskItemViewNew,
-  deskItemViewCtrl,
-  WinItemView,
+  deskItemNew,
+  deskItemCtrl,
+  WinItem,
   winItemWidget,
-  winItemViewNew,
-  winItemViewSetImg,
+  winItemNew,
+  winItemSetImg,
 ) where
 
 import Control.Monad.IO.Class
@@ -33,60 +34,70 @@ import UI.Styles qualified as UI
 -- | Setting image for Image widget
 data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon
 
+widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => UI.Widget -> (s -> T.Text) -> [s] -> m ()
+widgetUpdateClass widget asClass state =
+  UI.widgetGetStyleContext widget >>= UI.updateCssClass asClass state
+
 -- | Desktop visualizer view
-data DeskVisualView = DeskVisualView
+data DeskVisual = DeskVisual
   { deskVisualWidget :: !UI.Widget
   , deskVisualCont :: !UI.Container
-  , deskVisualItems :: !(IORef (V.Vector DeskItemView))
+  , deskVisualItems :: !(IORef (V.Vector DeskItem))
   }
 
-data DeskVisualViewOp
+data DeskVisualOp
   = CutDeskItemsTo !Int
-  | AddDeskItems !(V.Vector DeskItemView)
+  | AddDeskItems !(V.Vector DeskItem)
 
-deskVisualWidget :: DeskVisualView -> UI.Widget
-deskVisualWidget DeskVisualView{deskVisualWidget} = deskVisualWidget
+deskVisualWidget :: DeskVisual -> UI.Widget
+deskVisualWidget DeskVisual{deskVisualWidget} = deskVisualWidget
 
-deskVisualItemAt :: MonadIO m => DeskVisualView -> Int -> m (Maybe DeskItemView)
-deskVisualItemAt DeskVisualView{..} idx = do
+deskVisualItemAt :: MonadIO m => DeskVisual -> Int -> m (Maybe DeskItem)
+deskVisualItemAt DeskVisual{..} idx = do
   deskItems <- liftIO $ readIORef deskVisualItems
   pure $ deskItems V.!? idx
 
-deskVisualViewNew :: MonadIO m => m DeskVisualView
-deskVisualViewNew = do
+deskVisualNew :: MonadIO m => m DeskVisual
+deskVisualNew = do
   deskVisualCont <- UI.toContainer =<< UI.boxNew UI.OrientationHorizontal 5
   deskVisualWidget <- UI.toWidget deskVisualCont
+  UI.widgetGetStyleContext deskVisualWidget >>= flip UI.styleContextAddClass (T.pack "desk-visual")
 
   deskVisualItems <- liftIO $ newIORef V.empty
-  pure DeskVisualView{..}
+  pure DeskVisual{..}
 
-deskVisualViewCtrl :: MonadIO m => DeskVisualView -> DeskVisualViewOp -> m ()
-deskVisualViewCtrl DeskVisualView{deskVisualCont} = \case
+deskVisualCtrl :: MonadIO m => DeskVisual -> DeskVisualOp -> m ()
+deskVisualCtrl DeskVisual{..} = \case
   CutDeskItemsTo newCnt -> do
-    toDrop <- drop newCnt <$> UI.containerGetChildren deskVisualCont
-    for_ toDrop $ \deskItem -> UI.containerRemove deskVisualCont deskItem
+    toDelete <- liftIO $ atomicModifyIORef' deskVisualItems $ V.splitAt newCnt
+    for_ toDelete $ \DeskItem{deskItemWidget} -> do
+      UI.widgetHide deskItemWidget
+      UI.widgetDestroy deskItemWidget
   AddDeskItems deskItems -> do
-    for_ deskItems $ \DeskItemView{deskItemWidget} -> do
+    liftIO $ modifyIORef' deskVisualItems (<> deskItems)
+    for_ deskItems $ \DeskItem{deskItemWidget} -> do
       UI.containerAdd deskVisualCont deskItemWidget
+      UI.widgetShowAll deskItemWidget
 
 -- | Desktop item view
-data DeskItemView = DeskItemView
+data DeskItem = DeskItem
   { deskItemWidget :: !UI.Widget
   -- ^ The congregated widget
   , deskItemName :: !UI.Label
   , deskItemWinCont :: !UI.Container
   }
 
-data DeskItemViewOp
+data DeskItemOp
   = FlushWinItems
-  | AddWinItems !(V.Vector WinItemView)
+  | AddWinItems !(V.Vector WinItem)
+  | RemoveWinItem !WinItem
   | DeskLabelName !T.Text
 
-deskItemWidget :: DeskItemView -> UI.Widget
-deskItemWidget DeskItemView{deskItemWidget} = deskItemWidget
+deskItemWidget :: DeskItem -> UI.Widget
+deskItemWidget DeskItem{deskItemWidget} = deskItemWidget
 
-deskItemViewNew :: MonadIO m => IO () -> m DeskItemView
-deskItemViewNew onClick = do
+deskItemNew :: MonadIO m => IO () -> m DeskItem
+deskItemNew onClick = do
   deskItemWinCont <- UI.toContainer =<< UI.boxNew UI.OrientationHorizontal 0
 
   deskItemName <- UI.labelNew Nothing
@@ -99,40 +110,46 @@ deskItemViewNew onClick = do
   deskItemWidget <- UI.buttonNewWith (Just deskMain) onClick
   UI.widgetGetStyleContext deskItemWidget >>= flip UI.styleContextAddClass (T.pack "desktop-item")
 
-  pure DeskItemView{..}
+  pure DeskItem{..}
 
-deskItemViewCtrl :: MonadIO m => DeskItemView -> DeskItemViewOp -> m ()
-deskItemViewCtrl DeskItemView{..} = \case
-  FlushWinItems ->
-    UI.containerForeach deskItemWinCont $ \winItem ->
+deskItemCtrl :: MonadIO m => DeskItem -> DeskItemOp -> m ()
+deskItemCtrl DeskItem{..} = \case
+  FlushWinItems -> do
+    UI.containerForeach deskItemWinCont $ \winItem -> do
+      UI.widgetHide winItem
       UI.containerRemove deskItemWinCont winItem
   AddWinItems winItems -> do
-    for_ winItems $ \WinItemView{winItemWidget} -> do
+    for_ winItems $ \WinItem{winItemWidget} -> do
       UI.containerAdd deskItemWinCont winItemWidget
+      UI.widgetShowAll winItemWidget
+  RemoveWinItem WinItem{winItemWidget} -> do
+    UI.widgetHide winItemWidget
+    UI.containerRemove deskItemWinCont winItemWidget
+  -- Mundane property update here
   DeskLabelName name -> UI.labelSetLabel deskItemName name
 
 -- | Window item view
-data WinItemView = WinItemView
+data WinItem = WinItem
   { winItemWidget :: !UI.Widget
   -- ^ The congregated widget
   , winItemImg :: !UI.Image
   }
 
-winItemWidget :: WinItemView -> UI.Widget
-winItemWidget WinItemView{winItemWidget} = winItemWidget
+winItemWidget :: WinItem -> UI.Widget
+winItemWidget WinItem{winItemWidget} = winItemWidget
 
-winItemViewNew :: MonadIO m => IO () -> m WinItemView
-winItemViewNew onClick = do
+winItemNew :: MonadIO m => IO () -> m WinItem
+winItemNew onClick = do
   winItemImg <- UI.imageNew
 
   winImg <- UI.toWidget winItemImg
   winItemWidget <- UI.buttonNewWith (Just winImg) onClick
   UI.widgetGetStyleContext winItemWidget >>= flip UI.styleContextAddClass (T.pack "window-item")
 
-  pure WinItemView{..}
+  pure WinItem{..}
 
-winItemViewSetImg :: MonadIO m => WinItemView -> ImageSet -> m ()
-winItemViewSetImg WinItemView{winItemImg} = \case
+winItemSetImg :: MonadIO m => WinItem -> ImageSet -> m ()
+winItemSetImg WinItem{winItemImg} = \case
   ImgSName iconName -> UI.imageSetFromIconName winItemImg (Just iconName) size
   ImgSGIcon gIcon -> UI.imageSetFromGicon winItemImg gIcon size
   where

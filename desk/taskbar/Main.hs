@@ -59,7 +59,7 @@ main = do
         handler <- streamHandler stdout INFO
         updateGlobalLogger "DeskVis" $ setLevel INFO . setHandlers [handler]
       liftIO $ infoM "DeskVis" "Starting desktop visualizer..."
-      UI.deskVisualizerNew deskVisDeskSetup deskVisWinSetup
+      UI.deskVisualizer deskVisDeskSetup deskVisWinSetup
 
     cssProv :: IO UI.CssProvider
     cssProv = do
