@@ -129,22 +129,25 @@ deskVisualizerNew deskSetup winSetup = do
   deskRef <- liftIO $ newIORef V.empty -- TODO Reconsider this one
   desktopVisualizer <- UI.boxNew UI.OrientationHorizontal 0
   deskWindows <- dVisWindowCont winSetup (onWinEvent deskRef reqActivate) windowsChange windowActive
-  deskVis <- dVisDesktopCont deskSetup deskRef desktopStats
+  deskVis <- dVisDesktopCont deskSetup (onDeskEvent reqToDesktop) deskRef desktopStats
 
   traverse_ (UI.containerAdd desktopVisualizer) [deskWindows, deskVis]
   UI.widgetShowAll desktopVisualizer
   UI.toWidget desktopVisualizer
   where
+    onDeskEvent reqToDesktop = \case
+      DeskTryActivate deskId -> reqToDesktop deskId
+
     onWinEvent deskRef reqActivate = \case
       WinToDesktop deskOld deskNew windowId windowUI -> liftIO $ do
         -- TODO Handle window ordering
         infoM "DeskVis" (show windowId <> ": Switching desktop from " <> show deskOld <> " to " <> show deskNew)
         desktops <- readIORef deskRef
         -- Out of bounds: was already removed, no need to care
-        for_ (desktops V.!? deskOld) $ \DesktopUI{..} -> deskAddRemove False windowUI
+        for_ (desktops V.!? deskOld) $ \DesktopHandle{..} -> deskAddRemove False windowUI
         -- For now, let's not care about out of bounds from new windows.
         -- That is likely a sync issue, so it needs proper logging later.
-        for_ (desktops V.!? deskNew) $ \DesktopUI{..} -> deskAddRemove True windowUI
+        for_ (desktops V.!? deskNew) $ \DesktopHandle{..} -> deskAddRemove True windowUI
       WinTryActivate window -> reqActivate window
 
 -- TODO Switch / Window open / Window close is quite slow
@@ -153,117 +156,132 @@ deskVisualizerNew deskSetup winSetup = do
                     For each desktop (workspace)
 --------------------------------------------------------------------}
 
-data DesktopUI = DesktopUI
-  { desktopUI :: !UI.Container
-  , deskNameChange :: Maybe T.Text -> IO ()
+data DesktopHandle = DesktopHandle
+  { desktopUI :: !DesktopUI
   , deskAddRemove :: Bool -> UI.Widget -> IO ()
   -- ^ True for add, False for remove
   , curDeskStat :: !(IORef DesktopStat) -- TODO Not ideal
   , deskUpdate :: DesktopStat -> IO ()
   }
 
+data DeskEvent = DeskTryActivate !Int
+
 -- | Create UI for desktops.
 dVisDesktopCont ::
   MonadIO m =>
   DesktopSetup ->
-  IORef (V.Vector DesktopUI) ->
+  (DeskEvent -> IO ()) ->
+  IORef (V.Vector DesktopHandle) ->
   Task (V.Vector DesktopStat) ->
   m UI.Widget
-dVisDesktopCont deskSetup desks statTask = do
+dVisDesktopCont deskSetup evRcv desks statTask = do
   deskVis <- UI.boxNew UI.OrientationHorizontal 5
   UI.widgetGetStyleContext deskVis >>= flip UI.styleContextAddClass (T.pack "desktop-cont")
   liftIO $ do
-    kill <- UI.uiTask statTask (dVisDesktopUpdate deskVis deskSetup desks)
+    kill <- UI.uiTask statTask (dVisDesktopUpdate deskVis deskSetup evRcv desks)
     () <$ UI.onWidgetDestroy deskVis kill
   UI.toWidget deskVis
-
--- | Recreate/Update the desktops UI.
-dVisDesktopUpdate ::
-  UI.Box ->
-  DesktopSetup ->
-  IORef (V.Vector DesktopUI) ->
-  V.Vector DesktopStat ->
-  IO ()
-dVisDesktopUpdate parent deskSetup desksRef curDesks = do
-  oldDesks <- readIORef desksRef
-  -- Returns old/new commons, while writing added portion to desksRef.
-  -- Was trying to maximize code reuse.
-  -- TODO Factor pure parts of this one out.
-  (oldCom, newCom) <- case V.length curDesks `compare` V.length oldDesks of
-    LT -> do
-      -- Less desktops, remove UIs
-      let (keeps, discards) = V.splitAt (V.length curDesks) oldDesks
-      for_ discards $ \DesktopUI{desktopUI} -> do
-        UI.widgetDestroy desktopUI
-      (keeps, curDesks) <$ writeIORef desksRef V.empty
-    GT -> do
-      -- More desktops, add UIs
-      let (persists, adds) = V.splitAt (V.length oldDesks) curDesks
-      added <- for adds $ \newStat -> do
-        deskUI@DesktopUI{desktopUI} <- dVisDesktopItem deskSetup newStat
-        updateTo deskUI newStat
-        deskUI <$ UI.containerAdd parent desktopUI
-      (oldDesks, persists) <$ writeIORef desksRef added
-    EQ -> (oldDesks, curDesks) <$ writeIORef desksRef V.empty
-
-  -- Update the common part of UI, and then add common part back to the desksRef.
-  uiCom <- V.zipWithM updateTo oldCom newCom
-  -- TODO Perhaps update all here?
-  modifyIORef' desksRef (uiCom <>)
   where
-    updateTo deskUI@DesktopUI{deskUpdate} newStat = deskUI <$ deskUpdate newStat
+    -- Recreate/Update the desktops UI.
+    dVisDesktopUpdate parent deskSetup evRcv desksRef curDesks = do
+      oldDesks <- readIORef desksRef
+      -- Returns old/new commons, while writing added portion to desksRef.
+      -- Was trying to maximize code reuse.
+      -- TODO Factor pure parts of this one out.
+      (oldCom, newCom) <- case V.length curDesks `compare` V.length oldDesks of
+        LT -> do
+          -- Less desktops, remove UIs
+          let (keeps, discards) = V.splitAt (V.length curDesks) oldDesks
+          for_ discards $ \DesktopHandle{desktopUI} -> do
+            UI.widgetDestroy (desktopWidget desktopUI)
+          (keeps, curDesks) <$ writeIORef desksRef V.empty
+        GT -> do
+          -- More desktops, add UIs
+          let (persists, adds) = V.splitAt (V.length oldDesks) curDesks
+          added <- for adds $ \newStat -> do
+            deskUI@DesktopHandle{desktopUI} <- dVisDesktopItem deskSetup evRcv newStat
+            updateTo deskUI newStat
+            deskUI <$ UI.containerAdd parent (desktopWidget desktopUI)
+          (oldDesks, persists) <$ writeIORef desksRef added
+        EQ -> (oldDesks, curDesks) <$ writeIORef desksRef V.empty
 
-dVisDesktopItem :: MonadIO m => DesktopSetup -> DesktopStat -> m DesktopUI
-dVisDesktopItem DesktopSetup{..} deskStat@DesktopStat{..} = do
-  deskBox <- UI.boxNew UI.OrientationHorizontal 0
-  deskName <- UI.labelNew Nothing
-  UI.widgetGetStyleContext deskName >>= flip UI.styleContextAddClass (T.pack "desktop-label")
+      -- Update the common part of UI, and then add common part back to the desksRef.
+      uiCom <- V.zipWithM updateTo oldCom newCom
+      -- TODO Perhaps update all here?
+      modifyIORef' desksRef (uiCom <>)
+      where
+        updateTo deskUI@DesktopHandle{deskUpdate} newStat = deskUI <$ deskUpdate newStat
 
-  let deskNameChange name = UI.labelSetLabel deskName $ desktopLabeling name
-  -- TODO Button press -> activate
-  -- TODO Additional container tracking
-  UI.containerAdd deskBox deskName
-  desktopUI <- UI.toContainer deskBox
-  UI.widgetGetStyleContext desktopUI >>= flip UI.styleContextAddClass (T.pack "desktop-item")
-
+dVisDesktopItem :: MonadIO m => DesktopSetup -> (DeskEvent -> IO ()) -> DesktopStat -> m DesktopHandle
+dVisDesktopItem DesktopSetup{..} evRcv deskStat@DesktopStat{..} = do
+  -- TODO Indexing
+  desktopUI <- desktopUINew $ evRcv (DeskTryActivate 0)
   liftIO $ infoM "DeskVis" $ "UI: Desktop " <> show desktopName
 
   curDeskStat <- liftIO $ newIORef deskStat
   let deskUI =
-        DesktopUI
+        DesktopHandle
           { deskAddRemove = deskUIAddRemove deskUI
           , deskUpdate = updateDeskUI deskUI
           , ..
           }
   pure deskUI
   where
-    updateDeskUI deskUI@DesktopUI{..} deskStat@DesktopStat{..} = do
-      liftIO $ deskNameChange desktopName
-      UI.widgetGetStyleContext desktopUI >>= UI.updateCssClass deskCssClass [desktopState]
+    updateDeskUI deskUI@DesktopHandle{..} deskStat@DesktopStat{..} = do
+      let DesktopUI{..} = desktopUI
+      liftIO $ UI.labelSetLabel deskName $ desktopLabeling desktopName
+      UI.widgetGetStyleContext deskWidget >>= UI.updateCssClass deskCssClass [desktopState]
       liftIO $ writeIORef curDeskStat deskStat
       updateVisible deskUI
 
-    updateVisible DesktopUI{..} = do
+    updateVisible DesktopHandle{..} = do
+      let DesktopUI{..} = desktopUI
       deskStat <- liftIO $ readIORef curDeskStat
-      numWindows <- fromIntegral . pred . length <$> UI.containerGetChildren desktopUI
+      numWindows <- fromIntegral . pred . length <$> UI.containerGetChildren deskWinCont
       case showDesktop deskStat numWindows of
-        True -> UI.widgetShowAll desktopUI
-        False -> UI.widgetHide desktopUI
+        True -> UI.widgetShowAll deskWidget
+        False -> UI.widgetHide deskWidget
 
-    deskUIAddRemove deskUI@DesktopUI{desktopUI} flag widget = case flag of
+    deskUIAddRemove deskUI@DesktopHandle{desktopUI = DesktopUI{deskWinCont}} flag widget = case flag of
       True -> do
-        UI.containerAdd desktopUI widget
+        UI.containerAdd deskWinCont widget
         updateVisible deskUI -- This should show the window widget as well
       False -> do
         UI.widgetHide widget
-        UI.containerRemove desktopUI widget
+        UI.containerRemove deskWinCont widget
         updateVisible deskUI
+
+data DesktopUI = DesktopUI
+  { deskWidget :: !UI.Widget
+  -- ^ The congregated widget
+  , deskName :: !UI.Label
+  , deskWinCont :: !UI.Container
+  }
+
+desktopWidget :: DesktopUI -> UI.Widget
+desktopWidget DesktopUI{deskWidget} = deskWidget
+
+desktopUINew :: MonadIO m => IO () -> m DesktopUI
+desktopUINew onClick = do
+  deskWinCont <- UI.toContainer =<< UI.boxNew UI.OrientationHorizontal 0
+
+  deskName <- UI.labelNew Nothing
+  UI.widgetGetStyleContext deskName >>= flip UI.styleContextAddClass (T.pack "desktop-label")
+
+  deskMain <-
+    UI.boxed UI.OrientationHorizontal 0
+      =<< sequenceA [UI.toWidget deskName, UI.toWidget deskWinCont]
+
+  deskWidget <- UI.buttonNewWith (Just deskMain) onClick
+  UI.widgetGetStyleContext deskWidget >>= flip UI.styleContextAddClass (T.pack "desktop-item")
+
+  pure DesktopUI{..}
 
 {-------------------------------------------------------------------
                           For each window
 --------------------------------------------------------------------}
 
-data DeskWindowUI = DeskWindowUI
+data DeskWindowModel = DeskWindowModel
   { windowId :: Window
   , windowUI :: !UI.Widget
   }
@@ -282,12 +300,12 @@ dVisWindowCont ::
   m UI.Widget
 dVisWindowCont winSetup evRcv taskWinChange taskActive = do
   placeholder <- UI.imageNew
-  UI.onWidgetRealize placeholder $ do
+  liftIO $ do
     winsRef <- newIORef M.empty
     activeRef <- newIORef Nothing
     killUpd <- UI.uiTask taskWinChange (structureUpd winsRef)
     killAct <- UI.uiTask taskActive (changeActivate winsRef activeRef)
-    () <$ UI.onWidgetUnrealize placeholder (killAct >> killUpd)
+    () <$ UI.onWidgetDestroy placeholder (killAct >> killUpd)
   UI.toWidget placeholder
   where
     structureUpd winsRef = \case
@@ -295,7 +313,7 @@ dVisWindowCont winSetup evRcv taskWinChange taskActive = do
         -- Removes window
         for_ (S.toList removed) $ \window -> do
           mayUI <- atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) window
-          for_ mayUI $ \DeskWindowUI{windowUI} -> do
+          for_ mayUI $ \DeskWindowModel{windowUI} -> do
             UI.widgetDestroy windowUI
 
         -- Adds window
@@ -310,9 +328,9 @@ dVisWindowCont winSetup evRcv taskWinChange taskActive = do
       windows <- readIORef winsRef
       prevActive <- atomicModifyIORef' activeRef (nextActive,)
       -- Little hack(?)
-      for_ (prevActive >>= (windows M.!?)) $ \DeskWindowUI{windowUI} -> do
+      for_ (prevActive >>= (windows M.!?)) $ \DeskWindowModel{windowUI} -> do
         UI.widgetGetStyleContext windowUI >>= UI.updateCssClass winActiveCssClass []
-      for_ (nextActive >>= (windows M.!?)) $ \DeskWindowUI{windowUI} -> do
+      for_ (nextActive >>= (windows M.!?)) $ \DeskWindowModel{windowUI} -> do
         UI.widgetGetStyleContext windowUI >>= UI.updateCssClass winActiveCssClass [()]
 
 dVisWindowItem ::
@@ -321,23 +339,23 @@ dVisWindowItem ::
   (WinEvent -> IO ()) ->
   Window ->
   Task WindowInfo ->
-  m DeskWindowUI
+  m DeskWindowModel
 dVisWindowItem WindowSetup{..} evRcv window infoTask = do
   winImage <- UI.imageNew
   UI.widgetGetStyleContext winImage >>= flip UI.styleContextAddClass (T.pack "window-item")
 
   winImg <- UI.toWidget winImage
   winBtn <- UI.buttonNewWith (Just winImg) $ evRcv (WinTryActivate window)
-  let dWinUI = DeskWindowUI window winBtn
+  let dWinUI = DeskWindowModel window winBtn
   -- Cannot rely on realization, since window widgets would be floating
   liftIO $ do
     curDesk <- newIORef @Int (-1) -- When desktop is -1, it should not be showed.
     kill <- UI.uiTask infoTask (updateWindow dWinUI winImage curDesk)
     UI.onWidgetDestroy winImage kill
 
-  pure $ DeskWindowUI window winBtn
+  pure $ DeskWindowModel window winBtn
   where
-    updateWindow DeskWindowUI{..} winImage curDesk winInfo@WindowInfo{..} = do
+    updateWindow DeskWindowModel{..} winImage curDesk winInfo@WindowInfo{..} = do
       let newDesk = windowDesktop
       oldDesk <- atomicModifyIORef' curDesk $ (newDesk,)
       when (newDesk /= oldDesk) $ evRcv (WinToDesktop oldDesk newDesk windowId windowUI)
@@ -376,8 +394,6 @@ deskVisInitiate :: XIO () DeskVisRcvs
 deskVisInitiate = do
   rootWin <- xWindow
 
-  liftIO $ infoM "DeskVis" "DeskVis Initiating..."
-
   -- Reference to hold current data of windows.
   -- IORef, since X11 handling should be happening on the same thread.
   windowRef <- liftIO $ newIORef S.empty
@@ -397,8 +413,6 @@ deskVisInitiate = do
   desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
   reqActivate <- reqActiveWindow True
   reqToDesktop <- reqCurrentDesktop
-
-  liftIO $ infoM "DeskVis" "DeskVis Initiated."
 
   pure DeskVisRcvs{..}
   where

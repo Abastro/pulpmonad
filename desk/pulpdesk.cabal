@@ -69,6 +69,8 @@ library
     UI.Window
     UI.Application
     UI.X11.DesktopVisual
+    UI.X11.DesktopVisual.Handle
+    UI.X11.DesktopVisual.View
 
 test-suite test-pulpdesk
   import:             pulp-gtk

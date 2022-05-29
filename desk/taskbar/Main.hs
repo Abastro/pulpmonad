@@ -6,20 +6,20 @@ import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Text qualified as T
 import Defines
+import GI.GLib qualified as UI
 import GI.Gtk.Objects.Box qualified as UI
 import System.Environment
 import System.Exit
 import System.IO
 import System.Log.Handler.Simple
 import System.Log.Logger
+import System.Posix.Signals (sigINT)
 import UI.Application qualified as UI
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Styles qualified as UI
 import UI.Window qualified as UI
 import UI.X11.DesktopVisual qualified as UI
-import qualified GI.GLib as UI
-import System.Posix.Signals (sigINT)
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
