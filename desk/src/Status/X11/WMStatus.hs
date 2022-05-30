@@ -24,6 +24,8 @@ module Status.X11.WMStatus (
   WindowInfo (..),
   getWindowInfo,
   getWindowDesktop,
+  XIcon (..),
+  getWindowIcon,
 ) where
 
 import Control.Applicative
@@ -31,6 +33,7 @@ import Control.Concurrent.Task
 import Control.Monad.Except
 import Data.Bitraversable
 import Data.ByteString qualified as BS
+import Data.ByteString.Builder qualified as BS
 import Data.Functor.Compose
 import Data.IORef
 import Data.Map.Strict qualified as M
@@ -49,7 +52,6 @@ import Status.X11.XHandle
 import Text.Printf
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
--- TODO: Need to subscribe on the X events
 
 asUtf8 :: MonadError T.Text m => BS.ByteString -> m T.Text
 asUtf8 = either (throwError . T.pack . show) pure . T.decodeUtf8'
@@ -63,7 +65,7 @@ asSingle = \case
   [] -> throwError $ T.pack "empty list"
   x : _ -> pure x
 
--- | Since the format X emits is somewhat intricate.
+-- | The format X emits is somewhat intricate
 class Storable n => XPropRaw n where bitSize :: proxy n -> Int
 
 instance XPropRaw CChar where bitSize _ = 8
@@ -91,8 +93,6 @@ data XQueryError = XMissingProperty String | XParseError String T.Text
 formatXQError :: Window -> [XQueryError] -> String
 formatXQError window errors = printf "Query error[%d]: %s" window (show errors)
 
--- TODO Make the reference to property atoms optional
-
 -- | X Property query applicative, which accumulates all the errors.
 -- Make sure that no exception leaks out.
 newtype XPQuery a = XPQuery (XIO (IORef [Atom]) (Validation [XQueryError] a))
@@ -102,6 +102,7 @@ instance Alternative XPQuery where
   empty = XPQuery (pure empty)
   XPQuery qa <|> XPQuery qb = XPQuery (liftA2 (<|>) qa qb)
 
+-- TODO `rawGetWindowProperty` does not stream. Check: can we afford allocating whole list for this?
 queryProp :: forall a n. (XPropType n a) => String -> XPQuery a
 queryProp name = XPQuery $ do
   tracked <- xGetExt
@@ -109,7 +110,7 @@ queryProp name = XPQuery $ do
   liftIO $ modifyIORef' tracked (prop :)
   let bits = bitSize $ Proxy @n
   mayRaw <- liftDWIO $ \disp win -> rawGetWindowProperty @n bits disp prop win
-  pure (either (Failure . (: [])) Success $ handleParse mayRaw)
+  pure $ either (Failure . (: [])) Success $ handleParse mayRaw
   where
     handleParse mayRaw = do
       raw <- maybe (throwError $ XMissingProperty name) pure mayRaw
@@ -183,7 +184,6 @@ getDesktopStat =
     <*> (allDeskNames <|> pure V.empty)
     <*> (flip S.member <$> allVisibles <|> pure (const True))
   where
-    -- MAYBE Bound check? Admittedly, that is quite unnecessary
     numDesktops = queryProp @Int "_NET_NUMBER_OF_DESKTOPS"
     curDesktop = queryProp @Int "_NET_CURRENT_DESKTOP"
     allDeskNames = V.fromList <$> queryProp @[T.Text] "_NET_DESKTOP_NAMES"
@@ -225,8 +225,6 @@ reqActiveWindow flag = do
     -- Is this "currentTime" thing right?
     setClientMessageEvent' event target typActive 32 [srcInd, fromIntegral currentTime]
 
--- MAYBE How to deal with _NET_WM_ICON? It's quite hard.
-
 -- | Inclusive states of the window.
 data WMStateEx = WinHidden | WinDemandAttention
   deriving (Eq, Ord, Enum, Bounded)
@@ -257,3 +255,29 @@ getWindowInfo = WindowInfo <$> wmTitle <*> wmClass <*> wmState
 -- | Get the desktop certain window resides on.
 getWindowDesktop :: XPQuery Int
 getWindowDesktop = queryProp @Int "_NET_WM_DESKTOP" <|> pure (-1)
+
+-- | X representation of icon.
+-- Pixels are stored in ARGB format, left to right, top to bottom.
+data XIcon = XIcon
+  { iconWidth :: !Int
+  , iconHeight :: !Int
+  , iconColors :: !BS.ByteString
+  }
+
+instance XPropType CLong [XIcon] where
+  parseProp = \case
+    [] -> pure []
+    width : height : xs
+      | iconWidth <- fromIntegral width
+      , iconHeight <- fromIntegral height
+      , (dat, rem) <- splitAt (iconWidth * iconHeight) xs -> do
+          let iconColors = BS.toStrict . BS.toLazyByteString $ foldMap (BS.word32BE . fromIntegral) dat
+          if BS.length iconColors /= 4 * iconWidth * iconHeight
+            then throwError $ T.pack "Not enough pixels read for given width, height"
+            else (XIcon{..} :) <$> parseProp rem
+    _ -> throwError $ T.pack "Cannot read width, height"
+
+-- | Get the window icon.
+-- Since reading it takes time, it is not advised to listen to the property.
+getWindowIcon :: XPQuery [XIcon]
+getWindowIcon = queryProp @[XIcon] "_NET_WM_ICON"

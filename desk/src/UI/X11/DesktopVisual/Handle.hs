@@ -1,5 +1,6 @@
 module UI.X11.DesktopVisual.Handle (
   NumWindows,
+  GetXIcon,
   DesktopSetup (..),
   WindowSetup (..),
   deskVisualizer,
@@ -7,8 +8,9 @@ module UI.X11.DesktopVisual.Handle (
 
 import Control.Concurrent.Task
 import Control.Monad
-import Control.Monad.IO.Class
-import Control.Monad.Trans
+import Control.Monad.Except
+import Control.Monad.IO.Unlift
+import Data.Bifunctor (first)
 import Data.Foldable
 import Data.IORef
 import Data.List
@@ -25,7 +27,6 @@ import System.Log.Logger
 import UI.Commons qualified as UI
 import UI.Task qualified as UI
 import UI.X11.DesktopVisual.View qualified as View
-import Control.Monad.Except
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -55,7 +56,7 @@ data DesktopSetup = DesktopSetup
 
 -- | Window part of the setup.
 data WindowSetup = WindowSetup
-  { windowImgSetter :: WindowInfo -> IO View.ImageSet
+  { windowImgSetter :: WindowInfo -> GetXIcon -> IO View.ImageSet
   -- ^ With which iamge the window is going to set to.
   }
 
@@ -119,7 +120,9 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = do
             existed <- (window `M.member`) <$> readIORef winsRef
             unless existed $ do
               winItemView <- View.winItemNew $ reqActivate window
-              winItem <- winItemMake winSetup (winSwitch desksRef window) winDeskTask infoTask winItemView
+              let getIcon = winGetIcon window
+              let switcher = winSwitch desksRef window
+              winItem <- winItemMake winSetup getIcon switcher winDeskTask infoTask winItemView
               modifyIORef' winsRef (M.insert window winItem)
 
           -- Reorder windows appropriately
@@ -202,12 +205,13 @@ data WinItemHandle = WinItemHandle
 
 winItemMake ::
   WindowSetup ->
+  GetXIcon ->
   (View.WinItem -> Int -> Int -> IO ()) ->
   Task Int ->
   Task WindowInfo ->
   View.WinItem ->
   IO WinItemHandle
-winItemMake WindowSetup{..} onSwitch winDeskTask infoTask view = do
+winItemMake WindowSetup{..} getXIcon onSwitch winDeskTask infoTask view = do
   -- (-1) is never a valid desktop (means the window is omnipresent)
   join $ registers <$> newIORef (-1)
   where
@@ -222,12 +226,14 @@ winItemMake WindowSetup{..} onSwitch winDeskTask infoTask view = do
           when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk
 
         updateWindow winInfo@WindowInfo{..} = do
-          windowImgSetter winInfo >>= View.winItemSetImg view
+          windowImgSetter winInfo getXIcon >>= View.winItemSetImg view
           View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------
                           Communication
 --------------------------------------------------------------------}
+
+type GetXIcon = IO (Either String [XIcon])
 
 -- | Window changes, with new order, added & removed
 data DWindowChange
@@ -242,6 +248,7 @@ data DeskVisRcvs = DeskVisRcvs
   , windowActive :: Task (Maybe Window)
   , reqActivate :: Window -> IO ()
   , reqToDesktop :: Int -> IO ()
+  , winGetIcon :: Window -> GetXIcon
   }
 
 -- | Desktop visualizer event handle initiate.
@@ -272,6 +279,11 @@ deskVisInitiate = do
   desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
   reqActivate <- reqActiveWindow True
   reqToDesktop <- reqCurrentDesktop
+
+  -- MAYBE Make it ping back to X server?
+  winGetIcon <- withRunInIO $ \unliftX -> pure $ \window -> do
+    res <- unliftX $ xOnWindow window $ runXQuery getWindowIcon
+    pure $ first (formatXQError window) res
 
   pure DeskVisRcvs{..}
   where

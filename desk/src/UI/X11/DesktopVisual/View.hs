@@ -30,9 +30,10 @@ import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Singles qualified as UI
 import UI.Styles qualified as UI
+import qualified GI.GdkPixbuf.Objects.Pixbuf as Gdk
 
 -- | Setting image for Image widget
-data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon
+data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon | ImgSPixbuf Gdk.Pixbuf
 
 widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => UI.Widget -> (s -> T.Text) -> [s] -> m ()
 widgetUpdateClass widget asClass state =
@@ -152,5 +153,6 @@ winItemSetImg :: MonadIO m => WinItem -> ImageSet -> m ()
 winItemSetImg WinItem{winItemImg} = \case
   ImgSName iconName -> UI.imageSetFromIconName winItemImg (Just iconName) size
   ImgSGIcon gIcon -> UI.imageSetFromGicon winItemImg gIcon size
+  ImgSPixbuf pixbuf -> UI.imageSetFromPixbuf winItemImg (Just pixbuf)
   where
     size = fromIntegral $ fromEnum UI.IconSizeLargeToolbar

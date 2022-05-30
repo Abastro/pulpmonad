@@ -8,6 +8,7 @@ import Data.Text qualified as T
 import Defines
 import GI.GLib qualified as UI
 import GI.Gtk.Objects.Box qualified as UI
+import Status.X11.WMStatus (DesktopStat (..))
 import System.Environment
 import System.Exit
 import System.IO
@@ -20,6 +21,7 @@ import UI.Containers qualified as UI
 import UI.Styles qualified as UI
 import UI.Window qualified as UI
 import UI.X11.DesktopVisual qualified as UI
+import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -46,7 +48,8 @@ main = do
     deskVisDeskSetup =
       UI.DesktopSetup
         { UI.desktopLabeling = maybe (T.pack "X") mayLabel
-        , UI.showDesktop = UI.defShowFn
+        , UI.showDesktop = \stat@DesktopStat{desktopName} n ->
+            UI.defShowFn stat n && desktopName /= Just (T.pack scratchpadWorkspaceTag)
         }
     deskVisWinSetup = UI.WindowSetup UI.defImageSetter
 
