@@ -168,6 +168,7 @@ startXIO initiate = do
   takeMVar initResult
   where
     startingX = withRunInIO $ \unliftX -> do
+      let _ = 0
       actQueue <- unliftX xActQueue
       allocaXEvent $ \evPtr -> forever $ do
         atomically (flushTQueue actQueue) >>= traverse_ id
@@ -175,6 +176,9 @@ startXIO initiate = do
         unliftX $ loopHandle evPtr -- MAYBE some wait here to lessen CPU load
 
     loopHandle evPtr = withRunInIO $ \unliftX -> do
+      -- Waits for 1ms, because otherwise we are overloading stuffs
+      threadDelay 1000
+      
       display <- unliftX xDisplay
       listeners <- unliftX xListeners
       eventsQueued display queuedAfterFlush >>= \case

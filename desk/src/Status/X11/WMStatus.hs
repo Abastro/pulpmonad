@@ -23,6 +23,7 @@ module Status.X11.WMStatus (
   WMStateEx (..),
   WindowInfo (..),
   getWindowInfo,
+  getWindowDesktop,
 ) where
 
 import Control.Applicative
@@ -232,9 +233,7 @@ data WMStateEx = WinHidden | WinDemandAttention
 
 -- | Information on the specific window.
 data WindowInfo = WindowInfo
-  { windowDesktop :: !Int
-  -- ^ Desktop ID a window resides on.
-  , windowTitle :: !T.Text
+  { windowTitle :: !T.Text
   , windowClasses :: !(V.Vector T.Text)
   , windowState :: !(S.Set WMStateEx)
   }
@@ -242,10 +241,8 @@ data WindowInfo = WindowInfo
 -- | Window information. Only works for non-withdrawn state.
 -- Still, the worst that could happen is giving Nothing.
 getWindowInfo :: XPQuery WindowInfo
-getWindowInfo = WindowInfo <$> wmDesktop <*> wmTitle <*> wmClass <*> wmState
+getWindowInfo = WindowInfo <$> wmTitle <*> wmClass <*> wmState
   where
-    -- Missing location on desktop: -1
-    wmDesktop = queryProp @Int "_NET_WM_DESKTOP" <|> pure (-1)
     -- Let's tolerate missing title.
     wmTitle = (queryProp @T.Text "_NET_WM_NAME" <|> queryProp @T.Text "WM_NAME") <|> pure T.empty
     wmClass = V.fromList <$> queryProp @[T.Text] "WM_CLASS"
@@ -256,3 +253,7 @@ getWindowInfo = WindowInfo <$> wmDesktop <*> wmTitle <*> wmClass <*> wmState
       [ ("_NET_WM_STATE_HIDDEN", WinHidden)
       , ("_NET_WM_STATE_DEMANDS_ATTENTION", WinDemandAttention)
       ]
+
+-- | Get the desktop certain window resides on.
+getWindowDesktop :: XPQuery Int
+getWindowDesktop = queryProp @Int "_NET_WM_DESKTOP" <|> pure (-1)

@@ -28,6 +28,7 @@ import Status.X11.WMStatus
 import UI.X11.DesktopVisual.Handle
 import UI.X11.DesktopVisual.View (ImageSet (..))
 
+-- FIXME This might indeed take long
 appInfoImageSetter :: WindowInfo -> MaybeT IO ImageSet
 appInfoImageSetter WindowInfo{..} = do
   icon <- getAlt $ foldMap Alt $ findIcon <$> windowClasses

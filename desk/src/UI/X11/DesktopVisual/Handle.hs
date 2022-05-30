@@ -25,6 +25,7 @@ import System.Log.Logger
 import UI.Commons qualified as UI
 import UI.Task qualified as UI
 import UI.X11.DesktopVisual.View qualified as View
+import Control.Monad.Except
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -114,11 +115,11 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = do
               UI.widgetDestroy (View.winItemWidget itemWindowView)
 
           -- Add windows
-          for_ (M.toList adding) $ \(window, infoTask) -> do
+          for_ (M.toList adding) $ \(window, (winDeskTask, infoTask)) -> do
             existed <- (window `M.member`) <$> readIORef winsRef
             unless existed $ do
               winItemView <- View.winItemNew $ reqActivate window
-              winItem <- winItemMake winSetup (winSwitch desksRef window) infoTask winItemView
+              winItem <- winItemMake winSetup (winSwitch desksRef window) winDeskTask infoTask winItemView
               modifyIORef' winsRef (M.insert window winItem)
 
           -- Reorder windows appropriately
@@ -160,39 +161,40 @@ deskItemMake :: DesktopSetup -> DesktopStat -> View.DeskItem -> IO DeskItemHandl
 deskItemMake DesktopSetup{..} initStat view = do
   creates <$> newIORef initStat <*> newIORef V.empty
   where
-    creates statRef curWindows = DeskItemHandle{..} where
-      updateDeskItem deskStat@DesktopStat{..} = do
-        View.deskItemCtrl view (View.DeskLabelName $ desktopLabeling desktopName)
-        View.widgetUpdateClass (View.deskItemWidget view) deskCssClass [desktopState]
-        writeIORef statRef deskStat
-        updateVisible curWindows
-
-      addRmWinItem winView windowId = \case
-        WinRemove -> do
-          View.deskItemCtrl view (View.RemoveWinItem winView)
-          modifyIORef' curWindows (V.filter (/= windowId))
-          updateVisible curWindows
-        WinAdd curOrd -> do
-          (prev, next) <- V.span (\w -> curOrd w < curOrd windowId) <$> readIORef curWindows
-          writeIORef curWindows (prev <> V.singleton windowId <> next)
-          View.deskItemCtrl view (View.AddWinItemAt winView $ V.length prev)
+    creates statRef curWindows = DeskItemHandle{..}
+      where
+        updateDeskItem deskStat@DesktopStat{..} = do
+          View.deskItemCtrl view (View.DeskLabelName $ desktopLabeling desktopName)
+          View.widgetUpdateClass (View.deskItemWidget view) deskCssClass [desktopState]
+          writeIORef statRef deskStat
           updateVisible curWindows
 
-      reorderWinItems newOrd winItems = do
-        olds <- readIORef curWindows
-        let news = V.fromList . sortOn newOrd . V.toList $ olds
-        when (news /= olds) $ do
-          writeIORef curWindows news
-          let newViewOrd =
-                (\WinItemHandle{itemWindowView} -> itemWindowView) <$> V.mapMaybe (winItems M.!?) news
-          View.deskItemCtrl view (View.ReorderWinItems newViewOrd)
+        addRmWinItem winView windowId = \case
+          WinRemove -> do
+            View.deskItemCtrl view (View.RemoveWinItem winView)
+            modifyIORef' curWindows (V.filter (/= windowId))
+            updateVisible curWindows
+          WinAdd curOrd -> do
+            (prev, next) <- V.span (\w -> curOrd w < curOrd windowId) <$> readIORef curWindows
+            writeIORef curWindows (prev <> V.singleton windowId <> next)
+            View.deskItemCtrl view (View.AddWinItemAt winView $ V.length prev)
+            updateVisible curWindows
 
-      updateVisible curWindows = do
-        deskStat <- readIORef statRef
-        numWindows <- fromIntegral . V.length <$> readIORef curWindows
-        case showDesktop deskStat numWindows of
-          True -> UI.widgetShowAll (View.deskItemWidget view)
-          False -> UI.widgetHide (View.deskItemWidget view)
+        reorderWinItems newOrd winItems = do
+          olds <- readIORef curWindows
+          let news = V.fromList . sortOn newOrd . V.toList $ olds
+          when (news /= olds) $ do
+            writeIORef curWindows news
+            let newViewOrd =
+                  (\WinItemHandle{itemWindowView} -> itemWindowView) <$> V.mapMaybe (winItems M.!?) news
+            View.deskItemCtrl view (View.ReorderWinItems newViewOrd)
+
+        updateVisible curWindows = do
+          deskStat <- readIORef statRef
+          numWindows <- fromIntegral . V.length <$> readIORef curWindows
+          case showDesktop deskStat numWindows of
+            True -> UI.widgetShowAll (View.deskItemWidget view)
+            False -> UI.widgetHide (View.deskItemWidget view)
 
 data WinItemHandle = WinItemHandle
   { itemWindowView :: View.WinItem -- As window can move around, its view should be separately owned.
@@ -201,23 +203,25 @@ data WinItemHandle = WinItemHandle
 winItemMake ::
   WindowSetup ->
   (View.WinItem -> Int -> Int -> IO ()) ->
+  Task Int ->
   Task WindowInfo ->
   View.WinItem ->
   IO WinItemHandle
-winItemMake WindowSetup{..} onSwitch infoTask view = do
+winItemMake WindowSetup{..} onSwitch winDeskTask infoTask view = do
   -- (-1) is never a valid desktop (means the window is omnipresent)
   join $ registers <$> newIORef (-1)
   where
     registers curDeskRef = do
+      killChDesk <- UI.uiTask winDeskTask changeDesktop
       killInfo <- UI.uiTask infoTask updateWindow
-      UI.onWidgetDestroy (View.winItemWidget view) killInfo
+      UI.onWidgetDestroy (View.winItemWidget view) (killChDesk >> killInfo)
       pure WinItemHandle{itemWindowView = view}
       where
-        updateWindow winInfo@WindowInfo{..} = do
-          let newDesk = windowDesktop
+        changeDesktop newDesk = do
           oldDesk <- atomicModifyIORef' curDeskRef $ (newDesk,)
           when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk
 
+        updateWindow winInfo@WindowInfo{..} = do
           windowImgSetter winInfo >>= View.winItemSetImg view
           View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
 
@@ -226,7 +230,11 @@ winItemMake WindowSetup{..} onSwitch infoTask view = do
 --------------------------------------------------------------------}
 
 -- | Window changes, with new order, added & removed
-data DWindowChange = DWindowChange (M.Map Window Int) (M.Map Window (Task WindowInfo)) (S.Set Window)
+data DWindowChange
+  = DWindowChange
+      (M.Map Window Int)
+      (M.Map Window (Task Int, Task WindowInfo))
+      (S.Set Window)
 
 data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)
@@ -273,7 +281,11 @@ deskVisInitiate = do
       window <- xWindow
       act >>= either (onError window) pure
     watchWindow window = do
-      watchXQuery window getWindowInfo pure >>= \case
+      excRes <- runExceptT $ do
+        winDesk <- ExceptT $ watchXQuery window getWindowDesktop pure
+        winInfo <- ExceptT $ watchXQuery window getWindowInfo pure
+        pure (winDesk, winInfo)
+      case excRes of
         Left err -> do
           liftIO $ Nothing <$ infoM "DeskVis" ("invalid window: " <> formatXQError window err)
-        Right winInfo -> pure (Just winInfo)
+        Right res -> pure (Just res)
