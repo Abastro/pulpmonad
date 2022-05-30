@@ -11,6 +11,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans
 import Data.Foldable
 import Data.IORef
+import Data.List
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Data.Text qualified as T
@@ -68,122 +69,132 @@ deskVisualizer deskSetup winSetup = do
 
   pure $ View.deskVisualWidget deskVisualView
 
-data DeskVisModel = DeskVisModel
-  { dVisDesks :: !DeskContModel
-  , dVisWins :: !WinContModel
-  }
+-- Currently handle is empty, because no external handling is permitted.
+data DeskVisHandle = DeskVisHandle
 
 -- TODO Model scheme is not working, need to make it work with pure states. Later.
 deskVisMake ::
   DeskVisRcvs ->
   (DesktopSetup, WindowSetup) ->
   View.DeskVisual ->
-  IO DeskVisModel
+  IO DeskVisHandle
 deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = do
-  dVisDesks <- newIORef V.empty
-  dVisWins <- newIORef M.empty
-  activeWin <- newIORef Nothing
-  do
-    killStat <- UI.uiTask desktopStats (updateDeskStats dVisDesks)
-    killWinCh <- UI.uiTask windowsChange (changeWindows dVisDesks dVisWins)
-    killActiv <- UI.uiTask windowActive (changeActivate dVisWins activeWin)
-    UI.onWidgetDestroy (View.deskVisualWidget view) (killStat >> killWinCh >> killActiv)
-
-  pure DeskVisModel{..}
+  join $ registers <$> newIORef V.empty <*> newIORef M.empty <*> newIORef M.empty <*> newIORef Nothing
   where
-    updateDeskStats desksRef newStats = do
-      -- Cut down to available desktops
-      let numDesk = V.length newStats
-      modifyIORef' desksRef (V.take numDesk)
-      View.deskVisualCtrl view (View.CutDeskItemsTo numDesk)
+    registers desksRef winsRef ordersRef activeRef = do
+      killStat <- UI.uiTask desktopStats updateDeskStats
+      killWinCh <- UI.uiTask windowsChange changeWindows
+      killActiv <- UI.uiTask windowActive changeActivate
+      _ <- UI.onWidgetDestroy (View.deskVisualWidget view) (killStat >> killWinCh >> killActiv)
+      pure DeskVisHandle
+      where
+        updateDeskStats newStats = do
+          -- Cut down to available desktops
+          let numDesk = V.length newStats
+          modifyIORef' desksRef (V.take numDesk)
+          View.deskVisualCtrl view (View.CutDeskItemsTo numDesk)
 
-      -- Add additional available desktops
-      oldNum <- V.length <$> readIORef desksRef
-      addeds <- for (V.drop oldNum $ V.indexed newStats) $ \(idx, stat) -> do
-        deskItemView <- View.deskItemNew $ reqToDesktop idx
-        (deskItemView,) <$> deskItemMake deskSetup stat deskItemView
-      modifyIORef' desksRef (<> fmap snd addeds)
-      View.deskVisualCtrl view (View.AddDeskItems $ fmap fst addeds)
+          -- Add additional available desktops
+          oldNum <- V.length <$> readIORef desksRef
+          addeds <- for (V.drop oldNum $ V.indexed newStats) $ \(idx, stat) -> do
+            deskItemView <- View.deskItemNew $ reqToDesktop idx
+            (deskItemView,) <$> deskItemMake deskSetup stat deskItemView
+          modifyIORef' desksRef (<> fmap snd addeds)
+          View.deskVisualCtrl view (View.AddDeskItems $ fmap fst addeds)
 
-      -- Update all desktops
-      deskItems <- readIORef desksRef
-      V.zipWithM (\DeskItemModel{updateDeskItem} -> updateDeskItem) deskItems newStats
+          -- Update all desktops
+          deskItems <- readIORef desksRef
+          V.zipWithM (\DeskItemHandle{updateDeskItem} -> updateDeskItem) deskItems newStats
 
-    changeWindows desksRef winsRef (DWindowChange _newOrder adding removed) = do
-      -- Remove windows
-      for_ (S.toList removed) $ \window -> do
-        mayItem <- atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) window
-        for_ mayItem $ \WinItemModel{itemWindowView} ->
-          UI.widgetDestroy (View.winItemWidget itemWindowView)
+        changeWindows (DWindowChange newOrder adding removed) = do
+          -- Remove windows
+          for_ (S.toList removed) $ \window -> do
+            mayItem <- atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) window
+            for_ mayItem $ \WinItemHandle{itemWindowView} ->
+              UI.widgetDestroy (View.winItemWidget itemWindowView)
 
-      -- Add windows
-      for_ (M.toList adding) $ \(window, infoTask) -> do
-        existed <- (window `M.member`) <$> readIORef winsRef
-        unless existed $ do
-          winItemView <- View.winItemNew $ reqActivate window
-          winItem <- winItemMake winSetup (winSwitch desksRef window) infoTask winItemView
-          modifyIORef' winsRef (M.insert window winItem)
+          -- Add windows
+          for_ (M.toList adding) $ \(window, infoTask) -> do
+            existed <- (window `M.member`) <$> readIORef winsRef
+            unless existed $ do
+              winItemView <- View.winItemNew $ reqActivate window
+              winItem <- winItemMake winSetup (winSwitch desksRef window) infoTask winItemView
+              modifyIORef' winsRef (M.insert window winItem)
 
-    -- error "Window Reorder"
+          -- Reorder windows appropriately
+          writeIORef ordersRef newOrder
+          curWins <- readIORef winsRef
+          desktops <- readIORef desksRef
+          for_ desktops $ \DeskItemHandle{reorderWinItems} -> reorderWinItems (newOrder M.!?) curWins
 
-    changeActivate winsRef activeRef nextActive = do
-      windows <- readIORef winsRef
-      prevActive <- atomicModifyIORef' activeRef (nextActive,)
-      -- Little hack
-      for_ (prevActive >>= (windows M.!?)) $ \WinItemModel{itemWindowView} -> do
-        View.widgetUpdateClass (View.winItemWidget itemWindowView) winActiveCssClass []
-      for_ (nextActive >>= (windows M.!?)) $ \WinItemModel{itemWindowView} -> do
-        View.widgetUpdateClass (View.winItemWidget itemWindowView) winActiveCssClass [()]
+        changeActivate nextActive = do
+          windows <- readIORef winsRef
+          prevActive <- atomicModifyIORef' activeRef (nextActive,)
+          -- Little hack
+          for_ (prevActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
+            View.widgetUpdateClass (View.winItemWidget itemWindowView) winActiveCssClass []
+          for_ (nextActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
+            View.widgetUpdateClass (View.winItemWidget itemWindowView) winActiveCssClass [()]
 
-    winSwitch desksRef windowId winView deskOld deskNew = do
-      infoM "DeskVis" (show windowId <> ": Switching desktop from " <> show deskOld <> " to " <> show deskNew)
-      desktops <- readIORef desksRef
-      -- Out of bounds: was already removed, no need to care
-      for_ (desktops V.!? deskOld) $ \DeskItemModel{addRmWinItem} -> addRmWinItem winView False
-      -- For now, let's not care about out of bounds from new windows.
-      -- That is likely a sync issue, so it needs proper logging later.
-      for_ (desktops V.!? deskNew) $ \DeskItemModel{addRmWinItem} -> do
-        addRmWinItem winView True
+        winSwitch desksRef windowId winView deskOld deskNew = do
+          infoM "DeskVis" (show windowId <> ": Switching desktop from " <> show deskOld <> " to " <> show deskNew)
+          desktops <- readIORef desksRef
+          curOrders <- readIORef ordersRef
+          -- Out of bounds: was already removed, no need to care
+          for_ (desktops V.!? deskOld) $ \DeskItemHandle{addRmWinItem} -> do
+            addRmWinItem winView windowId WinRemove
+          -- For now, let's not care about out of bounds from new windows.
+          -- That is likely a sync issue, so it needs proper logging later.
+          for_ (desktops V.!? deskNew) $ \DeskItemHandle{addRmWinItem} -> do
+            addRmWinItem winView windowId (WinAdd (curOrders M.!?))
 
-type DeskContModel = IORef (V.Vector DeskItemModel)
-data DeskItemModel = DeskItemModel -- Not really a model
+-- WinAdd parameter is for ordering
+data DeskWinMod = WinRemove | WinAdd (Window -> Maybe Int)
+data DeskItemHandle = DeskItemHandle
   { updateDeskItem :: DesktopStat -> IO ()
-  , addRmWinItem :: View.WinItem -> Bool -> IO () -- False for remove, True for add
+  , addRmWinItem :: View.WinItem -> Window -> DeskWinMod -> IO () -- False for remove, True for add
+  , reorderWinItems :: (Window -> Maybe Int) -> M.Map Window WinItemHandle -> IO ()
   }
 
-deskItemMake :: DesktopSetup -> DesktopStat -> View.DeskItem -> IO DeskItemModel
+deskItemMake :: DesktopSetup -> DesktopStat -> View.DeskItem -> IO DeskItemHandle
 deskItemMake DesktopSetup{..} initStat view = do
-  itemDeskStat <- newIORef initStat
-  numWinRef <- newIORef 0
-  let updateDeskItem = updateItem itemDeskStat numWinRef
-  let addRmWinItem = addRmItem itemDeskStat numWinRef
-  pure DeskItemModel{..}
+  creates <$> newIORef initStat <*> newIORef V.empty
   where
-    updateItem statRef numWinRef deskStat@DesktopStat{..} = do
-      View.deskItemCtrl view (View.DeskLabelName $ desktopLabeling desktopName)
-      View.widgetUpdateClass (View.deskItemWidget view) deskCssClass [desktopState]
-      writeIORef statRef deskStat
-      updateVisible statRef numWinRef
+    creates statRef curWindows = DeskItemHandle{..} where
+      updateDeskItem deskStat@DesktopStat{..} = do
+        View.deskItemCtrl view (View.DeskLabelName $ desktopLabeling desktopName)
+        View.widgetUpdateClass (View.deskItemWidget view) deskCssClass [desktopState]
+        writeIORef statRef deskStat
+        updateVisible curWindows
 
-    addRmItem statRef numWinRef winView = \case
-      False -> do
-        View.deskItemCtrl view (View.RemoveWinItem winView)
-        modifyIORef' numWinRef pred
-        updateVisible statRef numWinRef
-      True -> do
-        View.deskItemCtrl view (View.AddWinItems $ V.singleton winView)
-        modifyIORef' numWinRef succ
-        updateVisible statRef numWinRef
+      addRmWinItem winView windowId = \case
+        WinRemove -> do
+          View.deskItemCtrl view (View.RemoveWinItem winView)
+          modifyIORef' curWindows (V.filter (/= windowId))
+          updateVisible curWindows
+        WinAdd curOrd -> do
+          (prev, next) <- V.span (\w -> curOrd w < curOrd windowId) <$> readIORef curWindows
+          writeIORef curWindows (prev <> V.singleton windowId <> next)
+          View.deskItemCtrl view (View.AddWinItemAt winView $ V.length prev)
+          updateVisible curWindows
 
-    updateVisible statRef numWinRef = do
-      deskStat <- readIORef statRef
-      numWindows <- readIORef numWinRef
-      case showDesktop deskStat numWindows of
-        True -> UI.widgetShowAll (View.deskItemWidget view)
-        False -> UI.widgetHide (View.deskItemWidget view)
+      reorderWinItems newOrd winItems = do
+        olds <- readIORef curWindows
+        let news = V.fromList . sortOn newOrd . V.toList $ olds
+        when (news /= olds) $ do
+          writeIORef curWindows news
+          let newViewOrd =
+                (\WinItemHandle{itemWindowView} -> itemWindowView) <$> V.mapMaybe (winItems M.!?) news
+          View.deskItemCtrl view (View.ReorderWinItems newViewOrd)
 
-type WinContModel = IORef (M.Map Window WinItemModel)
-data WinItemModel = WinItemModel
+      updateVisible curWindows = do
+        deskStat <- readIORef statRef
+        numWindows <- fromIntegral . V.length <$> readIORef curWindows
+        case showDesktop deskStat numWindows of
+          True -> UI.widgetShowAll (View.deskItemWidget view)
+          False -> UI.widgetHide (View.deskItemWidget view)
+
+data WinItemHandle = WinItemHandle
   { itemWindowView :: View.WinItem -- As window can move around, its view should be separately owned.
   }
 
@@ -192,22 +203,23 @@ winItemMake ::
   (View.WinItem -> Int -> Int -> IO ()) ->
   Task WindowInfo ->
   View.WinItem ->
-  IO WinItemModel
+  IO WinItemHandle
 winItemMake WindowSetup{..} onSwitch infoTask view = do
-  itemCurDesktop <- newIORef (-1) -- (-1) is never a valid desktop (means the window is omnipresent)
-  do
-    killInfo <- UI.uiTask infoTask (updateWindow itemCurDesktop)
-    UI.onWidgetDestroy (View.winItemWidget view) killInfo
-  let itemWindowView = view
-  pure WinItemModel{..}
+  -- (-1) is never a valid desktop (means the window is omnipresent)
+  join $ registers <$> newIORef (-1)
   where
-    updateWindow curDeskRef winInfo@WindowInfo{..} = do
-      let newDesk = windowDesktop
-      oldDesk <- atomicModifyIORef' curDeskRef $ (newDesk,)
-      when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk
+    registers curDeskRef = do
+      killInfo <- UI.uiTask infoTask updateWindow
+      UI.onWidgetDestroy (View.winItemWidget view) killInfo
+      pure WinItemHandle{itemWindowView = view}
+      where
+        updateWindow winInfo@WindowInfo{..} = do
+          let newDesk = windowDesktop
+          oldDesk <- atomicModifyIORef' curDeskRef $ (newDesk,)
+          when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk
 
-      windowImgSetter winInfo >>= View.winItemSetImg view
-      View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
+          windowImgSetter winInfo >>= View.winItemSetImg view
+          View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------
                           Communication
@@ -215,8 +227,6 @@ winItemMake WindowSetup{..} onSwitch infoTask view = do
 
 -- | Window changes, with new order, added & removed
 data DWindowChange = DWindowChange (M.Map Window Int) (M.Map Window (Task WindowInfo)) (S.Set Window)
-
--- data DVWindowRcv = DWindowMap Window (Task WindowInfo) | DWindowUnmap Window
 
 data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)
@@ -235,6 +245,7 @@ deskVisInitiate = do
   rootWin <- xWindow
 
   -- Reference to hold current data of windows.
+  -- Exists because each new window needs their own tasks.
   -- IORef, since X11 handling should be happening on the same thread.
   windowRef <- liftIO $ newIORef S.empty
   -- Detects difference between windows and handle it.

@@ -84,13 +84,13 @@ data DeskItem = DeskItem
   { deskItemWidget :: !UI.Widget
   -- ^ The congregated widget
   , deskItemName :: !UI.Label
-  , deskItemWinCont :: !UI.Container
+  , deskItemWinCont :: !UI.Box
   }
 
 data DeskItemOp
-  = FlushWinItems
-  | AddWinItems !(V.Vector WinItem)
+  = AddWinItemAt !WinItem !Int
   | RemoveWinItem !WinItem
+  | ReorderWinItems !(V.Vector WinItem)
   | DeskLabelName !T.Text
 
 deskItemWidget :: DeskItem -> UI.Widget
@@ -98,7 +98,7 @@ deskItemWidget DeskItem{deskItemWidget} = deskItemWidget
 
 deskItemNew :: MonadIO m => IO () -> m DeskItem
 deskItemNew onClick = do
-  deskItemWinCont <- UI.toContainer =<< UI.boxNew UI.OrientationHorizontal 0
+  deskItemWinCont <- UI.boxNew UI.OrientationHorizontal 0
 
   deskItemName <- UI.labelNew Nothing
   UI.widgetGetStyleContext deskItemName >>= flip UI.styleContextAddClass (T.pack "desktop-label")
@@ -114,17 +114,17 @@ deskItemNew onClick = do
 
 deskItemCtrl :: MonadIO m => DeskItem -> DeskItemOp -> m ()
 deskItemCtrl DeskItem{..} = \case
-  FlushWinItems -> do
-    UI.containerForeach deskItemWinCont $ \winItem -> do
-      UI.widgetHide winItem
-      UI.containerRemove deskItemWinCont winItem
-  AddWinItems winItems -> do
-    for_ winItems $ \WinItem{winItemWidget} -> do
-      UI.containerAdd deskItemWinCont winItemWidget
-      UI.widgetShowAll winItemWidget
+  AddWinItemAt WinItem{winItemWidget} idx -> do
+    UI.containerAdd deskItemWinCont winItemWidget
+    UI.boxReorderChild deskItemWinCont winItemWidget $ fromIntegral idx
+    UI.widgetShowAll winItemWidget
   RemoveWinItem WinItem{winItemWidget} -> do
     UI.widgetHide winItemWidget
     UI.containerRemove deskItemWinCont winItemWidget
+  ReorderWinItems winItems -> do
+    for_ (V.indexed winItems) $ \(idx, WinItem{winItemWidget}) -> do
+      UI.boxReorderChild deskItemWinCont winItemWidget $ fromIntegral idx
+
   -- Mundane property update here
   DeskLabelName name -> UI.labelSetLabel deskItemName name
 
