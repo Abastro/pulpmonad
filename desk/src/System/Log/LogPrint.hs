@@ -11,9 +11,11 @@ module System.Log.LogPrint (
   MonadLog (..),
   logPrintf,
   LogPrintfType,
+  logStderr,
 ) where
 
 import Control.Monad.IO.Class
+import Control.Monad.IO.Unlift
 import Data.Char
 import Data.Either
 import Data.Text qualified as T
@@ -26,15 +28,15 @@ data LogLevel = LevelDebug | LevelInfo | LevelWarn | LevelError
 
 logLevelName :: LogLevel -> LogStr
 logLevelName = \case
-  LevelDebug -> toLogStr "Debug"
-  LevelInfo -> toLogStr "Info"
-  LevelWarn -> toLogStr "Warn"
-  LevelError -> toLogStr "Error"
+  LevelDebug -> toLogStr "DEBUG"
+  LevelInfo -> toLogStr "INFO"
+  LevelWarn -> toLogStr "WARN"
+  LevelError -> toLogStr "ERROR"
 
 -- | Default log format.
 --
 -- >>> defLogFormat (T.pack "MySource") LevelInfo (toLogStr "Did something happen?")
--- "[Info#MySource] Did something happen?\n"
+-- "[INFO#MySource] Did something happen?\n"
 defLogFormat :: LogSrc -> LogLevel -> LogStr -> LogStr
 defLogFormat src level str = logStrPrinting "[$1$2] $3\n" [logLevelName level, srcSuffix, str]
   where
@@ -70,15 +72,26 @@ logStrPrinting inp args = foldMap asLog $ gatherRights (divides inp)
 class MonadIO m => MonadLog m where
   askLog :: LogSrc -> LogLevel -> m FastLogger
 
-logPrintf :: LogPrintfType l => FastLogger -> String -> l
-logPrintf logger inp = inLogPrintf logger inp []
+-- | Printf for loggers.
+--
+-- >>> (logPrintf "[$1]($3): $2 -> $4") 1 2 3 4 :: LogStr
+-- "[1](3): 2 -> 4"
+logPrintf :: LogPrintfType l => String -> l
+logPrintf inp = inLogPrintf inp []
 
 class LogPrintfType l where
-  inLogPrintf :: FastLogger -> String -> [LogStr] -> l
+  inLogPrintf :: String -> [LogStr] -> l
 
 -- In need of reverse
 instance (ToLogStr a, LogPrintfType l) => LogPrintfType (a -> l) where
-  inLogPrintf logger inp args = \arg -> inLogPrintf logger inp (toLogStr arg : args)
+  inLogPrintf inp args = \arg -> inLogPrintf inp (toLogStr arg : args)
 
-instance (a ~ (), MonadIO m) => LogPrintfType (m ()) where
-  inLogPrintf logger inp args = liftIO . logger $ logStrPrinting inp (reverse args)
+instance LogPrintfType LogStr where
+  inLogPrintf inp args = logStrPrinting inp (reverse args)
+
+instance (a ~ (), MonadIO m) => LogPrintfType (FastLogger -> m ()) where
+  inLogPrintf inp args = \logger -> liftIO . logger $ inLogPrintf inp args
+
+-- | Creates a logger to stderr and runs the logging action on it.
+logStderr :: (MonadUnliftIO m) => (FastLogger -> m a) -> m a
+logStderr logs = withRunInIO $ \unlift -> withFastLogger (LogStderr defaultBufSize) (unlift . logs)

@@ -22,6 +22,7 @@ import UI.Styles qualified as UI
 import UI.Window qualified as UI
 import UI.X11.DesktopVisual qualified as UI
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
+import Control.Env.PulpEnv
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -74,6 +75,9 @@ main = do
 
     activating :: UI.Application -> IO ()
     activating app = do
+      runPulpIO $ do
+        undefined
+
       cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
 
       window <- UI.appWindowNew app

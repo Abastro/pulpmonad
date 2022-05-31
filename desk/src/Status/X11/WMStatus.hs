@@ -122,18 +122,18 @@ prepareForQuery prepare getQuery = XPQuery $ do
   let XPQuery query = getQuery prepared in query
 
 -- INTERNAL for query run
-runXInt :: XPQuery a -> XIO () (Either [XQueryError] a, S.Set Atom)
+runXInt :: XPQuery a -> XIO r (Either [XQueryError] a, S.Set Atom)
 runXInt (XPQuery query) = do
   watched <- liftIO (newIORef [])
-  val <- xWithExt (\() -> watched) query
+  val <- xWithExt (\_ -> watched) query
   watchSet <- S.fromList <$> liftIO (readIORef watched)
   pure (validToEither val, watchSet)
 
 -- | Simply runs X query once.
-runXQuery :: XPQuery a -> XIO () (Either [XQueryError] a)
+runXQuery :: XPQuery a -> XIO r (Either [XQueryError] a)
 runXQuery (XPQuery query) = do
   placeholder <- liftIO (newIORef [])
-  validToEither <$> xWithExt (\() -> placeholder) query
+  validToEither <$> xWithExt (\_ -> placeholder) query
 
 -- | Watch X query at the given window.
 -- Note, allows some modifier process in between.

@@ -7,6 +7,9 @@ module Status.X11.XHandle (
   xWithExt,
   xOnWindow,
   startXIO,
+  XHandling,
+  runXHandling,
+  xHandling,
   xListenTo,
   xListenTo_,
   xSendTo,
@@ -154,6 +157,7 @@ startXIO :: XIO () a -> IO a
 startXIO initiate = do
   -- TODO Initiation action should NOT be XIO.
   -- Need to stop Initiation action from waiting for the task received.
+  -- Actually, initiation action is useless. Rather to have queueing actions.
   initResult <- newEmptyMVar -- Only use of MVar.
   _ <- forkOS . bracket (openDisplay "") closeDisplay $ \xhDisplay ->
     bracket_ installSignalHandlers uninstallSignalHandlers $ do
@@ -174,11 +178,10 @@ startXIO initiate = do
         atomically (flushTQueue actQueue) >>= traverse_ id
         -- .^. Before handling next X event, performs tasks in need of handling.
         unliftX $ loopHandle evPtr -- MAYBE some wait here to lessen CPU load
-
     loopHandle evPtr = withRunInIO $ \unliftX -> do
       -- Waits for 1ms, because otherwise we are overloading stuffs
       threadDelay 1000
-      
+
       display <- unliftX xDisplay
       listeners <- unliftX xListeners
       eventsQueued display queuedAfterFlush >>= \case
@@ -197,6 +200,19 @@ xQueueJob :: IO () -> XIO r ()
 xQueueJob job = do
   actQueue <- xActQueue
   liftIO $ atomically (writeTQueue actQueue job)
+
+newtype XHandling r = XHandling (forall a. XIO r a -> IO a)
+runXHandling :: XHandling r -> XIO r a -> IO a
+runXHandling (XHandling xHandle) = xHandle
+
+-- | Hand out the X handling so that listeners and senders could be registered and be used.
+xHandling :: XIO r (XHandling r)
+xHandling = withRunInIO $ \unliftX -> pure $
+  XHandling $ \act -> do
+    actQueue <- unliftX xActQueue
+    handleResult <- newEmptyMVar
+    atomically (writeTQueue actQueue $ unliftX act >>= putMVar handleResult)
+    takeMVar handleResult -- Waits for handling result
 
 -- MAYBE Use streaming library here
 
