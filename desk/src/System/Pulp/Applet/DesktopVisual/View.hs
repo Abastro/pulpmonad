@@ -1,4 +1,4 @@
-module UI.X11.DesktopVisual.View (
+module System.Pulp.Applet.DesktopVisual.View (
   ImageSet (..),
   widgetUpdateClass,
   DeskVisual,

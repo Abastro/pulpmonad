@@ -1,4 +1,4 @@
-module UI.X11.DesktopVisual.Handle (
+module System.Pulp.Applet.DesktopVisual.Handle (
   NumWindows,
   GetXIcon,
   DesktopSetup (..),
@@ -24,9 +24,9 @@ import Graphics.X11.Types
 import Status.X11.WMStatus
 import Status.X11.XHandle
 import System.Log.Logger
+import System.Pulp.Applet.DesktopVisual.View qualified as View
 import UI.Commons qualified as UI
 import UI.Task qualified as UI
-import UI.X11.DesktopVisual.View qualified as View
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case

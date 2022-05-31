@@ -1,4 +1,4 @@
-module Control.Env.PulpEnv (
+module System.Pulp.PulpEnv (
   PulpEnv,
   PulpIO,
   runPulpIO,

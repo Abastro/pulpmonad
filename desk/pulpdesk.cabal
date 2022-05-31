@@ -70,9 +70,13 @@ library
     UI.Containers
     UI.Window
     UI.Application
-    UI.X11.DesktopVisual
-    UI.X11.DesktopVisual.Handle
-    UI.X11.DesktopVisual.View
+
+    System.Log.LogPrint
+
+    System.Pulp.PulpEnv
+    System.Pulp.Applet.DesktopVisual
+    System.Pulp.Applet.DesktopVisual.Handle
+    System.Pulp.Applet.DesktopVisual.View
 
 test-suite test-pulpdesk
   import:             pulp-gtk

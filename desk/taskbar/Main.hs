@@ -15,14 +15,14 @@ import System.IO
 import System.Log.Handler.Simple
 import System.Log.Logger
 import System.Posix.Signals (sigINT)
+import System.Pulp.Applet.DesktopVisual qualified as App
+import System.Pulp.PulpEnv
 import UI.Application qualified as UI
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Styles qualified as UI
 import UI.Window qualified as UI
-import UI.X11.DesktopVisual qualified as UI
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
-import Control.Env.PulpEnv
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -48,12 +48,12 @@ main = do
     mayLabel n = fromMaybe n $ T.pack <$> workspaceMaps M.!? T.unpack n
 
     deskVisDeskSetup =
-      UI.DesktopSetup
-        { UI.desktopLabeling = maybe (T.pack "X") mayLabel
-        , UI.showDesktop = \stat@DesktopStat{desktopName} n ->
-            UI.defShowFn stat n && desktopName /= Just (T.pack scratchpadWorkspaceTag)
+      App.DesktopSetup
+        { App.desktopLabeling = maybe (T.pack "X") mayLabel
+        , App.showDesktop = \stat@DesktopStat{desktopName} n ->
+            App.defShowFn stat n && desktopName /= Just (T.pack scratchpadWorkspaceTag)
         }
-    deskVisWinSetup = UI.WindowSetup UI.defImageSetter
+    deskVisWinSetup = App.WindowSetup App.defImageSetter
 
     desktopVis :: IO UI.Widget
     desktopVis = do
@@ -64,7 +64,7 @@ main = do
         handler <- streamHandler stdout INFO
         updateGlobalLogger "DeskVis" $ setLevel INFO . setHandlers [handler]
       liftIO $ infoM "DeskVis" "Starting desktop visualizer..."
-      UI.deskVisualizer deskVisDeskSetup deskVisWinSetup
+      App.deskVisualizer deskVisDeskSetup deskVisWinSetup
 
     cssProv :: IO UI.CssProvider
     cssProv = do

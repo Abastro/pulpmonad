@@ -1,7 +1,7 @@
 {-# LANGUAGE MonoLocalBinds #-}
 
 -- | Desktops visualizer widget.
-module UI.X11.DesktopVisual (
+module System.Pulp.Applet.DesktopVisual (
   ImageSet (..),
   NumWindows,
   DesktopSetup (..),
@@ -33,8 +33,8 @@ import GI.Gio.Objects.DesktopAppInfo
 import GI.Gtk.Objects.IconTheme qualified as UI
 import Status.X11.WMStatus
 import System.Log.Logger
-import UI.X11.DesktopVisual.Handle
-import UI.X11.DesktopVisual.View (ImageSet (..))
+import System.Pulp.Applet.DesktopVisual.Handle
+import System.Pulp.Applet.DesktopVisual.View (ImageSet (..))
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO Optimize this one, maybe with caching
