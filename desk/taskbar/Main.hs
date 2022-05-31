@@ -35,6 +35,7 @@ workspaceMaps =
     , (game, "\xf43c")
     ]
 
+-- TODO Diagnose why heap grows to such a size
 main :: IO ()
 main = do
   Just app <- UI.applicationNew (Just $ T.pack "pulp.ui.taskbar") []

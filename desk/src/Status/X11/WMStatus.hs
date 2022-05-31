@@ -51,8 +51,6 @@ import Graphics.X11.Xlib.Extras
 import Status.X11.XHandle
 import Text.Printf
 
--- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
-
 asUtf8 :: MonadError T.Text m => BS.ByteString -> m T.Text
 asUtf8 = either (throwError . T.pack . show) pure . T.decodeUtf8'
 

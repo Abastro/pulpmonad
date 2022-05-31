@@ -77,13 +77,9 @@ fieldsWithHead hd pval = M.fromList <$> field `sepEndBy` eoH
   where
     field = P.label "field" $ (,) <$> (hd *> identH) <*> pval
 
--- MAYBE create generalized module for parsing?
-
 -- | Map query monad.
 newtype QueryMap b a = QueryMap (ExceptT String (State (M.Map T.Text b)) a)
   deriving (Functor, Applicative, Monad)
-
--- MAYBE Log all the failures?
 
 instance MonadFail (QueryMap b) where
   fail = QueryMap . throwError

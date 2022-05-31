@@ -19,11 +19,15 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import Data.ByteString qualified as BS
+import Data.ByteString.Builder qualified as BS
 import Data.List
 import Data.Maybe
 import Data.Monoid
 import Data.Text qualified as T
 import GI.GLib (castTo)
+import GI.GLib.Structs.Bytes qualified as Glib
+import GI.GdkPixbuf.Enums qualified as Gdk
+import GI.GdkPixbuf.Objects.Pixbuf qualified as Gdk
 import GI.Gio.Interfaces.AppInfo
 import GI.Gio.Objects.DesktopAppInfo
 import GI.Gtk.Objects.IconTheme qualified as UI
@@ -31,11 +35,8 @@ import Status.X11.WMStatus
 import System.Log.Logger
 import UI.X11.DesktopVisual.Handle
 import UI.X11.DesktopVisual.View (ImageSet (..))
-import qualified Data.ByteString.Builder as BS
-import qualified GI.GLib.Structs.Bytes as Glib
-import qualified GI.GdkPixbuf.Objects.Pixbuf as Gdk
-import qualified GI.GdkPixbuf.Enums as Gdk
 
+-- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO Optimize this one, maybe with caching
 appInfoImageSetter :: WindowInfo -> MaybeT IO ImageSet
 appInfoImageSetter WindowInfo{..} = do
@@ -78,6 +79,8 @@ xIconImageSetter getXIcon =
       pixbuf <- Gdk.pixbufNewFromBytes bytes Gdk.ColorspaceRgb True 8 width height (width * 4)
       pure $ ImgSPixbuf pixbuf
   where
+    -- TODO Reduce empty pinned portion of memory
+    -- MAYBE use bytes package?
     convColor emp | True <- BS.null emp = mempty
     convColor colors
       | (argb, rem) <- BS.splitAt 4 colors =
