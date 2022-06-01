@@ -1,7 +1,6 @@
 module Main where
 
 import Control.Monad
-import Control.Monad.IO.Class
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Text qualified as T
@@ -11,9 +10,6 @@ import GI.Gtk.Objects.Box qualified as UI
 import Status.X11.WMStatus (DesktopStat (..))
 import System.Environment
 import System.Exit
-import System.IO
-import System.Log.Handler.Simple
-import System.Log.Logger
 import System.Posix.Signals (sigINT)
 import System.Pulp.Applet.DesktopVisual qualified as App
 import System.Pulp.PulpEnv
@@ -57,14 +53,8 @@ main = do
 
     desktopVis :: IO UI.Widget
     desktopVis = do
-      liftIO $ do
-        -- Wat in tarnation, having to do just for logging?
-        -- Will get rid of it once I got time
-        updateGlobalLogger rootLoggerName removeHandler
-        handler <- streamHandler stdout INFO
-        updateGlobalLogger "DeskVis" $ setLevel INFO . setHandlers [handler]
-      liftIO $ infoM "DeskVis" "Starting desktop visualizer..."
-      App.deskVisualizer deskVisDeskSetup deskVisWinSetup
+      -- For now, run PulpIO here locally.
+      runPulpIO $ App.deskVisualizer deskVisDeskSetup deskVisWinSetup
 
     cssProv :: IO UI.CssProvider
     cssProv = do
@@ -75,9 +65,6 @@ main = do
 
     activating :: UI.Application -> IO ()
     activating app = do
-      runPulpIO $ do
-        undefined
-
       cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
 
       window <- UI.appWindowNew app

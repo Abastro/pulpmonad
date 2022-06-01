@@ -35,6 +35,7 @@ import Status.X11.WMStatus
 import System.Log.Logger
 import System.Pulp.Applet.DesktopVisual.Handle
 import System.Pulp.Applet.DesktopVisual.View (ImageSet (..))
+import qualified Data.ByteString.Lazy as LBS
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO Optimize this one, maybe with caching
@@ -71,7 +72,7 @@ xIconImageSetter getXIcon =
       -- If empty, fails on MaybeT, i.e. give Nothing.
       XIcon{..} : _ <- pure $ sortOn (\XIcon{iconHeight} -> abs (iconHeight - 24)) icons
       -- Convert: ARGB -> RGBA
-      let converted = BS.toStrict . BS.toLazyByteString $ convColor iconColors
+      let converted = LBS.toStrict . BS.toLazyByteString $ convColor iconColors
       bytes <- Glib.bytesNew (Just converted)
       -- TODO How to GC the pixbuf?
       let width = fromIntegral iconWidth

@@ -8,7 +8,6 @@ import Control.Monad.Trans.Maybe
 import Data.Foldable
 import Data.Map qualified as M
 import Data.Maybe
-import Data.Ord (clamp)
 import Data.Ratio ((%))
 import Data.Text qualified as T
 import Data.Traversable
@@ -86,7 +85,7 @@ mainboardWidget = do
       let cpuN n = T.pack $ printf "cpu-%03d" (n * 20)
       fg <- UI.iconNewTask UI.IconSizeDnd taskTemp \temp ->
         -- Will operate on range 20C - 120C
-        let tmpInd :: Int = round $ clamp (0, 100) (temp - 20) * 0.05 in cpuN tmpInd
+        let tmpInd :: Int = round $ (max 0 . min 100 $ temp - 20) * 0.05 in cpuN tmpInd
       let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
       bar <- UI.barNewTask barRect (0.9, 0.6, 0.1) taskUse (cpuUsed . cpuRatios)
       UI.overlayed fg [bar]

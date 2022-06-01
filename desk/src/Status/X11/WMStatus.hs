@@ -50,6 +50,7 @@ import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Status.X11.XHandle
 import Text.Printf
+import qualified Data.ByteString.Lazy as LBS
 
 asUtf8 :: MonadError T.Text m => BS.ByteString -> m T.Text
 asUtf8 = either (throwError . T.pack . show) pure . T.decodeUtf8'
@@ -269,7 +270,7 @@ instance XPropType CLong [XIcon] where
       | iconWidth <- fromIntegral width
       , iconHeight <- fromIntegral height
       , (dat, rem) <- splitAt (iconWidth * iconHeight) xs -> do
-          let iconColors = BS.toStrict . BS.toLazyByteString $ foldMap (BS.word32BE . fromIntegral) dat
+          let iconColors = LBS.toStrict . BS.toLazyByteString $ foldMap (BS.word32BE . fromIntegral) dat
           if BS.length iconColors /= 4 * iconWidth * iconHeight
             then throwError $ T.pack "Not enough pixels read for given width, height"
             else (XIcon{..} :) <$> parseProp rem

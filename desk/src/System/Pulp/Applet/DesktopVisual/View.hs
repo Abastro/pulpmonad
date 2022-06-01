@@ -41,7 +41,7 @@ widgetUpdateClass widget asClass state =
 
 -- | Desktop visualizer view
 data DeskVisual = DeskVisual
-  { deskVisualWidget :: !UI.Widget
+  { deskVisualWid :: !UI.Widget
   , deskVisualCont :: !UI.Container
   , deskVisualItems :: !(IORef (V.Vector DeskItem))
   }
@@ -51,7 +51,7 @@ data DeskVisualOp
   | AddDeskItems !(V.Vector DeskItem)
 
 deskVisualWidget :: DeskVisual -> UI.Widget
-deskVisualWidget DeskVisual{deskVisualWidget} = deskVisualWidget
+deskVisualWidget DeskVisual{deskVisualWid} = deskVisualWid
 
 deskVisualItemAt :: MonadIO m => DeskVisual -> Int -> m (Maybe DeskItem)
 deskVisualItemAt DeskVisual{..} idx = do
@@ -61,8 +61,8 @@ deskVisualItemAt DeskVisual{..} idx = do
 deskVisualNew :: MonadIO m => m DeskVisual
 deskVisualNew = do
   deskVisualCont <- UI.toContainer =<< UI.boxNew UI.OrientationHorizontal 5
-  deskVisualWidget <- UI.toWidget deskVisualCont
-  UI.widgetGetStyleContext deskVisualWidget >>= flip UI.styleContextAddClass (T.pack "desk-visual")
+  deskVisualWid <- UI.toWidget deskVisualCont
+  UI.widgetGetStyleContext deskVisualWid >>= flip UI.styleContextAddClass (T.pack "desk-visual")
 
   deskVisualItems <- liftIO $ newIORef V.empty
   pure DeskVisual{..}
@@ -71,18 +71,18 @@ deskVisualCtrl :: MonadIO m => DeskVisual -> DeskVisualOp -> m ()
 deskVisualCtrl DeskVisual{..} = \case
   CutDeskItemsTo newCnt -> do
     toDelete <- liftIO $ atomicModifyIORef' deskVisualItems $ V.splitAt newCnt
-    for_ toDelete $ \DeskItem{deskItemWidget} -> do
-      UI.widgetHide deskItemWidget
-      UI.widgetDestroy deskItemWidget
+    for_ toDelete $ \DeskItem{deskItemWid} -> do
+      UI.widgetHide deskItemWid
+      UI.widgetDestroy deskItemWid
   AddDeskItems deskItems -> do
     liftIO $ modifyIORef' deskVisualItems (<> deskItems)
-    for_ deskItems $ \DeskItem{deskItemWidget} -> do
-      UI.containerAdd deskVisualCont deskItemWidget
-      UI.widgetShowAll deskItemWidget
+    for_ deskItems $ \DeskItem{deskItemWid} -> do
+      UI.containerAdd deskVisualCont deskItemWid
+      UI.widgetShowAll deskItemWid
 
 -- | Desktop item view
 data DeskItem = DeskItem
-  { deskItemWidget :: !UI.Widget
+  { deskItemWid :: !UI.Widget
   -- ^ The congregated widget
   , deskItemName :: !UI.Label
   , deskItemWinCont :: !UI.Box
@@ -95,7 +95,7 @@ data DeskItemOp
   | DeskLabelName !T.Text
 
 deskItemWidget :: DeskItem -> UI.Widget
-deskItemWidget DeskItem{deskItemWidget} = deskItemWidget
+deskItemWidget DeskItem{deskItemWid} = deskItemWid
 
 deskItemNew :: MonadIO m => IO () -> m DeskItem
 deskItemNew onClick = do
@@ -108,44 +108,44 @@ deskItemNew onClick = do
     UI.boxed UI.OrientationHorizontal 0
       =<< sequenceA [UI.toWidget deskItemName, UI.toWidget deskItemWinCont]
 
-  deskItemWidget <- UI.buttonNewWith (Just deskMain) onClick
-  UI.widgetGetStyleContext deskItemWidget >>= flip UI.styleContextAddClass (T.pack "desktop-item")
+  deskItemWid <- UI.buttonNewWith (Just deskMain) onClick
+  UI.widgetGetStyleContext deskItemWid >>= flip UI.styleContextAddClass (T.pack "desktop-item")
 
   pure DeskItem{..}
 
 deskItemCtrl :: MonadIO m => DeskItem -> DeskItemOp -> m ()
 deskItemCtrl DeskItem{..} = \case
-  AddWinItemAt WinItem{winItemWidget} idx -> do
-    UI.containerAdd deskItemWinCont winItemWidget
-    UI.boxReorderChild deskItemWinCont winItemWidget $ fromIntegral idx
-    UI.widgetShowAll winItemWidget
-  RemoveWinItem WinItem{winItemWidget} -> do
-    UI.widgetHide winItemWidget
-    UI.containerRemove deskItemWinCont winItemWidget
+  AddWinItemAt WinItem{winItemWid} idx -> do
+    UI.containerAdd deskItemWinCont winItemWid
+    UI.boxReorderChild deskItemWinCont winItemWid $ fromIntegral idx
+    UI.widgetShowAll winItemWid
+  RemoveWinItem WinItem{winItemWid} -> do
+    UI.widgetHide winItemWid
+    UI.containerRemove deskItemWinCont winItemWid
   ReorderWinItems winItems -> do
-    for_ (V.indexed winItems) $ \(idx, WinItem{winItemWidget}) -> do
-      UI.boxReorderChild deskItemWinCont winItemWidget $ fromIntegral idx
+    for_ (V.indexed winItems) $ \(idx, WinItem{winItemWid}) -> do
+      UI.boxReorderChild deskItemWinCont winItemWid $ fromIntegral idx
 
   -- Mundane property update here
   DeskLabelName name -> UI.labelSetLabel deskItemName name
 
 -- | Window item view
 data WinItem = WinItem
-  { winItemWidget :: !UI.Widget
+  { winItemWid :: !UI.Widget
   -- ^ The congregated widget
   , winItemImg :: !UI.Image
   }
 
 winItemWidget :: WinItem -> UI.Widget
-winItemWidget WinItem{winItemWidget} = winItemWidget
+winItemWidget WinItem{winItemWid} = winItemWid
 
 winItemNew :: MonadIO m => IO () -> m WinItem
 winItemNew onClick = do
   winItemImg <- UI.imageNew
 
   winImg <- UI.toWidget winItemImg
-  winItemWidget <- UI.buttonNewWith (Just winImg) onClick
-  UI.widgetGetStyleContext winItemWidget >>= flip UI.styleContextAddClass (T.pack "window-item")
+  winItemWid <- UI.buttonNewWith (Just winImg) onClick
+  UI.widgetGetStyleContext winItemWid >>= flip UI.styleContextAddClass (T.pack "window-item")
 
   pure WinItem{..}
 

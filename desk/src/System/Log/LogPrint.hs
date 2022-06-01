@@ -7,8 +7,10 @@ module System.Log.LogPrint (
   LogLevel (..),
   logLevelName,
   defLogFormat,
-  withFM,
+  withF,
   MonadLog (..),
+  LevelLogger,
+  logS,
   logPrintf,
   LogPrintfType,
   logStderr,
@@ -21,6 +23,7 @@ import Data.Either
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import System.Log.FastLogger
+import Data.Maybe
 
 type LogSrc = T.Text
 data LogLevel = LevelDebug | LevelInfo | LevelWarn | LevelError
@@ -44,11 +47,19 @@ defLogFormat src level str = logStrPrinting "[$1$2] $3\n" [logLevelName level, s
       True -> mempty
       False -> toLogStr "#" <> toLogStr src
 
--- TODO Error level handling - verbosity?
+type LevelLogger = LogSrc -> LogLevel -> FastLogger
 
 -- | Logger with certain format. Use this to build MonadLog.
-withFM :: Functor m => (LogSrc -> LogLevel -> LogStr -> LogStr) -> (m FastLogger -> LogSrc -> LogLevel -> m FastLogger)
-withFM format baseLog src level = fmap (. format src level) baseLog
+withF :: (LogSrc -> LogLevel -> LogStr -> LogStr) -> FastLogger -> LevelLogger
+withF format = \logger src level -> logger . format src level
+
+-- TODO Error level handling - verbosity?
+
+class MonadIO m => MonadLog m where
+  askLog :: m LevelLogger
+
+logS :: MonadLog m => LogSrc -> LogLevel -> LogStr -> m ()
+logS src level msg = askLog >>= \logger -> liftIO (logger src level msg)
 
 -- Supports only '$1' style arguments
 logStrPrinting :: String -> [LogStr] -> LogStr
@@ -66,31 +77,29 @@ logStrPrinting inp args = foldMap asLog $ gatherRights (divides inp)
 
     argVec = V.fromList args
     asLog = \case
-      Left n -> argVec V.! pred n
+      Left n -> fromMaybe (error "printf arg out of bounds") $ argVec V.!? pred n
       Right msg -> toLogStr msg
 
-class MonadIO m => MonadLog m where
-  askLog :: LogSrc -> LogLevel -> m FastLogger
-
 -- | Printf for loggers.
+-- Uses default format for printing to LogStr.
 --
--- >>> (logPrintf "[$1]($3): $2 -> $4") 1 2 3 4 :: LogStr
--- "[1](3): 2 -> 4"
-logPrintf :: LogPrintfType l => String -> l
-logPrintf inp = inLogPrintf inp []
+-- >>> logPrintf (T.pack "MYSource") LevelDebug "message [$1]($2) $3 - $4" 1 2 3 4 :: LogStr
+-- "[DEBUG#MYSource] message [1](2) 3 - 4\n"
+logPrintf :: LogPrintfType l => LogSrc -> LogLevel -> String -> l
+logPrintf src lvl inp = inLogPrintf src lvl inp []
 
 class LogPrintfType l where
-  inLogPrintf :: String -> [LogStr] -> l
+  inLogPrintf :: LogSrc -> LogLevel -> String -> [LogStr] -> l
 
 -- In need of reverse
-instance (ToLogStr a, LogPrintfType l) => LogPrintfType (a -> l) where
-  inLogPrintf inp args = \arg -> inLogPrintf inp (toLogStr arg : args)
+instance {-# OVERLAPS #-} (ToLogStr a, LogPrintfType l) => LogPrintfType (a -> l) where
+  inLogPrintf src lvl inp args = \arg -> inLogPrintf src lvl inp (toLogStr arg : args)
 
 instance LogPrintfType LogStr where
-  inLogPrintf inp args = logStrPrinting inp (reverse args)
+  inLogPrintf src lvl inp args = defLogFormat src lvl $ logStrPrinting inp (reverse args)
 
-instance (a ~ (), MonadIO m) => LogPrintfType (FastLogger -> m ()) where
-  inLogPrintf inp args = \logger -> liftIO . logger $ inLogPrintf inp args
+instance {-# OVERLAPS #-} (a ~ (), MonadLog m) => LogPrintfType (m a) where
+  inLogPrintf src lvl inp args = logS src lvl $ logStrPrinting inp (reverse args)
 
 -- | Creates a logger to stderr and runs the logging action on it.
 logStderr :: (MonadUnliftIO m) => (FastLogger -> m a) -> m a

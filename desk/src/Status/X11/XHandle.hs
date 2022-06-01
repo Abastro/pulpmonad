@@ -242,7 +242,7 @@ xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
   taskCreate listenQueue (unliftX $ xQueueJob endListen) <$ beginListen
   where
     updateMask listeners = liftDWIO $ \disp win -> do
-      Ior newMask <- foldMap (Ior . maskOf) . getWinListen win <$> readIORef listeners
+      newMask <- foldl' (.|.) 0 . fmap maskOf . getWinListen win <$> readIORef listeners
       selectInput disp win newMask
     maskOf (XListen mask _ _) = mask
 

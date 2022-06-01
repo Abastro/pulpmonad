@@ -21,11 +21,11 @@ newtype PulpIO a = PulpIO (ReaderT PulpEnv IO a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadUnliftIO)
 
 instance MonadLog PulpIO where
-  askLog = withFM defLogFormat (PulpIO . asks $ \PulpEnv{pulpLogger} -> pulpLogger)
+  askLog = withF defLogFormat <$> (PulpIO . asks) (\PulpEnv{pulpLogger} -> pulpLogger)
 
 -- | Run an PulpIO action. Recommended to call only once.
 runPulpIO :: PulpIO a -> IO a
-runPulpIO (PulpIO act) =
+runPulpIO (PulpIO act) = do
   logStderr $ \pulpLogger -> do
     pulpXHandling <- liftIO (startXIO xHandling)
     runReaderT act PulpEnv{..}

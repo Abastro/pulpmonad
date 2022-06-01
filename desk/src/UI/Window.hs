@@ -14,7 +14,6 @@ module UI.Window (
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Int
-import Data.Ord
 import Data.Vector qualified as V
 import Data.Word
 import Foreign.C.Types
@@ -78,7 +77,7 @@ data DockSpan = DockSpan {dockBegin :: !Rational, dockEnd :: !Rational}
 sizeRatio :: Word32 -> DockSize -> Rational
 sizeRatio full = \case
   RelativeSize rel -> rel
-  AbsoluteSize size -> clamp (0, 1) $ fromIntegral size / fromIntegral full
+  AbsoluteSize size -> max 0 . min 1 $ fromIntegral size / fromIntegral full
 
 -- | Tuple of full size (perpendicular to DockPos) and full span (parallel to DockPos).
 fullSizeSpan :: Rectangle -> DockPos -> (Word32, Word32)
