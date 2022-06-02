@@ -1,4 +1,6 @@
 {-# LANGUAGE GADTs #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Redundant lambda" #-}
 
 -- | Thin logger facility on top of fast-logger, requires IO
 module System.Log.LogPrint (
@@ -43,9 +45,7 @@ logLevelName = \case
 defLogFormat :: LogSrc -> LogLevel -> LogStr -> LogStr
 defLogFormat src level str = logStrPrinting "[$1$2] $3\n" [logLevelName level, srcSuffix, str]
   where
-    srcSuffix = case T.null src of
-      True -> mempty
-      False -> toLogStr "#" <> toLogStr src
+    srcSuffix = if T.null src then mempty else toLogStr "#" <> toLogStr src
 
 type LevelLogger = LogSrc -> LogLevel -> FastLogger
 

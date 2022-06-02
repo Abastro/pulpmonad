@@ -175,7 +175,7 @@ startXIO initiate = do
       let _ = 0
       actQueue <- unliftX xActQueue
       allocaXEvent $ \evPtr -> forever $ do
-        atomically (flushTQueue actQueue) >>= traverse_ id
+        atomically (flushTQueue actQueue) >>= sequenceA_
         -- .^. Before handling next X event, performs tasks in need of handling.
         unliftX $ loopHandle evPtr -- MAYBE some wait here to lessen CPU load
     loopHandle evPtr = withRunInIO $ \unliftX -> do
@@ -222,7 +222,7 @@ xHandling = withRunInIO $ \unliftX -> pure $
 xListenTo ::
   EventMask ->
   Window ->
-  (Maybe a) ->
+  Maybe a ->
   (Event -> XIO r (Maybe a)) ->
   XIO r (Task a)
 xListenTo mask window initial handler = withRunInIO $ \unliftX -> do

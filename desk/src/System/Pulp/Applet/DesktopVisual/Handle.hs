@@ -28,7 +28,6 @@ import System.Pulp.Applet.DesktopVisual.View qualified as View
 import System.Pulp.PulpEnv
 import UI.Commons qualified as UI
 import UI.Task qualified as UI
-import Control.Concurrent
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -50,16 +49,16 @@ type NumWindows = Word
 
 -- | Desktop part of the setup.
 data DesktopSetup = DesktopSetup
-  { desktopLabeling :: Maybe T.Text -> T.Text
-  -- ^ Labeling rule for the desktop.
-  , showDesktop :: DesktopStat -> NumWindows -> Bool
-  -- ^ Whether to show certain desktop or not.
+  { -- | Labeling rule for the desktop.
+    desktopLabeling :: Maybe T.Text -> T.Text
+  , -- | Whether to show certain desktop or not.
+    showDesktop :: DesktopStat -> NumWindows -> Bool
   }
 
 -- | Window part of the setup.
-data WindowSetup = WindowSetup
-  { windowImgSetter :: WindowInfo -> GetXIcon -> IO View.ImageSet
-  -- ^ With which iamge the window is going to set to.
+newtype WindowSetup = WindowSetup
+  { -- | With which iamge the window is going to set to.
+    windowImgSetter :: WindowInfo -> GetXIcon -> IO View.ImageSet
   }
 
 -- | Desktops visualizer widget. Forks its own X11 event handler.
@@ -85,27 +84,17 @@ deskVisMake ::
   PulpIO DeskVisHandle
 deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -> do
   act <- registers <$> newIORef V.empty <*> newIORef M.empty <*> newIORef M.empty <*> newIORef Nothing
-  unlift $ logPrintf (T.pack "DeskVis") LevelInfo "Starting..."
-  forkOS $ do
-    caps <- myThreadId >>= threadCapability
-    putStrLn $ "Forked capability " <> show caps
-    unlift $ logPrintf (T.pack "DeskVis") LevelInfo "Forked"
   unlift act
   where
     registers desksRef winsRef ordersRef activeRef = withRunInIO $ \unlift -> do
-      logger <- unlift askLog
-      killStat <- UI.uiTask desktopStats (unlift . updateDeskStats logger)
+      killStat <- UI.uiTask desktopStats (unlift . updateDeskStats)
       killWinCh <- UI.uiTask windowsChange (unlift . changeWindows)
       killActiv <- UI.uiTask windowActive (unlift . changeActivate)
       _ <- UI.onWidgetDestroy (View.deskVisualWidget view) (killStat >> killWinCh >> killActiv)
       pure DeskVisHandle
       where
-        updateDeskStats :: LevelLogger -> V.Vector DesktopStat -> PulpIO ()
-        updateDeskStats logger newStats = withRunInIO $ \_unlift -> do
-          caps <- myThreadId >>= threadCapability
-          putStrLn $ "capability " <> show caps -- (1, False) etc.
-          -- FIXME Why logging does not work here?
-          logger (T.pack "DeskVis") LevelInfo (toLogStr "desktop stats")
+        updateDeskStats :: V.Vector DesktopStat -> PulpIO ()
+        updateDeskStats newStats = withRunInIO $ \unlift -> do
           -- Cut down to available desktops
           let numDesk = V.length newStats
           modifyIORef' desksRef (V.take numDesk)
@@ -115,13 +104,13 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           oldNum <- V.length <$> readIORef desksRef
           addeds <- for (V.drop oldNum $ V.indexed newStats) $ \(idx, stat) -> do
             deskItemView <- View.deskItemNew $ reqToDesktop idx
-            (deskItemView,) <$> deskItemMake deskSetup stat deskItemView
+            (deskItemView,) <$> unlift (deskItemMake deskSetup stat deskItemView)
           modifyIORef' desksRef (<> fmap snd addeds)
           View.deskVisualCtrl view (View.AddDeskItems $ fmap fst addeds)
 
           -- Update all desktops
           deskItems <- readIORef desksRef
-          () <$ V.zipWithM (\DeskItemHandle{updateDeskItem} -> updateDeskItem) deskItems newStats
+          V.zipWithM_ (\DeskItemHandle{updateDeskItem} -> updateDeskItem) deskItems newStats
 
         changeWindows :: DWindowChange -> PulpIO ()
         changeWindows (DWindowChange newOrder adding removed) = withRunInIO $ \unlift -> do
@@ -178,8 +167,8 @@ data DeskItemHandle = DeskItemHandle
   , reorderWinItems :: (Window -> Maybe Int) -> M.Map Window WinItemHandle -> IO ()
   }
 
-deskItemMake :: DesktopSetup -> DesktopStat -> View.DeskItem -> IO DeskItemHandle
-deskItemMake DesktopSetup{..} initStat view = do
+deskItemMake :: DesktopSetup -> DesktopStat -> View.DeskItem -> PulpIO DeskItemHandle
+deskItemMake DesktopSetup{..} initStat view = withRunInIO $ \_unlift -> do
   creates <$> newIORef initStat <*> newIORef V.empty
   where
     creates statRef curWindows = DeskItemHandle{..}
@@ -213,11 +202,11 @@ deskItemMake DesktopSetup{..} initStat view = do
         updateVisible curWindows = do
           deskStat <- readIORef statRef
           numWindows <- fromIntegral . V.length <$> readIORef curWindows
-          case showDesktop deskStat numWindows of
-            True -> UI.widgetShowAll (View.deskItemWidget view)
-            False -> UI.widgetHide (View.deskItemWidget view)
+          if showDesktop deskStat numWindows
+            then UI.widgetShowAll (View.deskItemWidget view)
+            else UI.widgetHide (View.deskItemWidget view)
 
-data WinItemHandle = WinItemHandle
+newtype WinItemHandle = WinItemHandle
   { itemWindowView :: View.WinItem -- As window can move around, its view should be separately owned.
   }
 
@@ -231,7 +220,7 @@ winItemMake ::
   PulpIO WinItemHandle
 winItemMake WindowSetup{..} getXIcon onSwitch winDeskTask infoTask view = do
   -- (-1) is never a valid desktop (means the window is omnipresent)
-  liftIO . join $ registers <$> newIORef (-1)
+  liftIO $ registers =<< newIORef (-1)
   where
     registers curDeskRef = do
       killChDesk <- UI.uiTask winDeskTask changeDesktop
@@ -240,7 +229,7 @@ winItemMake WindowSetup{..} getXIcon onSwitch winDeskTask infoTask view = do
       pure WinItemHandle{itemWindowView = view}
       where
         changeDesktop newDesk = do
-          oldDesk <- atomicModifyIORef' curDeskRef $ (newDesk,)
+          oldDesk <- atomicModifyIORef' curDeskRef (newDesk,)
           when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk
 
         updateWindow winInfo@WindowInfo{..} = do
@@ -286,7 +275,7 @@ deskVisInitiate logger = do
     watchXQuery rootWin getAllWindows $ \newWindowsVec -> do
       let order = M.fromList $ zip (V.toList newWindowsVec) [0 ..]
       let newWindows = S.fromList $ V.toList newWindowsVec
-      oldWindows <- liftIO $ atomicModifyIORef' windowRef $ \oldWindows -> (newWindows, oldWindows)
+      oldWindows <- liftIO $ atomicModifyIORef' windowRef (newWindows,)
       let removed = oldWindows S.\\ newWindows
       let added = newWindows S.\\ oldWindows
       -- "Invalid" windows are ignored from here

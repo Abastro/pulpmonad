@@ -34,8 +34,10 @@ import Control.Monad.Except
 import Data.Bitraversable
 import Data.ByteString qualified as BS
 import Data.ByteString.Builder qualified as BS
+import Data.ByteString.Lazy qualified as LBS
 import Data.Functor.Compose
 import Data.IORef
+import Data.List
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Proxy
@@ -50,7 +52,6 @@ import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Status.X11.XHandle
 import Text.Printf
-import qualified Data.ByteString.Lazy as LBS
 
 asUtf8 :: MonadError T.Text m => BS.ByteString -> m T.Text
 asUtf8 = either (throwError . T.pack . show) pure . T.decodeUtf8'
@@ -119,14 +120,14 @@ queryProp name = XPQuery $ do
 {-# WARNING prepareForQuery "Hack for interning more atoms. Could be removed" #-}
 prepareForQuery :: XIO () a -> (a -> XPQuery b) -> XPQuery b
 prepareForQuery prepare getQuery = XPQuery $ do
-  prepared <- xWithExt (\_ -> ()) prepare
+  prepared <- xWithExt (const ()) prepare
   let XPQuery query = getQuery prepared in query
 
 -- INTERNAL for query run
 runXInt :: XPQuery a -> XIO r (Either [XQueryError] a, S.Set Atom)
 runXInt (XPQuery query) = do
   watched <- liftIO (newIORef [])
-  val <- xWithExt (\_ -> watched) query
+  val <- xWithExt (const watched) query
   watchSet <- S.fromList <$> liftIO (readIORef watched)
   pure (validToEither val, watchSet)
 
@@ -134,7 +135,7 @@ runXInt (XPQuery query) = do
 runXQuery :: XPQuery a -> XIO r (Either [XQueryError] a)
 runXQuery (XPQuery query) = do
   placeholder <- liftIO (newIORef [])
-  validToEither <$> xWithExt (\_ -> placeholder) query
+  validToEither <$> xWithExt (const placeholder) query
 
 -- | Watch X query at the given window.
 -- Note, allows some modifier process in between.
@@ -169,8 +170,8 @@ data DesktopState
 
 -- | Desktop status for each desktop.
 data DesktopStat = DesktopStat
-  { desktopName :: Maybe T.Text
-  -- ^ Name of the desktop. May not exist.
+  { -- | Name of the desktop. May not exist.
+    desktopName :: Maybe T.Text
   , desktopState :: !DesktopState
   }
 
@@ -210,7 +211,7 @@ getAllWindows = V.fromList <$> queryProp @[Window] "_NET_CLIENT_LIST"
 
 -- | Get an active window.
 getActiveWindow :: XPQuery (Maybe Window)
-getActiveWindow = listToMaybe . filter (> 0) <$> queryProp @[Window] "_NET_ACTIVE_WINDOW"
+getActiveWindow = find (> 0) <$> queryProp @[Window] "_NET_ACTIVE_WINDOW"
 
 -- | Request active window. flag should be True if you are a pager.
 -- Must be called from root window.
@@ -268,12 +269,12 @@ instance XPropType CLong [XIcon] where
     [] -> pure []
     width : height : xs
       | iconWidth <- fromIntegral width
-      , iconHeight <- fromIntegral height
-      , (dat, rem) <- splitAt (iconWidth * iconHeight) xs -> do
-          let iconColors = LBS.toStrict . BS.toLazyByteString $ foldMap (BS.word32BE . fromIntegral) dat
-          if BS.length iconColors /= 4 * iconWidth * iconHeight
-            then throwError $ T.pack "Not enough pixels read for given width, height"
-            else (XIcon{..} :) <$> parseProp rem
+        , iconHeight <- fromIntegral height
+        , (dat, rem) <- splitAt (iconWidth * iconHeight) xs -> do
+        let iconColors = LBS.toStrict . BS.toLazyByteString $ foldMap (BS.word32BE . fromIntegral) dat
+        if BS.length iconColors /= 4 * iconWidth * iconHeight
+          then throwError $ T.pack "Not enough pixels read for given width, height"
+          else (XIcon{..} :) <$> parseProp rem
     _ -> throwError $ T.pack "Cannot read width, height"
 
 -- | Get the window icon.

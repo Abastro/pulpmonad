@@ -2,7 +2,6 @@ module Main where
 
 import Control.Monad
 import Data.Map.Strict qualified as M
-import Data.Maybe
 import Data.Text qualified as T
 import Defines
 import GI.GLib qualified as UI
@@ -19,6 +18,7 @@ import UI.Containers qualified as UI
 import UI.Styles qualified as UI
 import UI.Window qualified as UI
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
+import Control.Monad.IO.Unlift
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -34,14 +34,14 @@ workspaceMaps =
 
 -- TODO Diagnose why heap grows to such a size
 main :: IO ()
-main = do
+main = runPulpIO $ withRunInIO $ \unlift -> do
   Just app <- UI.applicationNew (Just $ T.pack "pulp.ui.taskbar") []
-  UI.onApplicationActivate app (activating app)
+  UI.onApplicationActivate app (unlift $ activating app)
   UI.unixSignalAdd UI.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ UI.applicationQuit app
   status <- UI.applicationRun app Nothing
-  when (status /= 0) $ exitWith (ExitFailure $ fromIntegral status)
+  when (status /= 0) . liftIO $ exitWith (ExitFailure $ fromIntegral status)
   where
-    mayLabel n = fromMaybe n $ T.pack <$> workspaceMaps M.!? T.unpack n
+    mayLabel n = maybe n T.pack $ workspaceMaps M.!? T.unpack n
 
     deskVisDeskSetup =
       App.DesktopSetup
@@ -51,20 +51,19 @@ main = do
         }
     deskVisWinSetup = App.WindowSetup App.defImageSetter
 
-    desktopVis :: IO UI.Widget
+    desktopVis :: PulpIO UI.Widget
     desktopVis = do
-      -- For now, run PulpIO here locally.
-      runPulpIO $ App.deskVisualizer deskVisDeskSetup deskVisWinSetup
+      App.deskVisualizer deskVisDeskSetup deskVisWinSetup
 
     cssProv :: IO UI.CssProvider
     cssProv = do
       css <- UI.cssProviderNew
-      cfgDir <- getEnv "XMONAD_CONFIG_DIR"
+      cfgDir <- liftIO $ getEnv "XMONAD_CONFIG_DIR"
       UI.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-taskbar.css")
       pure css
 
-    activating :: UI.Application -> IO ()
-    activating app = do
+    activating :: UI.Application -> PulpIO ()
+    activating app = withRunInIO $ \unlift -> do
       cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
 
       window <- UI.appWindowNew app
@@ -76,10 +75,11 @@ main = do
 
       UI.windowSetTransparent window
 
-      UI.containerAdd window =<< barBox
+      UI.containerAdd window =<< unlift barBox
 
       UI.widgetShowAll window
 
+    barBox :: PulpIO UI.Widget
     barBox = do
       box <- UI.boxNew UI.OrientationHorizontal 5
       UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "taskbar-box")
