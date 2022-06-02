@@ -212,7 +212,8 @@ xHandling = withRunInIO $ \unliftX -> pure $
     atomically (writeTQueue actQueue $ unliftX act >>= putMVar handleResult)
     takeMVar handleResult
 
--- | Take X query commands, give the action to query the result, performed in the X thread.
+-- | Take X query commands, give the action to query the result.
+-- The query will be performed in the X thread.
 -- WARNING: the returned action can block while querying the result.
 xQueryOnce :: (a -> XIO r b) -> XIO r (a -> IO b)
 xQueryOnce query = do

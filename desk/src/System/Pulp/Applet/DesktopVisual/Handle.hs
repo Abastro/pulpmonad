@@ -14,11 +14,11 @@ import Data.Bifunctor (first)
 import Data.Foldable
 import Data.IORef
 import Data.List
+import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Traversable
-import Data.Tuple
 import Data.Vector qualified as V
 import Graphics.X11.Types
 import Status.X11.WMStatus
@@ -87,7 +87,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
   where
     registers desksRef winsRef ordersRef activeRef = withRunInIO $ \unlift -> do
       killStat <- UI.uiTask desktopStats (unlift . updateDeskStats)
-      killWinCh <- UI.uiTask windowsChange (unlift . changeWindows)
+      killWinCh <- UI.uiTask windowsList (unlift . updateWinList)
       killActiv <- UI.uiTask windowActive (unlift . changeActivate)
       _ <- UI.onWidgetDestroy (View.deskVisualWidget view) (killStat >> killWinCh >> killActiv)
       pure DeskVisHandle
@@ -111,29 +111,38 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           deskItems <- readIORef desksRef
           V.zipWithM_ (\DeskItemHandle{updateDeskItem} -> updateDeskItem) deskItems newStats
 
-        changeWindows :: DWindowChange -> PulpIO ()
-        changeWindows (DWindowChange newOrder adding removed) = withRunInIO $ \unlift -> do
-          -- Remove windows
-          for_ (S.toList removed) $ \window -> do
-            mayItem <- atomicModifyIORef' winsRef $ swap . M.updateLookupWithKey (\_ _ -> Nothing) window
-            for_ mayItem $ \WinItemHandle{itemWindowView} ->
-              UI.widgetDestroy (View.winItemWidget itemWindowView)
+        removeOldWin _window WinItemHandle{itemWindowView} = do
+          UI.widgetDestroy (View.winItemWidget itemWindowView)
+          pure False
 
-          -- Add windows
-          for_ (M.toList adding) $ \(window, winRcvs) -> do
-            existed <- (window `M.member`) <$> readIORef winsRef
-            unless existed $ do
-              winItemView <- View.winItemNew $ reqActivate window
-              let getIcon = winGetIcon window
-              let switcher item x y = unlift (winSwitch desksRef window item x y)
-              winItem <- unlift $ winItemMake winSetup getIcon switcher winRcvs winItemView
-              modifyIORef' winsRef (M.insert window winItem)
+        addNewWin window () = withRunInIO $ \unlift -> do
+          winRcvs <- trackWinInfo window
+          winItemView <- View.winItemNew $ reqActivate window
+          let getIcon = winGetIcon window
+          let switcher item x y = unlift (winSwitch desksRef window item x y)
+          unlift $ winItemMake winSetup getIcon switcher winRcvs winItemView
+
+        updateWinList :: V.Vector Window -> PulpIO ()
+        updateWinList windows = withRunInIO $ \unlift -> do
+          -- Update window maps
+          oldWinMap <- readIORef winsRef
+          let newWinMap = M.fromSet (const ()) . S.fromList . V.toList $ windows
+          updWinMap <-
+            unlift $
+              M.mergeA
+                (M.filterAMissing removeOldWin)
+                (M.traverseMissing addNewWin)
+                (M.zipWithMatched $ \_ handle _ -> handle)
+                oldWinMap
+                newWinMap
+          writeIORef winsRef updWinMap
 
           -- Reorder windows appropriately
+          let newOrder = M.fromList (V.toList windows `zip` [0 ..])
           writeIORef ordersRef newOrder
           curWins <- readIORef winsRef
           desktops <- readIORef desksRef
-          for_ desktops $ \DeskItemHandle{reorderWinItems} -> reorderWinItems (newOrder M.!?) curWins
+          for_ desktops $ \DeskItemHandle{reorderWinItems} -> reorderWinItems (newOrder M.!?) (curWins M.!?)
 
         changeActivate :: Maybe Window -> PulpIO ()
         changeActivate nextActive = withRunInIO $ \_unlift -> do
@@ -163,8 +172,15 @@ data DeskWinMod = WinRemove | WinAdd (Window -> Maybe Int)
 data DeskItemHandle = DeskItemHandle
   { updateDeskItem :: DesktopStat -> IO ()
   , addRmWinItem :: View.WinItem -> Window -> DeskWinMod -> IO () -- False for remove, True for add
-  , reorderWinItems :: (Window -> Maybe Int) -> M.Map Window WinItemHandle -> IO ()
+  , reorderWinItems :: (Window -> Maybe Int) -> (Window -> Maybe WinItemHandle) -> IO ()
   }
+
+{-
+data DeskItemEvent
+  = DeskItemUpdate !DesktopStat
+  | DeskWinAddRm !Window !View.WinItem !DeskWinMod
+  | DeskWinReorder (Window -> Maybe Int) (Window -> Maybe WinItemHandle)
+-}
 
 deskItemMake :: DesktopSetup -> DesktopStat -> View.DeskItem -> PulpIO DeskItemHandle
 deskItemMake DesktopSetup{..} initStat view = withRunInIO $ \_unlift -> do
@@ -189,13 +205,13 @@ deskItemMake DesktopSetup{..} initStat view = withRunInIO $ \_unlift -> do
             View.deskItemCtrl view (View.AddWinItemAt winView $ V.length prev)
             updateVisible curWindows
 
-        reorderWinItems newOrd winItems = do
+        reorderWinItems newOrd getHandle = do
           olds <- readIORef curWindows
           let news = V.fromList . sortOn newOrd . V.toList $ olds
           when (news /= olds) $ do
             writeIORef curWindows news
             let newViewOrd =
-                  (\WinItemHandle{itemWindowView} -> itemWindowView) <$> V.mapMaybe (winItems M.!?) news
+                  (\WinItemHandle{itemWindowView} -> itemWindowView) <$> V.mapMaybe getHandle news
             View.deskItemCtrl view (View.ReorderWinItems newViewOrd)
 
         updateVisible curWindows = do
@@ -240,18 +256,9 @@ winItemMake WindowSetup{..} getXIcon onSwitch PerWinRcvs{..} view = do
 
 type GetXIcon = IO (Either String [XIcon])
 
--- | Window changes, with new order, added & removed
-data DWindowChange
-  = DWindowChange
-      (M.Map Window Int)
-      (M.Map Window PerWinRcvs)
-      (S.Set Window)
-
--- TODO Note that separate DWindowChange adds more state to manage..
-
 data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)
-  , windowsChange :: Task DWindowChange
+  , windowsList :: Task (V.Vector Window)
   , windowActive :: Task (Maybe Window)
   , trackWinInfo :: Window -> IO PerWinRcvs
   , reqActivate :: Window -> IO ()
@@ -272,26 +279,14 @@ deskVisInitiate :: XIO () DeskVisRcvs
 deskVisInitiate = do
   rootWin <- xWindow
 
-  -- Reference to hold current data of windows.
-  -- Exists because each new window needs their own tasks.
-  -- IORef, since X11 handling should be happening on the same thread.
-  windowRef <- liftIO $ newIORef S.empty
-  -- Detects difference between windows and handle it.
-  windowsChange <- errorAct $
-    watchXQuery rootWin getAllWindows $ \newWindowsVec -> do
-      let order = M.fromList $ zip (V.toList newWindowsVec) [0 ..]
-      let newWindows = S.fromList $ V.toList newWindowsVec
-      oldWindows <- liftIO $ atomicModifyIORef' windowRef (newWindows,)
-      let removed = oldWindows S.\\ newWindows
-      let added = newWindows S.\\ oldWindows
-      -- "Invalid" windows are ignored from here
-      addWins <- traverse (lift . watchWindow) (M.fromSet id added)
-      pure $ DWindowChange order addWins removed
-
   desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
+  windowsList <- errorAct $ watchXQuery rootWin getAllWindows pure
   windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
 
-  trackWinInfo <- xQueryOnce watchWindow
+  trackWinInfo <- xQueryOnce $ \window -> do
+    winDesktop <- errorAct $ watchXQuery window getWindowDesktop pure
+    winInfo <- errorAct $ watchXQuery window getWindowInfo pure
+    pure PerWinRcvs{..}
 
   reqActivate <- reqActiveWindow True
   reqToDesktop <- reqCurrentDesktop
@@ -306,9 +301,3 @@ deskVisInitiate = do
     errorAct act = do
       window <- xWindow
       act >>= either (onError window) pure
-
-    watchWindow window = do
-      winDesktop <- errorAct $ watchXQuery window getWindowDesktop pure
-      winInfo <- errorAct $ watchXQuery window getWindowInfo pure
-      pure PerWinRcvs{..}
-
