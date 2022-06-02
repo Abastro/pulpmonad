@@ -9,9 +9,8 @@ module Status.X11.XHandle (
   startXIO,
   XHandling,
   runXHandling,
-  xHandling,
+  xQueryOnce,
   xListenTo,
-  xListenTo_,
   xSendTo,
 ) where
 
@@ -99,10 +98,10 @@ insertListen key listen@(XListen _ win _) XListeners{..} =
 deleteListen :: Unique -> XListeners -> XListeners
 deleteListen key XListeners{..}
   | (Just (XListen _ win _), xListens') <- M.updateLookupWithKey (\_ _ -> Nothing) key xListens =
-      XListeners
-        { xListens = xListens'
-        , perWinListens = M.alter (>>= emptyToNot . S.delete key) win perWinListens
-        }
+    XListeners
+      { xListens = xListens'
+      , perWinListens = M.alter (>>= emptyToNot . S.delete key) win perWinListens
+      }
   | otherwise = XListeners{..}
   where
     emptyToNot set = set <$ guard (S.null set)
@@ -151,37 +150,38 @@ xWithExt extF (XIO act) = XIO (withReaderT withF act)
   where
     withF XHandle{..} = XHandle{xhExtends = extF xhExtends, ..}
 
--- | Starts X handler using initiate action.
+-- TODO Prevent waits while running X handling?
+newtype XHandling r = XHandling (forall a. XIO r a -> IO a)
+runXHandling :: XHandling r -> XIO r a -> IO a
+runXHandling (XHandling xHandle) = xHandle
+
+-- | Starts X handler and return X handling to register listeners/senders.
 -- NOTE: non-fatal X error is ignored.
-startXIO :: XIO () a -> IO a
-startXIO initiate = do
-  -- TODO Initiation action should NOT be XIO.
-  -- Need to stop Initiation action from waiting for the task received.
-  -- Actually, initiation action is useless. Rather to have queueing actions.
-  initResult <- newEmptyMVar -- Only use of MVar.
+startXIO :: IO (XHandling ())
+startXIO = do
+  theHandling <- newEmptyMVar
   _ <- forkOS . bracket (openDisplay "") closeDisplay $ \xhDisplay ->
     bracket_ installSignalHandlers uninstallSignalHandlers $ do
       let xhScreen = defaultScreen xhDisplay
       xhWindow <- rootWindow xhDisplay xhScreen
-      xhListeners <- newIORef (XListeners M.empty M.empty)
       xhActQueue <- newTQueueIO
+      xhListeners <- newIORef (XListeners M.empty M.empty)
       let runX (XIO act) = runReaderT act XHandle{xhExtends = (), ..}
       runX $ do
-        initiate >>= liftIO . putMVar initResult
+        xHandling >>= liftIO . putMVar theHandling
         startingX
-  takeMVar initResult
+  takeMVar theHandling
   where
     startingX = withRunInIO $ \unliftX -> do
-      let _ = 0
       actQueue <- unliftX xActQueue
       allocaXEvent $ \evPtr -> forever $ do
         atomically (flushTQueue actQueue) >>= sequenceA_
         -- .^. Before handling next X event, performs tasks in need of handling.
-        unliftX $ loopHandle evPtr -- MAYBE some wait here to lessen CPU load
-    loopHandle evPtr = withRunInIO $ \unliftX -> do
-      -- Waits for 1ms, because otherwise we are overloading stuffs
-      threadDelay 1000
+        unliftX $ listenLeft evPtr
+        -- Waits for 1ms, because otherwise we are overloading stuffs
+        threadDelay 1000
 
+    listenLeft evPtr = withRunInIO $ \unliftX -> do
       display <- unliftX xDisplay
       listeners <- unliftX xListeners
       eventsQueued display queuedAfterFlush >>= \case
@@ -193,7 +193,7 @@ startXIO initiate = do
 
           listens <- getWinListen evWindow <$> readIORef listeners
           for_ listens $ \(XListen _ _ listen) -> listen event
-          unliftX $ loopHandle evPtr
+          unliftX $ listenLeft evPtr
 
 -- | Queues a job to execute on next cycle.
 xQueueJob :: IO () -> XIO r ()
@@ -201,20 +201,23 @@ xQueueJob job = do
   actQueue <- xActQueue
   liftIO $ atomically (writeTQueue actQueue job)
 
-newtype XHandling r = XHandling (forall a. XIO r a -> IO a)
-runXHandling :: XHandling r -> XIO r a -> IO a
-runXHandling (XHandling xHandle) = xHandle
+-- MAYBE Use streaming library here
 
--- | Hand out the X handling so that listeners and senders could be registered and be used.
+-- | X handling to queue & listen to the jobs. Waits for the result.
 xHandling :: XIO r (XHandling r)
 xHandling = withRunInIO $ \unliftX -> pure $
   XHandling $ \act -> do
     actQueue <- unliftX xActQueue
     handleResult <- newEmptyMVar
     atomically (writeTQueue actQueue $ unliftX act >>= putMVar handleResult)
-    takeMVar handleResult -- Waits for handling result
+    takeMVar handleResult
 
--- MAYBE Use streaming library here
+-- | Take X query commands, give the action to query the result, performed in the X thread.
+-- WARNING: the returned action can block while querying the result.
+xQueryOnce :: (a -> XIO r b) -> XIO r (a -> IO b)
+xQueryOnce query = do
+  hand <- xHandling
+  pure $ \arg -> runXHandling hand (query arg)
 
 -- | Listen with certain event mask at certain window.
 -- Task variable should be cared of as soon as possible, as it would put the event loop in halt.
@@ -245,21 +248,6 @@ xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
       newMask <- foldl' (.|.) 0 . fmap maskOf . getWinListen win <$> readIORef listeners
       selectInput disp win newMask
     maskOf (XListen mask _ _) = mask
-
--- | Similar to 'xListenTo', but does not emit/report any value to the Task.
--- NB: Subsequently, it is also impossible to stop listening on this one.
-xListenTo_ ::
-  EventMask ->
-  Window ->
-  (Event -> XIO r ()) ->
-  XIO r ()
-xListenTo_ mask window handler = withRunInIO $ \unliftX -> do
-  listeners <- unliftX xListeners
-  key <- newUnique
-  let listen = XListen mask window $ \event -> do
-        unliftX (xOnWindow window $ handler event)
-  modifyIORef' listeners $ insertListen key listen
-  unliftX . liftDWIO $ \d w -> selectInput d w mask
 
 -- | Send event with certain mask to certain window, through the X11 thread.
 --

@@ -27,7 +27,7 @@ instance MonadLog PulpIO where
 runPulpIO :: PulpIO a -> IO a
 runPulpIO (PulpIO act) = do
   logStderr $ \pulpLogger -> do
-    pulpXHandling <- liftIO (startXIO xHandling)
+    pulpXHandling <- liftIO startXIO
     runReaderT act PulpEnv{..}
 
 -- | Register X handle to the background X11 connection.

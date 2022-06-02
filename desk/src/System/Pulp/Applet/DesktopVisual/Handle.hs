@@ -249,6 +249,8 @@ data DWindowChange
       (M.Map Window (Task Int, Task WindowInfo))
       (S.Set Window)
 
+-- TODO Separate DWindowChange adds more state to manage
+
 data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)
   , windowsChange :: Task DWindowChange
@@ -287,10 +289,8 @@ deskVisInitiate logger = do
   reqActivate <- reqActiveWindow True
   reqToDesktop <- reqCurrentDesktop
 
-  -- MAYBE Make it ping back to X server?
-  winGetIcon <- withRunInIO $ \unliftX -> pure $ \window -> do
-    res <- unliftX $ xOnWindow window $ runXQuery getWindowIcon
-    pure $ first (formatXQError window) res
+  winGetIcon <- xQueryOnce $ \window -> do
+    first (formatXQError window) <$> xOnWindow window (runXQuery getWindowIcon)
 
   pure DeskVisRcvs{..}
   where
