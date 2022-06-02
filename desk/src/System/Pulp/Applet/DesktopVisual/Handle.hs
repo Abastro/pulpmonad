@@ -121,13 +121,13 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
               UI.widgetDestroy (View.winItemWidget itemWindowView)
 
           -- Add windows
-          for_ (M.toList adding) $ \(window, (winDeskTask, infoTask)) -> do
+          for_ (M.toList adding) $ \(window, winRcvs) -> do
             existed <- (window `M.member`) <$> readIORef winsRef
             unless existed $ do
               winItemView <- View.winItemNew $ reqActivate window
               let getIcon = winGetIcon window
               let switcher item x y = unlift (winSwitch desksRef window item x y)
-              winItem <- unlift $ winItemMake winSetup getIcon switcher winDeskTask infoTask winItemView
+              winItem <- unlift $ winItemMake winSetup getIcon switcher winRcvs winItemView
               modifyIORef' winsRef (M.insert window winItem)
 
           -- Reorder windows appropriately
@@ -214,17 +214,16 @@ winItemMake ::
   WindowSetup ->
   GetXIcon ->
   (View.WinItem -> Int -> Int -> IO ()) ->
-  Task Int ->
-  Task WindowInfo ->
+  PerWinRcvs ->
   View.WinItem ->
   PulpIO WinItemHandle
-winItemMake WindowSetup{..} getXIcon onSwitch winDeskTask infoTask view = do
+winItemMake WindowSetup{..} getXIcon onSwitch PerWinRcvs{..} view = do
   -- (-1) is never a valid desktop (means the window is omnipresent)
   liftIO $ registers =<< newIORef (-1)
   where
     registers curDeskRef = do
-      killChDesk <- UI.uiTask winDeskTask changeDesktop
-      killInfo <- UI.uiTask infoTask updateWindow
+      killChDesk <- UI.uiTask winDesktop changeDesktop
+      killInfo <- UI.uiTask winInfo updateWindow
       UI.onWidgetDestroy (View.winItemWidget view) (killChDesk >> killInfo)
       pure WinItemHandle{itemWindowView = view}
       where
@@ -246,18 +245,24 @@ type GetXIcon = IO (Either String [XIcon])
 data DWindowChange
   = DWindowChange
       (M.Map Window Int)
-      (M.Map Window (Task Int, Task WindowInfo))
+      (M.Map Window PerWinRcvs)
       (S.Set Window)
 
--- TODO Separate DWindowChange adds more state to manage
+-- TODO Note that separate DWindowChange adds more state to manage..
 
 data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)
   , windowsChange :: Task DWindowChange
   , windowActive :: Task (Maybe Window)
+  , trackWinInfo :: Window -> IO (Maybe PerWinRcvs)
   , reqActivate :: Window -> IO ()
   , reqToDesktop :: Int -> IO ()
   , winGetIcon :: Window -> GetXIcon
+  }
+
+data PerWinRcvs = PerWinRcvs
+  { winDesktop :: !(Task Int)
+  , winInfo :: !(Task WindowInfo)
   }
 
 -- | Desktop visualizer event handle initiate.
@@ -284,8 +289,11 @@ deskVisInitiate logger = do
       addWins <- M.traverseMaybeWithKey (\_ -> lift . watchWindow) (M.fromSet id added)
       pure $ DWindowChange order addWins removed
 
-  windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
   desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
+  windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
+
+  -- trackWinInfo <- xQueryOnce watchWindow
+
   reqActivate <- reqActiveWindow True
   reqToDesktop <- reqCurrentDesktop
 
@@ -299,11 +307,12 @@ deskVisInitiate logger = do
     errorAct act = do
       window <- xWindow
       act >>= either (onError window) pure
+
     watchWindow window = do
       excRes <- runExceptT $ do
-        winDesk <- ExceptT $ watchXQuery window getWindowDesktop pure
+        winDesktop <- ExceptT $ watchXQuery window getWindowDesktop pure
         winInfo <- ExceptT $ watchXQuery window getWindowInfo pure
-        pure (winDesk, winInfo)
+        pure PerWinRcvs{..}
       case excRes of
         Left err -> do
           liftIO $
