@@ -64,8 +64,7 @@ newtype WindowSetup = WindowSetup
 -- | Desktops visualizer widget. Forks its own X11 event handler.
 deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO UI.Widget
 deskVisualizer deskSetup winSetup = do
-  logger <- askLog
-  rcvs <- pulpXHandle (deskVisInitiate logger)
+  rcvs <- pulpXHandle deskVisInitiate
   deskVisualView <- View.deskVisualNew
   _ <- deskVisMake rcvs (deskSetup, winSetup) deskVisualView
   UI.widgetShowAll (View.deskVisualWidget deskVisualView)
@@ -254,7 +253,7 @@ data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)
   , windowsChange :: Task DWindowChange
   , windowActive :: Task (Maybe Window)
-  , trackWinInfo :: Window -> IO (Maybe PerWinRcvs)
+  , trackWinInfo :: Window -> IO PerWinRcvs
   , reqActivate :: Window -> IO ()
   , reqToDesktop :: Int -> IO ()
   , winGetIcon :: Window -> GetXIcon
@@ -269,8 +268,8 @@ data PerWinRcvs = PerWinRcvs
 --
 -- The widget holds one entire X event loop,
 -- so related resources will be disposed of on kill.
-deskVisInitiate :: LevelLogger -> XIO () DeskVisRcvs
-deskVisInitiate logger = do
+deskVisInitiate :: XIO () DeskVisRcvs
+deskVisInitiate = do
   rootWin <- xWindow
 
   -- Reference to hold current data of windows.
@@ -286,13 +285,13 @@ deskVisInitiate logger = do
       let removed = oldWindows S.\\ newWindows
       let added = newWindows S.\\ oldWindows
       -- "Invalid" windows are ignored from here
-      addWins <- M.traverseMaybeWithKey (\_ -> lift . watchWindow) (M.fromSet id added)
+      addWins <- traverse (lift . watchWindow) (M.fromSet id added)
       pure $ DWindowChange order addWins removed
 
   desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
   windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
 
-  -- trackWinInfo <- xQueryOnce watchWindow
+  trackWinInfo <- xQueryOnce watchWindow
 
   reqActivate <- reqActiveWindow True
   reqToDesktop <- reqCurrentDesktop
@@ -309,13 +308,7 @@ deskVisInitiate logger = do
       act >>= either (onError window) pure
 
     watchWindow window = do
-      excRes <- runExceptT $ do
-        winDesktop <- ExceptT $ watchXQuery window getWindowDesktop pure
-        winInfo <- ExceptT $ watchXQuery window getWindowInfo pure
-        pure PerWinRcvs{..}
-      case excRes of
-        Left err -> do
-          liftIO $
-            logger (T.pack "DeskVis") LevelInfo (toLogStr $ "invalid window: " <> formatXQError window err)
-          pure Nothing
-        Right res -> pure (Just res)
+      winDesktop <- errorAct $ watchXQuery window getWindowDesktop pure
+      winInfo <- errorAct $ watchXQuery window getWindowInfo pure
+      pure PerWinRcvs{..}
+

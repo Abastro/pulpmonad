@@ -236,8 +236,8 @@ data WindowInfo = WindowInfo
   , windowState :: !(S.Set WMStateEx)
   }
 
--- | Window information. Only works for non-withdrawn state.
--- Still, the worst that could happen is giving Nothing.
+-- | Window information. Only fails when WM_CLASS property is missing.
+-- When name(title) is missing, this gives the empty title.
 getWindowInfo :: XPQuery WindowInfo
 getWindowInfo = WindowInfo <$> wmTitle <*> wmClass <*> wmState
   where
