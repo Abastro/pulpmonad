@@ -56,22 +56,25 @@ mainboardDisplay = do
   ev <$ UI.widgetShowAll ev
   where
     memIcon task = do
+      -- TODO Identify the transparency issue of the image
       let ramImg = View.imageStaticNew UI.IconSizeDnd $ View.ImgSName (T.pack "ram-000")
       hack <- ramImg
       fg <- ramImg
-      let barRect = RationalRect (13 % 32) (8 % 32) (19 % 32) (24 % 32)
-      bar <- View.barNew barRect (View.BarColor 0.1 0.6 0.9)
+      let barRect = RationalRect (14 % 32) (8 % 32) (18 % 32) (24 % 32)
+      bar <- View.barNew barRect
+      mem <- UI.overlayed hack [View.barWidget bar, fg]
+      UI.widgetSetName mem (T.pack "mem")
       liftIO $ do
         kill <- UI.uiTask task $ View.barSetFill bar . memUsed . memRatios
-        UI.onWidgetDestroy (View.barWidget bar) kill
-      -- FIXME: Too much space allocated to bar
-      UI.overlayed hack [View.barWidget bar, fg]
+        UI.onWidgetDestroy mem kill
+      pure mem
 
     cpuIcon (taskUse, taskTemp) = do
       fg <- View.imageDynNew UI.IconSizeDnd
       let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
-      bar <- View.barNew barRect (View.BarColor 0.9 0.6 0.1)
+      bar <- View.barNew barRect
       cpu <- UI.overlayed (View.imageDynWidget fg) [View.barWidget bar]
+      UI.widgetSetName cpu (T.pack "cpu")
       liftIO $ do
         killUse <- UI.uiTask taskUse $ View.barSetFill bar . cpuUsed . cpuRatios
         killTm <- UI.uiTask taskTemp $ View.imageDynSetImg fg . View.ImgSName . cpuN . tmpInd

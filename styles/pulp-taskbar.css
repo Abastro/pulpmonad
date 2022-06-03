@@ -22,7 +22,8 @@ button {
 	border-radius: 0px;
 }
 
-button:checked, button:hover .Contents:hover {
+button:checked,
+button:hover .Contents:hover {
 	box-shadow: inset 0 -3px #0c7cd5;
 }
 
@@ -68,4 +69,14 @@ button:checked, button:hover .Contents:hover {
 
 .window-item.hidden {
 	opacity: .3;
+}
+
+/* Mainboard styling */
+
+#mem .bar {
+	color: rgb(24, 160, 240)
+}
+
+#cpu .bar {
+	color: rgb(240, 160, 24)
 }

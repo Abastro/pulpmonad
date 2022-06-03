@@ -21,9 +21,12 @@ import GI.Cairo.Render qualified as C
 import GI.Cairo.Render.Connector qualified as C
 import GI.GdkPixbuf.Objects.Pixbuf qualified as Gdk
 import GI.Gio.Interfaces.Icon qualified as Gio
+import GI.Gtk.Flags qualified as UI
 import GI.Gtk.Objects.Image qualified as UI
 import UI.Commons qualified as UI
+import UI.Styles qualified as UI
 import XMonad.StackSet (RationalRect (..))
+import qualified GI.Gdk.Structs.RGBA as Gdk
 
 -- | Setting image for Image widget
 data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon | ImgSPixbuf Gdk.Pixbuf
@@ -58,7 +61,7 @@ imageStaticNew size sets = do
 
 data BarColor = BarColor !Double !Double !Double
 
--- MAYBE update color as well?
+-- MAYBE Bar direction?
 data Bar = Bar
   { barWid :: !UI.Widget
   , barFill :: !(TVar Double)
@@ -68,10 +71,11 @@ barWidget :: Bar -> UI.Widget
 barWidget Bar{barWid} = barWid
 
 -- | Bar with initial fill of 0.
-barNew :: MonadIO m => RationalRect -> BarColor -> m Bar
-barNew relative (BarColor red green blue) = do
+barNew :: MonadIO m => RationalRect -> m Bar
+barNew relative = do
   barWid <- UI.toWidget =<< UI.imageNew -- Image is the most benign
-  UI.widgetSetName barWid (T.pack "bar")
+  -- Cannot extend the class from haskell side, soo..
+  UI.widgetGetStyleContext barWid >>= flip UI.styleContextAddClass (T.pack "bar")
   UI.setWidgetHalign barWid UI.AlignFill
   UI.setWidgetValign barWid UI.AlignFill
   barFill <- liftIO $ newTVarIO 0.0
@@ -81,6 +85,12 @@ barNew relative (BarColor red green blue) = do
   pure Bar{..}
   where
     drawBar area fill = do
+      barColor <- (`UI.styleContextGetColor` [UI.StateFlagsNormal]) =<< UI.widgetGetStyleContext area
+      red <- Gdk.getRGBARed barColor
+      green <- Gdk.getRGBAGreen barColor
+      blue <- Gdk.getRGBABlue barColor
+      alpha <- Gdk.getRGBAAlpha barColor
+
       w <- UI.widgetGetAllocatedWidth area
       h <- UI.widgetGetAllocatedHeight area
       let RationalRect l t r d = relative
@@ -88,10 +98,8 @@ barNew relative (BarColor red green blue) = do
           top = realToFrac t * realToFrac h
           right = realToFrac r * realToFrac w
           down = realToFrac d * realToFrac h
-      C.translate left top
-      C.scale (right - left) (down - top)
-      C.setSourceRGB red green blue
-      C.rectangle 0.0 (1.0 - fill) 1.0 fill
+      C.setSourceRGBA red green blue alpha
+      C.rectangle left down (right - left) ((top - down) * fill)
       C.fill
 
 barSetFill :: MonadIO m => Bar -> Double -> m ()
