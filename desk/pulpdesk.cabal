@@ -108,10 +108,12 @@ library
     UI.Containers
     UI.Window
     UI.Application
+    View.Imagery
 
     System.Log.LogPrint
 
     System.Pulp.PulpEnv
+    System.Pulp.Applet.SystemDisplay
     System.Pulp.Applet.DesktopVisual
     System.Pulp.Applet.DesktopVisual.Handle
     System.Pulp.Applet.DesktopVisual.View

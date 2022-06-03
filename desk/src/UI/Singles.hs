@@ -24,7 +24,8 @@ iconNewWith iconSize realize unrealize = do
   _ <- onWidgetRealize image $ do
     let sizeEnum = fromIntegral $ fromEnum iconSize
     key <- realize $ \name -> imageSetFromIconName image (Just name) sizeEnum
-    () <$ onWidgetUnrealize image (unrealize key)
+    onWidgetUnrealize image (unrealize key)
+    pure ()
   toWidget image
 
 iconNewFromName :: MonadIO m => IconSize -> T.Text -> m Widget
@@ -45,13 +46,14 @@ barNewTask relative color task asFill = do
   -- Uses TVar as well to allow rendering
   _ <- onWidgetRealize bar $ do
     -- MAYBE avoid blocking?
-    tvar <- taskNextWait task >>= atomically . newTVar
+    tvar <- taskNextWait task >>= newTVarIO
     killTask <- uiTask task $ \val ->
       atomically (writeTVar tvar val) *> widgetQueueDraw bar
     _ <- onWidgetDraw bar $ \ctx -> do
       fill <- asFill <$> readTVarIO tvar
       True <$ renderWithContext (drawBar bar relative color fill) ctx
-    () <$ onWidgetUnrealize bar killTask
+    onWidgetUnrealize bar killTask
+    pure ()
   toWidget bar
 
 -- For now, assume from down to up

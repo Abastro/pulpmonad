@@ -11,6 +11,7 @@ import System.Environment
 import System.Exit
 import System.Posix.Signals (sigINT)
 import System.Pulp.Applet.DesktopVisual qualified as App
+import System.Pulp.Applet.SystemDisplay qualified as App
 import System.Pulp.PulpEnv
 import UI.Application qualified as UI
 import UI.Commons qualified as UI
@@ -19,6 +20,8 @@ import UI.Styles qualified as UI
 import UI.Window qualified as UI
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import Control.Monad.IO.Unlift
+import Data.Foldable
+import qualified GI.Gtk.Objects.IconTheme as UI
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -62,9 +65,16 @@ main = runPulpIO $ withRunInIO $ \unlift -> do
       UI.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-taskbar.css")
       pure css
 
+    iconThemeSetup :: IO ()
+    iconThemeSetup = do
+      mainDir <- getEnv "XMONAD_CONFIG_DIR"
+      defaultTheme <- UI.iconThemeGetDefault
+      UI.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
+
     activating :: UI.Application -> PulpIO ()
     activating app = withRunInIO $ \unlift -> do
       cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
+      iconThemeSetup
 
       window <- UI.appWindowNew app
       UI.windowSetTitle window (T.pack "Pulp Taskbar")
@@ -84,4 +94,7 @@ main = runPulpIO $ withRunInIO $ \unlift -> do
       box <- UI.boxNew UI.OrientationHorizontal 5
       UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "taskbar-box")
       UI.boxSetCenterWidget box . Just =<< desktopVis
+      traverse_ (addToEnd box) =<< sequenceA [App.mainboardDisplay, App.batDisplay]
       UI.toWidget box
+      where
+        addToEnd box wid = UI.boxPackEnd box wid False False 0

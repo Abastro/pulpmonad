@@ -80,8 +80,6 @@ xIconImageSetter getXIcon =
       pixbuf <- Gdk.pixbufNewFromBytes bytes Gdk.ColorspaceRgb True 8 width height (width * 4)
       pure $ ImgSPixbuf pixbuf
   where
-    -- TODO Reduce empty pinned portion of memory
-    -- MAYBE use bytes package?
     convColor emp | True <- BS.null emp = mempty
     convColor colors
       | (argb, rem) <- BS.splitAt 4 colors =
