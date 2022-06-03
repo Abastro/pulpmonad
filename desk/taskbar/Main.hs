@@ -1,15 +1,19 @@
 module Main where
 
 import Control.Monad
+import Control.Monad.IO.Unlift
+import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 import Defines
 import GI.GLib qualified as UI
 import GI.Gtk.Objects.Box qualified as UI
+import GI.Gtk.Objects.IconTheme qualified as UI
 import Status.X11.WMStatus (DesktopStat (..))
 import System.Environment
 import System.Exit
 import System.Posix.Signals (sigINT)
+import System.Pulp.Applet.Clocks qualified as App
 import System.Pulp.Applet.DesktopVisual qualified as App
 import System.Pulp.Applet.SystemDisplay qualified as App
 import System.Pulp.PulpEnv
@@ -19,9 +23,6 @@ import UI.Containers qualified as UI
 import UI.Styles qualified as UI
 import UI.Window qualified as UI
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
-import Control.Monad.IO.Unlift
-import Data.Foldable
-import qualified GI.Gtk.Objects.IconTheme as UI
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -37,12 +38,13 @@ workspaceMaps =
 
 -- TODO Diagnose why heap grows to such a size
 main :: IO ()
-main = runPulpIO $ withRunInIO $ \unlift -> do
-  Just app <- UI.applicationNew (Just $ T.pack "pulp.ui.taskbar") []
-  UI.onApplicationActivate app (unlift $ activating app)
-  UI.unixSignalAdd UI.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ UI.applicationQuit app
-  status <- UI.applicationRun app Nothing
-  when (status /= 0) . liftIO $ exitWith (ExitFailure $ fromIntegral status)
+main = runPulpIO $
+  withRunInIO $ \unlift -> do
+    Just app <- UI.applicationNew (Just $ T.pack "pulp.ui.taskbar") []
+    UI.onApplicationActivate app (unlift $ activating app)
+    UI.unixSignalAdd UI.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ UI.applicationQuit app
+    status <- UI.applicationRun app Nothing
+    when (status /= 0) . liftIO $ exitWith (ExitFailure $ fromIntegral status)
   where
     mayLabel n = maybe n T.pack $ workspaceMaps M.!? T.unpack n
 
@@ -94,7 +96,9 @@ main = runPulpIO $ withRunInIO $ \unlift -> do
       box <- UI.boxNew UI.OrientationHorizontal 5
       UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "taskbar-box")
       UI.boxSetCenterWidget box . Just =<< desktopVis
+      traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a) %H:%M %p"]
       traverse_ (addToEnd box) =<< sequenceA [App.mainboardDisplay, App.batDisplay]
       UI.toWidget box
       where
+        addToBegin box wid = UI.boxPackStart box wid False False 0
         addToEnd box wid = UI.boxPackEnd box wid False False 0

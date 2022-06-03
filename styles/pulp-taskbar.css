@@ -80,3 +80,10 @@ button:hover .Contents:hover {
 #cpu .bar {
 	color: rgb(240, 160, 24)
 }
+
+/* Clock styling */
+#clock_text label {
+	font-family: "Ubuntu", sans-serif;
+	font-size: 9pt;
+	margin: 5px;
+}

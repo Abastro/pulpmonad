@@ -19,6 +19,7 @@ import Data.Int
 import Data.Text qualified as T
 import GI.Cairo.Render qualified as C
 import GI.Cairo.Render.Connector qualified as C
+import GI.Gdk.Structs.RGBA qualified as Gdk
 import GI.GdkPixbuf.Objects.Pixbuf qualified as Gdk
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gtk.Flags qualified as UI
@@ -26,7 +27,6 @@ import GI.Gtk.Objects.Image qualified as UI
 import UI.Commons qualified as UI
 import UI.Styles qualified as UI
 import XMonad.StackSet (RationalRect (..))
-import qualified GI.Gdk.Structs.RGBA as Gdk
 
 -- | Setting image for Image widget
 data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon | ImgSPixbuf Gdk.Pixbuf

@@ -32,7 +32,6 @@ import GI.Gio.Interfaces.AppInfo
 import GI.Gio.Objects.DesktopAppInfo
 import GI.Gtk.Objects.IconTheme qualified as UI
 import Status.X11.WMStatus
-import System.Log.Logger
 import System.Pulp.Applet.DesktopVisual.Handle
 import System.Pulp.Applet.DesktopVisual.View (ImageSet (..))
 import qualified Data.ByteString.Lazy as LBS
@@ -64,10 +63,11 @@ classImageSetter WindowInfo{windowClasses} = do
       pure className
 
 -- TODO Properly adapt the icon size
+-- TODO Proper logging
 xIconImageSetter :: GetXIcon -> MaybeT IO ImageSet
 xIconImageSetter getXIcon =
   liftIO getXIcon >>= \case
-    Left err -> MaybeT $ Nothing <$ liftIO (infoM "DeskVis" $ "Cannot recognize icon: " <> err)
+    Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
     Right icons -> do
       -- If empty, fails on MaybeT, i.e. give Nothing.
       XIcon{..} : _ <- pure $ sortOn (\XIcon{iconHeight} -> abs (iconHeight - 24)) icons

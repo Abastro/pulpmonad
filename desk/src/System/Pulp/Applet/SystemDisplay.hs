@@ -18,15 +18,18 @@ import XMonad.Util.Run (safeSpawn)
 -- | Battery status display.
 batDisplay :: MonadIO m => m UI.Widget
 batDisplay = do
-  img <- View.imageDynNew UI.IconSizeDnd
-  liftIO $ startRegular 500 batStat >>= traverse_ (updateAct img)
-  ev <- UI.buttonNewWith (Just $ View.imageDynWidget img) $ safeSpawn "gnome-control-center" ["power"]
+  img <- startRegular 500 batStat >>= traverse batIcon
+  ev <- UI.buttonNewWith (View.imageDynWidget <$> img) $ safeSpawn "gnome-control-center" ["power"]
+  UI.widgetSetName ev (T.pack "bat")
   ev <$ UI.widgetShowAll ev
   where
-    updateAct img task = do
-      kill <- UI.uiTask task $ \BatStat{capacity, batStatus} ->
-        View.imageDynSetImg img $ View.ImgSName $ batName ((capacity `div` 10) * 10) batStatus
-      UI.onWidgetDestroy (View.imageDynWidget img) kill
+    batIcon task = do
+      img <- View.imageDynNew UI.IconSizeDnd
+      liftIO $ do
+        kill <- UI.uiTask task $ \BatStat{capacity, batStatus} ->
+          View.imageDynSetImg img $ View.ImgSName $ batName ((capacity `div` 10) * 10) batStatus
+        UI.onWidgetDestroy (View.imageDynWidget img) kill
+      pure img
 
     batName level = \case
       Charging -> T.pack $ printf "battery-level-%d-charging-symbolic" level
@@ -57,6 +60,7 @@ mainboardDisplay = do
   where
     memIcon task = do
       -- TODO Identify the transparency issue of the image
+      -- MAYBE Image itself providing location of bar?
       let ramImg = View.imageStaticNew UI.IconSizeDnd $ View.ImgSName (T.pack "ram-000")
       hack <- ramImg
       fg <- ramImg
