@@ -18,10 +18,12 @@ data LabelDyn = LabelDyn
 labelDynWidget :: LabelDyn -> UI.Widget
 labelDynWidget LabelDyn{labelDynWid} = labelDynWid
 
-labelDynNew :: MonadIO m => m LabelDyn
-labelDynNew = do
+-- | Construct dynamic label. When the flag passed is true, label is line-wrapped.
+labelDynNew :: MonadIO m => Bool -> m LabelDyn
+labelDynNew wraps = do
   labelDynLbl <- UI.labelNew Nothing
   labelDynWid <- UI.toWidget labelDynLbl
+  UI.labelSetLineWrap labelDynLbl wraps
   pure LabelDyn{..}
 
 labelDynSetLabel :: MonadIO m => LabelDyn -> T.Text -> m ()

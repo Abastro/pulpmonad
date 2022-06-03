@@ -11,8 +11,9 @@ import UI.Containers qualified as UI
 import UI.Task qualified as UI
 import View.Textual qualified as View
 
--- | Text clock with given format.
--- For format reference, look at 'Data.Time.formatTime' for details. Queries every second.
+-- | Text clock with given format. Queries time every second.
+--
+-- For format reference, look at 'Data.Time.formatTime' for details.
 textClock :: MonadIO m => String -> m UI.Widget
 textClock format = do
   lbl <- startRegular 1000 getZonedTime >>= traverse clockTxt
@@ -23,7 +24,7 @@ textClock format = do
   UI.toWidget ev <* UI.widgetShowAll ev
   where
     clockTxt task = do
-      label <- View.labelDynNew
+      label <- View.labelDynNew False
       liftIO $ do
         kill <- UI.uiTask task $ View.labelDynSetLabel label . T.pack . formatTime defaultTimeLocale format
         UI.onWidgetDestroy (View.labelDynWidget label) kill

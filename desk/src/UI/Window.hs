@@ -104,15 +104,16 @@ scaleTo full ratio = floor $ fromIntegral full * ratio
 -- Can fail when there is no default display / primary montior.
 --
 -- TODO handle placing on the monitor
--- TODO Check input or not
-windowSetDock :: (MonadIO m, MonadFail m) => Window -> DockPos -> DockSize -> DockSpan -> m ()
+-- TODO Check input (or not)
+-- TODO Perhaps allow not applying the strut
+windowSetDock :: (MonadIO m) => Window -> DockPos -> DockSize -> DockSpan -> m ()
 windowSetDock window pos size span@DockSpan{..} = do
   windowSetTypeHint window WindowTypeHintDock
   windowSetSkipPagerHint window True
   windowSetSkipTaskbarHint window True
 
-  display <- maybe (fail "No default display") pure =<< Gdk.displayGetDefault
-  monitor <- maybe (fail "No primary monitor") pure =<< Gdk.displayGetPrimaryMonitor display
+  display <- liftIO $ maybe (fail "No default display") pure =<< Gdk.displayGetDefault
+  monitor <- liftIO $ maybe (fail "No primary monitor") pure =<< Gdk.displayGetPrimaryMonitor display
   screen <- Gdk.displayGetDefaultScreen display
 
   monRect <- fromGdkRect =<< Gdk.monitorGetGeometry monitor

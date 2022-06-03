@@ -22,7 +22,9 @@ import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Styles qualified as UI
 import UI.Window qualified as UI
+import View.Imagery qualified as View
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
+import XMonad.Util.Run (safeSpawn)
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -36,7 +38,29 @@ workspaceMaps =
     , (game, "\xf43c")
     ]
 
--- TODO Diagnose why heap grows to such a size
+data BarWinCfg = BarWinCfg
+  { barDockPos :: !UI.DockPos
+  , barDockSize :: !UI.DockSize
+  , barDockSpan :: !UI.DockSpan
+  , barTitle :: !T.Text
+  }
+
+-- | Creates and links the taskbar window. Does not show the window.
+taskbarWindow :: UI.Application -> BarWinCfg -> UI.Widget -> PulpIO UI.Window
+taskbarWindow app BarWinCfg{..} content = do
+  window <- UI.windowNew UI.WindowTypeToplevel
+  UI.windowSetTitle window barTitle
+  UI.windowSetDock window barDockPos barDockSize barDockSpan
+  UI.windowSetKeepBelow window True
+  UI.windowSetSkipPagerHint window True
+  UI.windowSetSkipTaskbarHint window True
+  UI.windowSetTransparent window
+
+  UI.containerAdd window content
+
+  UI.applicationAddWindow app window
+  pure window
+
 main :: IO ()
 main = runPulpIO $
   withRunInIO $ \unlift -> do
@@ -46,20 +70,6 @@ main = runPulpIO $
     status <- UI.applicationRun app Nothing
     when (status /= 0) . liftIO $ exitWith (ExitFailure $ fromIntegral status)
   where
-    mayLabel n = maybe n T.pack $ workspaceMaps M.!? T.unpack n
-
-    deskVisDeskSetup =
-      App.DesktopSetup
-        { App.desktopLabeling = maybe (T.pack "X") mayLabel
-        , App.showDesktop = \stat@DesktopStat{desktopName} n ->
-            App.defShowFn stat n && desktopName /= Just (T.pack scratchpadWorkspaceTag)
-        }
-    deskVisWinSetup = App.WindowSetup App.defImageSetter
-
-    desktopVis :: PulpIO UI.Widget
-    desktopVis = do
-      App.deskVisualizer deskVisDeskSetup deskVisWinSetup
-
     cssProv :: IO UI.CssProvider
     cssProv = do
       css <- UI.cssProviderNew
@@ -78,27 +88,60 @@ main = runPulpIO $
       cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
-      window <- UI.appWindowNew app
-      UI.windowSetTitle window (T.pack "Pulp Taskbar")
-      UI.windowSetDock window UI.DockBottom (UI.AbsoluteSize 40) (UI.DockSpan (1 / 6) (5 / 6))
-      UI.windowSetKeepAbove window True
-      UI.windowSetSkipPagerHint window True
-      UI.windowSetSkipTaskbarHint window True
+      left <- unlift $ taskbarWindow app leftCfg =<< leftBox
+      center <- unlift $ taskbarWindow app centerCfg =<< centerBox
+      traverse_ UI.widgetShowAll [left, center]
 
-      UI.windowSetTransparent window
-
-      UI.containerAdd window =<< unlift barBox
-
-      UI.widgetShowAll window
-
-    barBox :: PulpIO UI.Widget
-    barBox = do
-      box <- UI.boxNew UI.OrientationHorizontal 5
-      UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "taskbar-box")
-      UI.boxSetCenterWidget box . Just =<< desktopVis
-      traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a) %H:%M %p"]
-      traverse_ (addToEnd box) =<< sequenceA [App.mainboardDisplay, App.batDisplay]
+    leftCfg =
+      BarWinCfg
+        { barDockPos = UI.DockBottom
+        , barDockSize = UI.AbsoluteSize 36
+        , barDockSpan = UI.DockSpan 0 (1 / 6)
+        , barTitle = T.pack "Pulp Statusbar"
+        }
+    leftBox :: PulpIO UI.Widget
+    leftBox = do
+      box <- UI.boxNew UI.OrientationHorizontal 2
+      UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "statusbar-box")
+      powerIcon <- View.imageStaticNew UI.IconSizeLargeToolbar $ View.ImgSName (T.pack "system-shutdown-symbolic")
+      traverse_ (addToBegin box)
+        =<< sequenceA
+          [ UI.buttonNewWith (Just powerIcon) runPulpCtl
+          , App.batDisplay UI.IconSizeLargeToolbar
+          , App.mainboardDisplay UI.IconSizeLargeToolbar 42
+          ]
       UI.toWidget box
       where
-        addToBegin box wid = UI.boxPackStart box wid False False 0
-        addToEnd box wid = UI.boxPackEnd box wid False False 0
+        runPulpCtl = do
+          cacheDir <- getEnv "XMONAD_CACHE_DIR"
+          safeSpawn (cacheDir </> "pulp-sysctl") []
+
+    centerCfg =
+      BarWinCfg
+        { barDockPos = UI.DockBottom
+        , barDockSize = UI.AbsoluteSize 40
+        , barDockSpan = UI.DockSpan (1 / 6) (5 / 6)
+        , barTitle = T.pack "Pulp Taskbar"
+        }
+    centerBox :: PulpIO UI.Widget
+    centerBox = do
+      box <- UI.boxNew UI.OrientationHorizontal 2
+      UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "taskbar-box")
+      UI.boxSetCenterWidget box . Just =<< desktopVis
+      traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a)\n %H:%M %p "]
+      UI.toWidget box
+
+    addToBegin box wid = UI.boxPackStart box wid False False 0
+    _addToEnd box wid = UI.boxPackEnd box wid False False 0
+
+    desktopVis :: PulpIO UI.Widget
+    desktopVis = App.deskVisualizer deskVisDeskSetup deskVisWinSetup
+      where
+        mayLabel n = maybe n T.pack $ workspaceMaps M.!? T.unpack n
+        deskVisDeskSetup =
+          App.DesktopSetup
+            { App.desktopLabeling = maybe (T.pack "X") mayLabel
+            , App.showDesktop = \stat@DesktopStat{desktopName} n ->
+                App.defShowFn stat n && desktopName /= Just (T.pack scratchpadWorkspaceTag)
+            }
+        deskVisWinSetup = App.WindowSetup App.defImageSetter

@@ -9,22 +9,26 @@ import Status.HWStatus
 import Text.Printf
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
+
+-- import UI.Singles qualified as UI
+
 import UI.Singles qualified as UI
 import UI.Task qualified as UI
 import View.Imagery qualified as View
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.Run (safeSpawn)
+import Data.Int
 
 -- | Battery status display.
-batDisplay :: MonadIO m => m UI.Widget
-batDisplay = do
+batDisplay :: MonadIO m => UI.IconSize -> m UI.Widget
+batDisplay iconSize = do
   img <- startRegular 500 batStat >>= traverse batIcon
   ev <- UI.buttonNewWith (View.imageDynWidget <$> img) $ safeSpawn "gnome-control-center" ["power"]
   UI.widgetSetName ev (T.pack "bat")
   ev <$ UI.widgetShowAll ev
   where
     batIcon task = do
-      img <- View.imageDynNew UI.IconSizeDnd
+      img <- View.imageDynNew iconSize
       liftIO $ do
         kill <- UI.uiTask task $ \BatStat{capacity, batStatus} ->
           View.imageDynSetImg img $ View.ImgSName $ batName ((capacity `div` 10) * 10) batStatus
@@ -35,9 +39,9 @@ batDisplay = do
       Charging -> T.pack $ printf "battery-level-%d-charging-symbolic" level
       _ -> T.pack $ printf "battery-level-%d-symbolic" level
 
--- | Mainboard status display.
-mainboardDisplay :: MonadIO m => m UI.Widget
-mainboardDisplay = do
+-- | Mainboard status display with given icon size & width.
+mainboardDisplay :: MonadIO m => UI.IconSize -> Int32 -> m UI.Widget
+mainboardDisplay iconSize mainWidth = do
   widMem <- startRegular 500 memStat >>= traverse memIcon
   traverse_ (`UI.setWidgetHalign` UI.AlignStart) widMem
   traverse_ (`UI.setWidgetValign` UI.AlignCenter) widMem
@@ -50,18 +54,19 @@ mainboardDisplay = do
   traverse_ (`UI.setWidgetValign` UI.AlignCenter) widCPU
 
   bg <- do
-    img <- UI.imageNew -- Will set image later
-    UI.widgetSetSizeRequest img 56 32
+    img <- UI.imageNew -- Tried to set the image, but gtk does not accept rectangular icons.
+    UI.widgetSetSizeRequest img mainWidth (-1)
     UI.toWidget img
 
   disp <- UI.overlayed bg (toList widMem <> toList widCPU)
   ev <- UI.buttonNewWith (Just disp) $ safeSpawn "gnome-system-monitor" ["-r"]
+  UI.widgetSetName ev (T.pack "mainboard")
   ev <$ UI.widgetShowAll ev
   where
     memIcon task = do
       -- TODO Identify the transparency issue of the image
       -- MAYBE Image itself providing location of bar?
-      let ramImg = View.imageStaticNew UI.IconSizeDnd $ View.ImgSName (T.pack "ram-000")
+      let ramImg = View.imageStaticNew iconSize $ View.ImgSName (T.pack "ram-000")
       hack <- ramImg
       fg <- ramImg
       let barRect = RationalRect (14 % 32) (8 % 32) (18 % 32) (24 % 32)
@@ -74,7 +79,7 @@ mainboardDisplay = do
       pure mem
 
     cpuIcon (taskUse, taskTemp) = do
-      fg <- View.imageDynNew UI.IconSizeDnd
+      fg <- View.imageDynNew iconSize
       let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
       bar <- View.barNew barRect
       cpu <- UI.overlayed (View.imageDynWidget fg) [View.barWidget bar]
