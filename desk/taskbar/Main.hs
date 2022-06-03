@@ -101,14 +101,16 @@ main = runPulpIO $
         }
     leftBox :: PulpIO UI.Widget
     leftBox = do
-      box <- UI.boxNew UI.OrientationHorizontal 2
+      box <- UI.boxNew UI.OrientationHorizontal 0
       UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "statusbar-box")
       powerIcon <- View.imageStaticNew UI.IconSizeLargeToolbar $ View.ImgSName (T.pack "system-shutdown-symbolic")
       traverse_ (addToBegin box)
         =<< sequenceA
-          [ UI.buttonNewWith (Just powerIcon) runPulpCtl
+          [UI.buttonNewWith (Just powerIcon) runPulpCtl]
+      traverse_ (addToEnd box)
+        =<< sequenceA
+          [ App.mainboardDisplay UI.IconSizeLargeToolbar 42
           , App.batDisplay UI.IconSizeLargeToolbar
-          , App.mainboardDisplay UI.IconSizeLargeToolbar 42
           ]
       UI.toWidget box
       where
@@ -132,7 +134,7 @@ main = runPulpIO $
       UI.toWidget box
 
     addToBegin box wid = UI.boxPackStart box wid False False 0
-    _addToEnd box wid = UI.boxPackEnd box wid False False 0
+    addToEnd box wid = UI.boxPackEnd box wid False False 0
 
     desktopVis :: PulpIO UI.Widget
     desktopVis = App.deskVisualizer deskVisDeskSetup deskVisWinSetup

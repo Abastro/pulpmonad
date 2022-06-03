@@ -110,7 +110,7 @@ deskItemNew onClick = do
     UI.boxed UI.OrientationHorizontal 0
       =<< sequenceA [UI.toWidget deskItemName, UI.toWidget deskItemWinCont]
 
-  deskItemWid <- UI.buttonNewWith (Just deskMain) onClick
+  deskItemWid <- UI.clickyNewWith (Just deskMain) onClick
   UI.widgetGetStyleContext deskItemWid >>= flip UI.styleContextAddClass (T.pack "desktop-item")
 
   pure DeskItem{..}
