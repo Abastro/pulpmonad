@@ -66,15 +66,13 @@ deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO UI.Widget
 deskVisualizer deskSetup winSetup = do
   rcvs <- pulpXHandle deskVisInitiate
   deskVisualView <- View.deskVisualNew
-  _ <- deskVisMake rcvs (deskSetup, winSetup) deskVisualView
-  UI.widgetShowAll (View.deskVisualWidget deskVisualView)
+  DeskVisHandle <- deskVisMake rcvs (deskSetup, winSetup) deskVisualView
 
   pure $ View.deskVisualWidget deskVisualView
 
 -- Currently handle is empty, because no external handling is permitted.
 data DeskVisHandle = DeskVisHandle
 
--- TODO Make it to use PulpIO in most cases
 -- TODO Model scheme is not working, need to make it work with pure states. Later.
 deskVisMake ::
   DeskVisRcvs ->
@@ -119,7 +117,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           winRcvs <- trackWinInfo window
           winItemView <- View.winItemNew $ reqActivate window
           let getIcon = winGetIcon window
-          let switcher item x y = unlift (winSwitch desksRef window item x y)
+          let switcher item x y = unlift (winSwitch window item x y)
           unlift $ winItemMake winSetup getIcon switcher winRcvs winItemView
 
         updateWinList :: V.Vector Window -> PulpIO ()
@@ -154,8 +152,8 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           for_ (nextActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
             View.widgetUpdateClass (View.winItemWidget itemWindowView) winActiveCssClass [()]
 
-        winSwitch :: IORef (V.Vector DeskItemHandle) -> Window -> View.WinItem -> Int -> Int -> PulpIO ()
-        winSwitch desksRef windowId winView deskOld deskNew = withRunInIO $ \unlift -> do
+        winSwitch :: Window -> View.WinItem -> Int -> Int -> PulpIO ()
+        winSwitch windowId winView deskOld deskNew = withRunInIO $ \unlift -> do
           unlift $ logPrintf (T.pack "DeskVis") LevelInfo "[$1] desktop $2 -> $3" windowId deskOld deskNew
           desktops <- readIORef desksRef
           curOrders <- readIORef ordersRef
@@ -176,10 +174,10 @@ data DeskItemHandle = DeskItemHandle
   }
 
 {-
-data DeskItemEvent
-  = DeskItemUpdate !DesktopStat
-  | DeskWinAddRm !Window !View.WinItem !DeskWinMod
-  | DeskWinReorder (Window -> Maybe Int) (Window -> Maybe WinItemHandle)
+data DeskItemState = DeskItemState
+  { deskStat :: !DesktopStat
+  , deskWindows :: !(V.Vector Window)
+  }
 -}
 
 deskItemMake :: DesktopSetup -> DesktopStat -> View.DeskItem -> PulpIO DeskItemHandle
@@ -194,6 +192,7 @@ deskItemMake DesktopSetup{..} initStat view = withRunInIO $ \_unlift -> do
           writeIORef statRef deskStat
           updateVisible curWindows
 
+        -- TODO How to on window destroy?
         addRmWinItem winView windowId = \case
           WinRemove -> do
             View.deskItemCtrl view (View.RemoveWinItem winView)
@@ -217,9 +216,7 @@ deskItemMake DesktopSetup{..} initStat view = withRunInIO $ \_unlift -> do
         updateVisible curWindows = do
           deskStat <- readIORef statRef
           numWindows <- fromIntegral . V.length <$> readIORef curWindows
-          if showDesktop deskStat numWindows
-            then UI.widgetShowAll (View.deskItemWidget view)
-            else UI.widgetHide (View.deskItemWidget view)
+          View.deskItemCtrl view (View.DeskVisibility $ showDesktop deskStat numWindows)
 
 newtype WinItemHandle = WinItemHandle
   { itemWindowView :: View.WinItem -- As window can move around, its view should be separately owned.

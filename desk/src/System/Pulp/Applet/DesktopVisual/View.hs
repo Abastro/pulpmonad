@@ -63,6 +63,7 @@ deskVisualNew = do
   deskVisualCont <- UI.toContainer =<< UI.boxNew UI.OrientationHorizontal 5
   deskVisualWid <- UI.toWidget deskVisualCont
   UI.widgetGetStyleContext deskVisualWid >>= flip UI.styleContextAddClass (T.pack "desk-visual")
+  UI.widgetShowAll deskVisualWid
 
   deskVisualItems <- liftIO $ newIORef V.empty
   pure DeskVisual{..}
@@ -93,6 +94,7 @@ data DeskItemOp
   | RemoveWinItem !WinItem
   | ReorderWinItems !(V.Vector WinItem)
   | DeskLabelName !T.Text
+  | DeskVisibility !Bool
 
 deskItemWidget :: DeskItem -> UI.Widget
 deskItemWidget DeskItem{deskItemWid} = deskItemWid
@@ -128,6 +130,7 @@ deskItemCtrl DeskItem{..} = \case
 
   -- Mundane property update here
   DeskLabelName name -> UI.labelSetLabel deskItemName name
+  DeskVisibility flag -> if flag then UI.widgetShowAll deskItemWid else UI.widgetHide deskItemWid
 
 -- | Window item view
 data WinItem = WinItem
