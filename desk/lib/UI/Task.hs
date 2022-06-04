@@ -16,5 +16,5 @@ uiSingleRun task = void $ Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE (False <$ tas
 uiTask :: Task a -> (a -> IO b) -> IO (IO ())
 uiTask task actWith = do
   let action = True <$ (taskNext task >>= traverse_ actWith)
-  sourceId <- Gdk.threadsAddTimeout PRIORITY_DEFAULT_IDLE 1 action
+  sourceId <- Gdk.threadsAddTimeout PRIORITY_DEFAULT 1 action
   pure $ taskStop task <* sourceRemove sourceId
