@@ -26,6 +26,7 @@ import Text.Printf
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Styles qualified as UI
+import UI.Task qualified as UI
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !UI.Orientation
@@ -35,8 +36,8 @@ data SysTrayArgs = SysTrayArgs
   }
 
 -- MAYBE option to fit icon size to be uniform
-sysTrayMake :: Host -> Client -> SysTrayArgs -> IO UI.Widget
-sysTrayMake
+sysTrayMakeStub :: Host -> Client -> SysTrayArgs -> IO UI.Widget
+sysTrayMakeStub
   Host
     { itemInfoMap = getInfoMap
     , addUpdateHandler = addUHandler
@@ -44,7 +45,6 @@ sysTrayMake
     }
   client
   SysTrayArgs{..} = do
-    trayBox <- UI.boxNew trayOrientation 0
     contextMap <- newMVar M.empty
 
     let getContext name = (M.!? name) <$> readMVar contextMap
@@ -80,97 +80,84 @@ sysTrayMake
         setTooltipText widget info =
           UI.widgetSetTooltipText widget $ Just $ T.pack $ getTooltipText info
 
-        updateHandler
-          ItemAdded
-          info@ItemInfo
-            { menuPath = pathForMenu
-            , itemServiceName = serviceName
-            , itemServicePath = servicePath
-            } =
-            do
-              let serviceNameStr = formatBusName serviceName
-                  servicePathStr = formatObjectPath servicePath :: String
-                  serviceMenuPathStr = formatObjectPath <$> pathForMenu
+        updateHandler ItemAdded info@ItemInfo{itemServiceName, itemServicePath, menuPath} =
+          do
+            let serviceNameStr = formatBusName itemServiceName
+                servicePathStr = formatObjectPath itemServicePath :: String
+                serviceMenuPathStr = formatObjectPath <$> menuPath
 
-              button <- UI.eventBoxNew
-              UI.widgetAddEvents button [Gdk.EventMaskScrollMask]
+            button <- UI.eventBoxNew
+            UI.widgetAddEvents button [Gdk.EventMaskScrollMask]
 
-              image :: UI.Widget <- undefined -- use pixbuf
-              UI.widgetGetStyleContext image
-                >>= flip UI.styleContextAddClass (T.pack "tray-icon-image")
+            image :: UI.Widget <- undefined -- use pixbuf
+            UI.widgetGetStyleContext image
+              >>= flip UI.styleContextAddClass (T.pack "tray-icon-image")
 
-              UI.containerAdd button image
-              setTooltipText (error "cast" button) info
+            UI.containerAdd button image
+            setTooltipText (error "cast" button) info
 
-              maybeMenu <-
-                sequenceA $
-                  DMenu.menuNew (T.pack serviceNameStr) . T.pack <$> serviceMenuPathStr
+            maybeMenu <-
+              sequenceA $
+                DMenu.menuNew (T.pack serviceNameStr) . T.pack <$> serviceMenuPathStr
 
-              let context = undefined
-                  popupItemForMenu menu =
-                    UI.menuPopupAtWidget
-                      menu
-                      image
-                      UI.GravitySouthWest
-                      UI.GravityNorthWest
-                      Nothing
+            let context = undefined
+                popupItemForMenu menu =
+                  UI.menuPopupAtWidget
+                    menu
+                    image
+                    UI.GravitySouthWest
+                    UI.GravityNorthWest
+                    Nothing
 
-              _ <- UI.onWidgetButtonPressEvent button $ \event -> do
-                button <- Gdk.getEventButtonButton event
-                x <- round <$> Gdk.getEventButtonXRoot event
-                y <- round <$> Gdk.getEventButtonYRoot event
-                action <- case button of
-                  1 ->
-                    bool (error "leftClickAction") (error "PopupMenu")
-                      <$> getInfoAttr itemIsMenu True serviceName
-                  2 -> error "middleClickAction"
-                  _ -> error "rightClickAction"
-                {-
-                case action of
-                  Activate -> void $ activate client serviceName servicePath x y
-                  SecondaryActivate ->
-                    void $
-                      secondaryActivate
-                        client
-                        serviceName
-                        servicePath
-                        x
-                        y
-                  PopupMenu -> maybe (return ()) popupItemForMenu maybeMenu
-                -}
-                return False
-              _ <- UI.onWidgetScrollEvent button $ \event -> do
-                direction <- Gdk.getEventScrollDirection event
-                let direction' = case direction of
-                      UI.ScrollDirectionUp -> Just "vertical"
-                      UI.ScrollDirectionDown -> Just "vertical"
-                      UI.ScrollDirectionLeft -> Just "horizontal"
-                      UI.ScrollDirectionRight -> Just "horizontal"
-                      _ -> Nothing
-                    -- deltaX/deltaY are provided only in case of smooth scrolling which
-                    -- is enabled via additional flag, we don't to enable/handle it
-                    delta = case direction of
-                      UI.ScrollDirectionUp -> -1
-                      UI.ScrollDirectionDown -> 1
-                      UI.ScrollDirectionLeft -> -1
-                      UI.ScrollDirectionRight -> 1
-                      _ -> 0
-                traverse_ (scroll client serviceName servicePath delta) direction'
-                return False
+            _ <- UI.onWidgetButtonPressEvent button $ \event -> do
+              button <- Gdk.getEventButtonButton event
+              x <- round <$> Gdk.getEventButtonXRoot event
+              y <- round <$> Gdk.getEventButtonYRoot event
+              action <- case button of
+                1 ->
+                  bool (error "leftClickAction") (error "PopupMenu")
+                    <$> getInfoAttr itemIsMenu True itemServiceName
+                2 -> error "middleClickAction"
+                _ -> error "rightClickAction"
+              {-
+              case action of
+                Activate -> void $ activate client serviceName servicePath x y
+                SecondaryActivate ->
+                  void $
+                    secondaryActivate
+                      client
+                      serviceName
+                      servicePath
+                      x
+                      y
+                PopupMenu -> maybe (return ()) popupItemForMenu maybeMenu
+              -}
+              return False
+            _ <- UI.onWidgetScrollEvent button $ \event -> do
+              direction <- Gdk.getEventScrollDirection event
+              let direction' = case direction of
+                    UI.ScrollDirectionUp -> Just "vertical"
+                    UI.ScrollDirectionDown -> Just "vertical"
+                    UI.ScrollDirectionLeft -> Just "horizontal"
+                    UI.ScrollDirectionRight -> Just "horizontal"
+                    _ -> Nothing
+                  -- deltaX/deltaY are provided only in case of smooth scrolling which
+                  -- is enabled via additional flag, we don't to enable/handle it
+                  delta = case direction of
+                    UI.ScrollDirectionUp -> -1
+                    UI.ScrollDirectionDown -> 1
+                    UI.ScrollDirectionLeft -> -1
+                    UI.ScrollDirectionRight -> 1
+                    _ -> 0
+              traverse_ (scroll client itemServiceName itemServicePath delta) direction'
+              return False
 
-              modifyMVar_ contextMap $ return . M.insert serviceName context
-
-              UI.widgetShowAll button
-              let packFn = if trayAlignBegin then UI.boxPackStart else UI.boxPackEnd
-              packFn trayBox button (error "shouldExpand") True 0
+            error "widget add"
         updateHandler ItemRemoved ItemInfo{itemServiceName = name} =
           getContext name >>= removeWidget
           where
-            removeWidget Nothing = undefined
-            removeWidget (Just _) =
-              do
-                UI.containerRemove trayBox (error "widgetToRemove" :: UI.Widget)
-                modifyMVar_ contextMap $ return . M.delete name
+            removeWidget Nothing = error "log widget remove error"
+            removeWidget (Just _) = error "widget remove"
         updateHandler IconUpdated i = updateIconFromInfo i
         updateHandler OverlayIconUpdated i = updateIconFromInfo i
         updateHandler ToolTipUpdated info@ItemInfo{itemServiceName = name} =
@@ -257,12 +244,4 @@ sysTrayMake
             then error "getIconPixbufByName size (T.pack name) mpath"
             else sequenceA $ getFromPixmaps selectedPixmap
 
-        uiUpdateHandler updateType info =
-          void $
-            undefined
-            {- Gdk.threadsAddIdle GLib.PRIORITY_DEFAULT -} $
-              updateHandler updateType info >> return False
-
-    handlerId <- addUHandler uiUpdateHandler
-    _ <- UI.onWidgetDestroy trayBox $ removeUHandler handlerId
-    UI.toWidget trayBox
+    undefined

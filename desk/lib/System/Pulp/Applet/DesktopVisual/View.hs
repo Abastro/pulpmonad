@@ -53,7 +53,7 @@ data DeskVisualOp
 deskVisualWidget :: DeskVisual -> UI.Widget
 deskVisualWidget DeskVisual{deskVisualWid} = deskVisualWid
 
--- TODO Remove
+-- TODO Remove itemAt
 deskVisualItemAt :: MonadIO m => DeskVisual -> Int -> m (Maybe DeskItem)
 deskVisualItemAt DeskVisual{..} idx = do
   deskItems <- liftIO $ readIORef deskVisualItems
