@@ -23,6 +23,7 @@ import Data.Foldable
 import Data.IORef
 import Data.Text qualified as T
 import Data.Vector qualified as V
+import GI.GdkPixbuf.Objects.Pixbuf qualified as Gdk
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gtk.Objects.Box qualified as UI
 import GI.Gtk.Objects.Image qualified as UI
@@ -30,7 +31,6 @@ import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Singles qualified as UI
 import UI.Styles qualified as UI
-import qualified GI.GdkPixbuf.Objects.Pixbuf as Gdk
 
 -- | Setting image for Image widget
 data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon | ImgSPixbuf Gdk.Pixbuf
@@ -53,6 +53,7 @@ data DeskVisualOp
 deskVisualWidget :: DeskVisual -> UI.Widget
 deskVisualWidget DeskVisual{deskVisualWid} = deskVisualWid
 
+-- TODO Remove
 deskVisualItemAt :: MonadIO m => DeskVisual -> Int -> m (Maybe DeskItem)
 deskVisualItemAt DeskVisual{..} idx = do
   deskItems <- liftIO $ readIORef deskVisualItems
@@ -83,8 +84,8 @@ deskVisualCtrl DeskVisual{..} = \case
 
 -- | Desktop item view
 data DeskItem = DeskItem
-  { deskItemWid :: !UI.Widget
-  -- ^ The congregated widget
+  { -- | The congregated widget
+    deskItemWid :: !UI.Widget
   , deskItemName :: !UI.Label
   , deskItemWinCont :: !UI.Box
   }
@@ -134,8 +135,8 @@ deskItemCtrl DeskItem{..} = \case
 
 -- | Window item view
 data WinItem = WinItem
-  { winItemWid :: !UI.Widget
-  -- ^ The congregated widget
+  { -- | The congregated widget
+    winItemWid :: !UI.Widget
   , winItemImg :: !UI.Image
   }
 

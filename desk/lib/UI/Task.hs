@@ -1,14 +1,15 @@
 module UI.Task where
 
+import Control.Concurrent.Task
+import Control.Monad
 import Data.Foldable
 import GI.GLib.Constants
 import GI.GLib.Structs.Source
 import GI.Gdk.Functions qualified as Gdk
-import Control.Concurrent.Task
 
 -- | Adds UI single-use task, which only runs once.
 uiSingleRun :: IO a -> IO ()
-uiSingleRun task = () <$ Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE (False <$ task)
+uiSingleRun task = void $ Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE (False <$ task)
 
 -- | Adds UI Task, returns the kill action. Each UI task is checked every 1ms.
 -- WARNING: a task should not be given to 2 UI tasks.

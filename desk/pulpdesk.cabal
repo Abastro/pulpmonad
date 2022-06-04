@@ -92,6 +92,11 @@ common pulp-gtk
 library
   import:             pulp-gtk
   hs-source-dirs:     lib
+  build-depends:
+      dbus ^>=1.2
+    , status-notifier-item ^>=0.3.1
+    , gi-dbusmenugtk3 ==0.4.*
+
   exposed-modules:
     Control.Concurrent.Task
     Data.Validation
@@ -119,6 +124,7 @@ library
     System.Pulp.Applet.DesktopVisual
     System.Pulp.Applet.DesktopVisual.Handle
     System.Pulp.Applet.DesktopVisual.View
+    System.Pulp.Applet.SysTray
 
 test-suite test-pulpdesk
   import:             pulp-gtk
