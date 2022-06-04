@@ -91,7 +91,7 @@ common pulp-gtk
 
 library
   import:             pulp-gtk
-  hs-source-dirs:     src
+  hs-source-dirs:     lib
   exposed-modules:
     Control.Concurrent.Task
     Data.Validation

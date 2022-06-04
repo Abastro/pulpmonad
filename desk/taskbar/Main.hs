@@ -38,7 +38,7 @@ workspaceMaps =
     , (game, "\xf43c")
     ]
 
-data BarWinCfg = BarWinCfg
+data BarWinParams = BarWinParams
   { barDockPos :: !UI.DockPos
   , barDockSize :: !UI.DockSize
   , barDockSpan :: !UI.DockSpan
@@ -46,8 +46,8 @@ data BarWinCfg = BarWinCfg
   }
 
 -- | Creates and links the taskbar window. Does not show the window.
-taskbarWindow :: UI.Application -> BarWinCfg -> UI.Widget -> PulpIO UI.Window
-taskbarWindow app BarWinCfg{..} content = do
+taskbarWindow :: UI.Application -> BarWinParams -> UI.Widget -> PulpIO UI.Window
+taskbarWindow app BarWinParams{..} content = do
   window <- UI.windowNew UI.WindowTypeToplevel
   UI.windowSetTitle window barTitle
   UI.windowSetDock window barDockPos barDockSize barDockSpan
@@ -88,12 +88,12 @@ main = runPulpIO $
       cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
-      left <- unlift $ taskbarWindow app leftCfg =<< leftBox
-      center <- unlift $ taskbarWindow app centerCfg =<< centerBox
+      left <- unlift $ taskbarWindow app leftParams =<< leftBox
+      center <- unlift $ taskbarWindow app centerParams =<< centerBox
       traverse_ UI.widgetShowAll [left, center]
 
-    leftCfg =
-      BarWinCfg
+    leftParams =
+      BarWinParams
         { barDockPos = UI.DockBottom
         , barDockSize = UI.AbsoluteSize 36
         , barDockSpan = UI.DockSpan 0 (1 / 6)
@@ -118,8 +118,8 @@ main = runPulpIO $
           cacheDir <- getEnv "XMONAD_CACHE_DIR"
           safeSpawn (cacheDir </> "pulp-sysctl") []
 
-    centerCfg =
-      BarWinCfg
+    centerParams =
+      BarWinParams
         { barDockPos = UI.DockBottom
         , barDockSize = UI.AbsoluteSize 40
         , barDockSpan = UI.DockSpan (1 / 6) (5 / 6)
