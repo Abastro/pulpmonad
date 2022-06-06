@@ -136,14 +136,15 @@ data WinItem = WinItem
   { -- | The congregated widget
     winItemWid :: !UI.Widget
   , winItemImg :: !View.ImageDyn
+  , winItemSize :: !UI.IconSize
   }
 
 winItemWidget :: WinItem -> UI.Widget
 winItemWidget WinItem{winItemWid} = winItemWid
 
-winItemNew :: MonadIO m => IO () -> m WinItem
-winItemNew onClick = do
-  winItemImg <- View.imageDynNew UI.IconSizeLargeToolbar
+winItemNew :: MonadIO m => UI.IconSize -> IO () -> m WinItem
+winItemNew winItemSize onClick = do
+  winItemImg <- View.imageDynNew winItemSize
   winItemWid <- UI.buttonNewWith (Just $ View.imageDynWidget winItemImg) onClick
   UI.widgetGetStyleContext winItemWid >>= flip UI.styleContextAddClass (T.pack "window-item")
   pure WinItem{..}
@@ -154,17 +155,14 @@ winItemSetTitle WinItem{winItemWid} = UI.widgetSetTooltipText winItemWid . Just
 type RawIconSet = IO (Either String [UI.RawIcon])
 
 winItemSetIcon :: MonadIO m => WinItem -> RawIconSet -> Maybe View.ImageSet -> m ()
-winItemSetIcon WinItem{winItemImg} rawIcons = \case
+winItemSetIcon WinItem{..} rawIcons = \case
   Nothing -> do
-    iconSet <- fromMaybe (View.ImgSName $ T.pack "missing") <$> liftIO (rawIconSetter rawIcons)
+    iconSet <- fromMaybe (View.ImgSName $ T.pack "missing") <$> liftIO rawIconSet
     View.imageDynSetImg winItemImg iconSet
   Just iconSet -> View.imageDynSetImg winItemImg iconSet
-
-rawIconSetter :: RawIconSet -> IO (Maybe View.ImageSet)
-rawIconSetter getIcon =
-  runMaybeT $
-    liftIO getIcon >>= \case
+  where
+    rawIconSet = runMaybeT $ liftIO rawIcons >>= \case
       Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
       Right icons -> do
-        scaled <- MaybeT $ UI.iconsChoosePixbuf 24 UI.argbTorgba icons
+        scaled <- MaybeT $ UI.iconsChoosePixbuf (UI.iconSizePx winItemSize) UI.argbTorgba icons
         pure (View.ImgSPixbuf scaled)

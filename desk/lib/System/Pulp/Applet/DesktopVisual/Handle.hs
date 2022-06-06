@@ -59,9 +59,10 @@ data DesktopSetup = DesktopSetup
   }
 
 -- | Window part of the setup.
-newtype WindowSetup = WindowSetup
+data WindowSetup = WindowSetup
   { -- | With which image the window is going to set to.
     windowImgSetter :: WindowInfo -> MaybeT IO View.ImageSet
+  , windowIconSize :: UI.IconSize
   }
 
 -- TODO Configuration adjusting the icon size
@@ -88,6 +89,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
   act <- registers <$> newIORef V.empty <*> newIORef M.empty <*> newIORef M.empty <*> newIORef Nothing
   unlift act
   where
+    WindowSetup{windowIconSize} = winSetup
     registers desksRef winsRef ordersRef activeRef = withRunInIO $ \unlift -> do
       killStat <- UI.uiTask desktopStats (unlift . updateDeskStats)
       killWinCh <- UI.uiTask windowsList (unlift . updateWinList)
@@ -120,7 +122,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
 
         addNewWin window () = withRunInIO $ \unlift -> do
           winRcvs <- trackWinInfo window
-          winItemView <- View.winItemNew $ reqActivate window
+          winItemView <- View.winItemNew windowIconSize $ reqActivate window
           let getIcon = winGetIcon window
           let switcher item x y = unlift (winSwitch window item x y)
           unlift $ winItemMake winSetup getIcon switcher winRcvs winItemView

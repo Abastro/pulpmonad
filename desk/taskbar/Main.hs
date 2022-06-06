@@ -142,7 +142,11 @@ main = runPulpIO $
             , App.showDesktop = \stat@DesktopStat{desktopName} n ->
                 App.defShowFn stat n && desktopName /= Just (T.pack scratchpadWorkspaceTag)
             }
-        deskVisWinSetup = App.WindowSetup App.defImageSetter
+        deskVisWinSetup =
+          App.WindowSetup
+            { windowImgSetter = App.defImageSetter
+            , windowIconSize = UI.IconSizeLargeToolbar
+            }
 
     rightArgs =
       BarWinArgs
@@ -158,11 +162,12 @@ main = runPulpIO $
       liftIO $ addToEnd box =<< App.systemTray sysTrayArgs
       UI.toWidget box
       where
-        sysTrayArgs = App.SysTrayArgs {
-          App.trayOrientation = UI.OrientationHorizontal
-        , App.trayIconSize = UI.IconSizeLargeToolbar
-        , App.trayAlignBegin = False
-        }
+        sysTrayArgs =
+          App.SysTrayArgs
+            { App.trayOrientation = UI.OrientationHorizontal
+            , App.trayIconSize = UI.IconSizeLargeToolbar
+            , App.trayAlignBegin = False
+            }
 
     addToBegin box wid = UI.boxPackStart box wid False False 0
     addToEnd box wid = UI.boxPackEnd box wid False False 0
