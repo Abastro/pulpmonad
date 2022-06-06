@@ -177,7 +177,6 @@ customIconTheme themePath = do
 imgNameSet :: UI.IconSize -> Maybe String -> T.Text -> MaybeT IO View.ImageSet
 imgNameSet size mayTheme name = do
   guard $ not (T.null name)
-  liftIO $ putStrLn $ "Theme " <> show mayTheme <> " name " <> show name
   -- Icon should be freedesktop-compliant icon name.
   let nonEmp p = p <$ guard (not $ null p)
   case mayTheme >>= nonEmp of
