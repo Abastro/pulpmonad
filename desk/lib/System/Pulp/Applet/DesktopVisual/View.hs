@@ -15,6 +15,7 @@ module System.Pulp.Applet.DesktopVisual.View (
   winItemWidget,
   winItemNew,
   winItemSetImg,
+  winItemSetTitle,
 ) where
 
 import Control.Monad.IO.Class
@@ -146,3 +147,6 @@ winItemNew onClick = do
 
 winItemSetImg :: MonadIO m => WinItem -> View.ImageSet -> m ()
 winItemSetImg WinItem{winItemImg} = View.imageDynSetImg winItemImg
+
+winItemSetTitle :: MonadIO m => WinItem -> T.Text -> m ()
+winItemSetTitle WinItem{winItemWid} = UI.widgetSetTooltipText winItemWid . Just

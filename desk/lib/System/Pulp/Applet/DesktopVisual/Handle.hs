@@ -249,6 +249,7 @@ winItemMake WindowSetup{..} getXIcon onSwitch PerWinRcvs{..} view = do
           when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk
 
         updateWindow winInfo@WindowInfo{..} = do
+          View.winItemSetTitle view windowTitle
           windowImgSetter winInfo getXIcon >>= View.winItemSetImg view
           View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
 
