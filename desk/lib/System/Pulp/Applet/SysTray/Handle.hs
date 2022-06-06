@@ -35,7 +35,6 @@ import System.Pulp.Applet.SysTray.View qualified as View
 import UI.Commons qualified as UI
 import UI.Task qualified as UI
 import View.Imagery qualified as View
-import qualified GI.Gio.Objects.ThemedIcon as Gio
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !UI.Orientation
@@ -107,6 +106,8 @@ sysTrayMake HS.Host{..} client args@SysTrayArgs{..} view = do
 
         addItem :: HS.ItemInfo -> IO (Maybe TrayItemHandle)
         addItem info@HS.ItemInfo{..} = do
+          {- putStrLn "icon add"
+          print $ HS.supressPixelData info -}
           itemView <- View.trayItemNew trayIconSize
           item@TrayItemHandle{..} <- trayItemMake client args info itemView
           itemAddRemove view True
@@ -181,6 +182,8 @@ customIconTheme themePath = do
 
 imgNameSet :: UI.IconSize -> Maybe String -> T.Text -> MaybeT IO View.ImageSet
 imgNameSet size mayTheme name = do
+  guard $ not (T.null name)
+  liftIO $ putStrLn $ "Theme " <> show mayTheme <> " name " <> show name
   -- Icon should be freedesktop-compliant icon name.
   let nonEmp p = p <$ guard (not $ null p)
   case mayTheme >>= nonEmp of
@@ -190,26 +193,21 @@ imgNameSet size mayTheme name = do
   where
     panelName = name <> T.pack "-panel" -- Looks up first with "-panel" suffix
     loadFlags = [UI.IconLookupFlagsUseBuiltin, UI.IconLookupFlagsGenericFallback]
-    withDefTheme = do
-      -- Avoid rendering here. If possible, want to prioritize panel name.
-      defTheme <- UI.iconThemeGetDefault
-      themed <- UI.iconThemeHasIcon defTheme panelName >>= \case
-        True -> Gio.themedIconNew panelName
-        False -> Gio.themedIconNewWithDefaultFallbacks name
-      View.ImgSGIcon <$> Gio.toIcon themed
-    forCustomTheme themePath = do
-      theme <- liftIO $ customIconTheme themePath
-      pixbuf <- MaybeT $ UI.iconThemeLoadIcon theme panelName (iconSizePx size) loadFlags
-      pure (View.ImgSPixbuf pixbuf)
+    withDefTheme = UI.iconThemeGetDefault >>= setPixbuf
+    forCustomTheme themePath = customIconTheme themePath >>= setPixbuf
     directPath path = do
       fileIcon <- Gio.fileNewForPath path >>= Gio.fileIconNew
       View.ImgSGIcon <$> Gio.toIcon fileIcon
+
+    setPixbuf theme = do
+      pixbuf <- MaybeT $ UI.iconThemeLoadIcon theme panelName (iconSizePx size) loadFlags
+      pure (View.ImgSPixbuf pixbuf)
 
 imgInfoSet :: UI.IconSize -> HS.ImageInfo -> MaybeT IO View.ImageSet
 imgInfoSet size imgs = do
   (width, height, colors) : _ <- pure $ sortOn (\(_, height, _) -> abs (height - iconSizePx size)) imgs
   guard $ BS.length colors == fromIntegral (width * height * nSample)
-  -- MAYBE convert to RGBA?
+  -- NB: Why does this work? SNI is ARGB, Gtk is RGBA.
   bytes <- Glib.bytesNew (Just colors)
   pixbuf <- Gdk.pixbufNewFromBytes bytes Gdk.ColorspaceRgb True 8 width height (width * nSample)
   pure $ View.ImgSPixbuf pixbuf
