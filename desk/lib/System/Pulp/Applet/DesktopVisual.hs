@@ -32,20 +32,24 @@ import qualified UI.Pixbufs as UI
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO Optimize this one, maybe with caching
+-- TODO Gnome apps (e.g. terminal) is harder to detect. How to go around?
 appInfoImageSetter :: WindowInfo -> MaybeT IO ImageSet
 appInfoImageSetter WindowInfo{..} = do
-  icon <- getAlt $ foldMap Alt $ findIcon <$> windowClasses
+  icon <- findIcon windowClasses
   pure (ImgSGIcon icon)
   where
-    -- TODO Some does not consider StartupWmClass - check against appinfo name
-    findIcon className = MaybeT $ do
+    findIcon classes = MaybeT $ do
       allInfos <- appInfoGetAll
       deskInfos <- catMaybes <$> traverse (castTo DesktopAppInfo) allInfos
-      filtered <- filterM (fmap (== Just className) . appWmClass) deskInfos
+      filtered <- filterM (filterCond classes) deskInfos
       join . listToMaybe <$> traverse appInfoGetIcon filtered
-    appWmClass appInfo =
-      either (const Nothing) Just
-        <$> tryAny (desktopAppInfoGetStartupWmClass appInfo)
+
+    filterCond classes deskInfo = do
+      wmClass <- either (const Nothing) Just <$> tryAny (desktopAppInfoGetStartupWmClass deskInfo)
+      -- Some slips through, so check it against desktop id with lowercased classes
+      ident <- appInfoGetId deskInfo
+      let isMatch cl = Just cl == wmClass || T.toLower cl <> T.pack ".desktop" == ident
+      pure (any isMatch classes)
 
 classImageSetter :: WindowInfo -> MaybeT IO ImageSet
 classImageSetter WindowInfo{windowClasses} = do
@@ -58,11 +62,12 @@ classImageSetter WindowInfo{windowClasses} = do
       pure className
 
 -- MAYBE Proper logging
-xIconImageSetter :: GetXIcon -> MaybeT IO ImageSet
-xIconImageSetter getXIcon =
+xIconImageSetter :: WindowInfo -> GetXIcon -> MaybeT IO ImageSet
+xIconImageSetter WindowInfo{windowClasses} getXIcon =
   liftIO getXIcon >>= \case
     Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
     Right icons -> do
+      liftIO $ putStrLn $ "X11 icon getting for " <> show windowClasses
       scaled <- MaybeT $ UI.iconsChoosePixbuf 24 UI.argbTorgba icons
       pure (ImgSPixbuf scaled)
 
@@ -72,7 +77,7 @@ defImageSetter winInfo getXIcon = do
     runMaybeT $
       appInfoImageSetter winInfo
         <|> classImageSetter winInfo
-        <|> xIconImageSetter getXIcon
+        <|> xIconImageSetter winInfo getXIcon
   pure (fromMaybe (ImgSName $ T.pack "missing") imageSet)
 
 defShowFn :: DesktopStat -> NumWindows -> Bool
