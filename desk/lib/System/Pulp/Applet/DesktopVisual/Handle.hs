@@ -30,6 +30,7 @@ import UI.Commons qualified as UI
 import UI.Pixbufs qualified as UI
 import UI.Task qualified as UI
 import View.Imagery qualified as View
+import Control.Monad.Trans.Maybe
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -59,8 +60,8 @@ data DesktopSetup = DesktopSetup
 
 -- | Window part of the setup.
 newtype WindowSetup = WindowSetup
-  { -- | With which iamge the window is going to set to.
-    windowImgSetter :: WindowInfo -> GetXIcon -> IO View.ImageSet
+  { -- | With which image the window is going to set to.
+    windowImgSetter :: WindowInfo -> MaybeT IO View.ImageSet
   }
 
 -- TODO Configuration adjusting the icon size
@@ -196,7 +197,6 @@ deskItemMake DesktopSetup{..} initStat view = withRunInIO $ \_unlift -> do
           writeIORef statRef deskStat
           updateVisible curWindows
 
-        -- TODO How to on window destroy?
         addRmWinItem winView windowId = \case
           WinRemove -> do
             View.deskItemCtrl view (View.RemoveWinItem winView)
@@ -250,7 +250,7 @@ winItemMake WindowSetup{..} getXIcon onSwitch PerWinRcvs{..} view = do
 
         updateWindow winInfo@WindowInfo{..} = do
           View.winItemSetTitle view windowTitle
-          windowImgSetter winInfo getXIcon >>= View.winItemSetImg view
+          runMaybeT (windowImgSetter winInfo) >>= View.winItemSetIcon view getXIcon
           View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------

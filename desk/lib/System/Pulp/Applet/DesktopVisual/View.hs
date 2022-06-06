@@ -14,18 +14,21 @@ module System.Pulp.Applet.DesktopVisual.View (
   WinItem,
   winItemWidget,
   winItemNew,
-  winItemSetImg,
   winItemSetTitle,
+  winItemSetIcon,
 ) where
 
 import Control.Monad.IO.Class
+import Control.Monad.Trans.Maybe
 import Data.Foldable
 import Data.IORef
+import Data.Maybe
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import GI.Gtk.Objects.Box qualified as UI
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
+import UI.Pixbufs qualified as UI
 import UI.Singles qualified as UI
 import UI.Styles qualified as UI
 import View.Imagery qualified as View
@@ -145,8 +148,23 @@ winItemNew onClick = do
   UI.widgetGetStyleContext winItemWid >>= flip UI.styleContextAddClass (T.pack "window-item")
   pure WinItem{..}
 
-winItemSetImg :: MonadIO m => WinItem -> View.ImageSet -> m ()
-winItemSetImg WinItem{winItemImg} = View.imageDynSetImg winItemImg
-
 winItemSetTitle :: MonadIO m => WinItem -> T.Text -> m ()
 winItemSetTitle WinItem{winItemWid} = UI.widgetSetTooltipText winItemWid . Just
+
+type RawIconSet = IO (Either String [UI.RawIcon])
+
+winItemSetIcon :: MonadIO m => WinItem -> RawIconSet -> Maybe View.ImageSet -> m ()
+winItemSetIcon WinItem{winItemImg} rawIcons = \case
+  Nothing -> do
+    iconSet <- fromMaybe (View.ImgSName $ T.pack "missing") <$> liftIO (rawIconSetter rawIcons)
+    View.imageDynSetImg winItemImg iconSet
+  Just iconSet -> View.imageDynSetImg winItemImg iconSet
+
+rawIconSetter :: RawIconSet -> IO (Maybe View.ImageSet)
+rawIconSetter getIcon =
+  runMaybeT $
+    liftIO getIcon >>= \case
+      Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
+      Right icons -> do
+        scaled <- MaybeT $ UI.iconsChoosePixbuf 24 UI.argbTorgba icons
+        pure (View.ImgSPixbuf scaled)
