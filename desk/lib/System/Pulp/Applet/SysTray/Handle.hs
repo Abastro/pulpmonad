@@ -3,33 +3,20 @@ module System.Pulp.Applet.SysTray.Handle (
   systemTray,
 ) where
 
-import Control.Applicative
 import Control.Monad
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Maybe
 import DBus
 import DBus.Client
 import Data.Foldable
 import Data.IORef
 import Data.Map.Strict qualified as M
-import Data.Maybe
 import Data.Text qualified as T
 import Data.Traversable
 import GI.DbusmenuGtk3.Objects.Menu qualified as DMenu
-import GI.Gdk.Objects.Screen qualified as Gdk
-import GI.Gio.Interfaces.File qualified as Gio
-import GI.Gio.Interfaces.Icon qualified as Gio
-import GI.Gio.Objects.FileIcon qualified as Gio
-import GI.Gtk.Flags qualified as UI
-import GI.Gtk.Objects.IconTheme qualified as UI
 import StatusNotifier.Host.Service qualified as HS
 import StatusNotifier.Item.Client qualified as IC
-import System.FilePath ((</>))
 import System.Pulp.Applet.SysTray.View qualified as View
 import UI.Commons qualified as UI
-import UI.Pixbufs qualified as UI
 import UI.Task qualified as UI
-import View.Imagery qualified as View
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !UI.Orientation
@@ -130,18 +117,13 @@ trayItemMake client SysTrayArgs{..} HS.ItemInfo{..} view = do
       True -> View.sysTrayCtrl trayView (View.TrayAddItem view)
       False -> View.sysTrayCtrl trayView (View.TrayRemoveItem view)
 
-    itemUpdateIcon themePath iconName iconInfo = do
-      iconSet <-
-        runMaybeT $ imgNameSet trayIconSize themePath iconName <|> imgInfoSet trayIconSize iconInfo
-      let defedSet = fromMaybe (View.ImgSName $ T.pack "missing") iconSet
-      View.trayItemCtrl view (View.ItemSetIcon defedSet)
+    itemUpdateIcon itemThemePath iconName itemIconInfo = do
+      View.trayItemCtrl view (View.ItemSetIcon View.TrayItemIcon{..})
+      where
+        itemIconName = Just iconName
 
-    itemUpdateOverlay themePath mayIconName iconInfo = do
-      let iconN = MaybeT (pure mayIconName)
-      iconSet <-
-        runMaybeT $ (imgNameSet trayIconSize themePath =<< iconN) <|> imgInfoSet trayIconSize iconInfo
-      let defedSet = fromMaybe (View.ImgSName $ T.pack "missing") iconSet
-      View.trayItemCtrl view (View.ItemSetOverlay defedSet)
+    itemUpdateOverlay itemThemePath itemIconName itemIconInfo = do
+      View.trayItemCtrl view (View.ItemSetOverlay View.TrayItemIcon{..})
 
     itemUpdateTooltip = \case
       Nothing -> View.trayItemCtrl view (View.ItemSetTooltip Nothing)
@@ -163,44 +145,3 @@ trayItemMake client SysTrayArgs{..} HS.ItemInfo{..} view = do
       View.MouseLeft | not itemIsMenu -> void $ IC.activate client itemServiceName itemServicePath xRoot yRoot
       View.MouseMiddle -> void $ IC.secondaryActivate client itemServiceName itemServicePath xRoot yRoot
       _ -> traverse_ (View.trayItemCtrl view . View.ItemShowPopup) mayMenu
-
-customIconTheme :: MonadIO m => String -> m UI.IconTheme
-customIconTheme themePath = do
-  custom <- UI.iconThemeNew
-  Gdk.screenGetDefault >>= traverse_ (UI.iconThemeSetScreen custom)
-  UI.iconThemeAppendSearchPath custom themePath
-
-  defTheme <- UI.iconThemeGetDefault
-  UI.iconThemeGetSearchPath defTheme >>= traverse_ (UI.iconThemeAppendSearchPath custom)
-  pure custom
-
-imgNameSet :: UI.IconSize -> Maybe String -> T.Text -> MaybeT IO View.ImageSet
-imgNameSet size mayTheme name = do
-  guard $ not (T.null name)
-  -- Icon should be freedesktop-compliant icon name.
-  let nonEmp p = p <$ guard (not $ null p)
-  case mayTheme >>= nonEmp of
-    Nothing -> withDefTheme
-    Just themePath ->
-      forCustomTheme themePath <|> directPath (themePath </> T.unpack name)
-  where
-    panelName = name <> T.pack "-panel" -- Looks up first with "-panel" suffix
-    loadFlags = [UI.IconLookupFlagsUseBuiltin, UI.IconLookupFlagsGenericFallback]
-    withDefTheme = UI.iconThemeGetDefault >>= setPixbuf
-    forCustomTheme themePath = customIconTheme themePath >>= setPixbuf
-    directPath path = do
-      fileIcon <- Gio.fileNewForPath path >>= Gio.fileIconNew
-      View.ImgSGIcon <$> Gio.toIcon fileIcon
-
-    setPixbuf theme = do
-      pixbuf <- MaybeT $ UI.iconThemeLoadIcon theme panelName (UI.iconSizePx size) loadFlags
-      pure (View.ImgSPixbuf pixbuf)
-
--- NB: Why does `id` work? SNI is ARGB, Gtk is RGBA.
-imgInfoSet :: UI.IconSize -> HS.ImageInfo -> MaybeT IO View.ImageSet
-imgInfoSet size imgs = do
-  pixbuf <- MaybeT $ UI.iconsChoosePixbuf (UI.iconSizePx size) id icons
-  pure $ View.ImgSPixbuf pixbuf
-  where
-    icons = asRawIcon <$> imgs
-    asRawIcon (iconWidth, iconHeight, iconColors) = UI.RawIcon{..}

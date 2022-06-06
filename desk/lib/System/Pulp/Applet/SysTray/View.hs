@@ -11,20 +11,35 @@ module System.Pulp.Applet.SysTray.View (
   trayItemWidget,
   trayItemNew,
   trayItemCtrl,
+  TrayItemIcon (..),
 ) where
 
+import Control.Applicative
+import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans.Maybe
+import Data.ByteString qualified as BS
+import Data.Foldable
 import Data.Int
+import Data.Maybe
 import Data.Text qualified as T
 import GI.DbusmenuGtk3.Objects.Menu qualified as DBus
 import GI.Gdk.Flags qualified as Gdk
+import GI.Gdk.Objects.Screen qualified as Gdk
 import GI.Gdk.Structs.EventButton qualified as Gdk
 import GI.Gdk.Structs.EventScroll qualified as Gdk
+import GI.Gio.Interfaces.File qualified as Gio
+import GI.Gio.Interfaces.Icon qualified as Gio
+import GI.Gio.Objects.FileIcon qualified as Gio
+import GI.Gtk.Flags qualified as UI
 import GI.Gtk.Objects.Box qualified as UI
 import GI.Gtk.Objects.EventBox qualified as UI
+import GI.Gtk.Objects.IconTheme qualified as UI
 import GI.Gtk.Objects.Menu qualified as UI
+import System.FilePath ((</>))
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
+import UI.Pixbufs qualified as UI
 import UI.Styles qualified as UI
 import View.Imagery qualified as View
 
@@ -59,14 +74,15 @@ sysTrayCtrl SysTray{..} = \case
 
 data TrayItem = TrayItem
   { trayItemWid :: !UI.Widget
+  , trayItemSize :: !UI.IconSize
   , trayItemIcon :: !View.ImageDyn
   , trayItemOverlay :: !View.ImageDyn
   }
 
 data TrayItemOp
   = ItemSetInputHandler !(TrayItemInput -> IO ())
-  | ItemSetIcon !View.ImageSet
-  | ItemSetOverlay !View.ImageSet
+  | ItemSetIcon !TrayItemIcon
+  | ItemSetOverlay !TrayItemIcon
   | ItemSetTooltip !(Maybe T.Text)
   | ItemShowPopup !DBus.Menu
 
@@ -79,9 +95,9 @@ trayItemWidget :: TrayItem -> UI.Widget
 trayItemWidget TrayItem{trayItemWid} = trayItemWid
 
 trayItemNew :: MonadIO m => UI.IconSize -> m TrayItem
-trayItemNew size = do
-  trayItemIcon <- View.imageDynNew size
-  trayItemOverlay <- View.imageDynNew size
+trayItemNew trayItemSize = do
+  trayItemIcon <- View.imageDynNew trayItemSize
+  trayItemOverlay <- View.imageDynNew trayItemSize
   overlay <- UI.overlayed (View.imageDynWidget trayItemIcon) [View.imageDynWidget trayItemOverlay]
 
   interactive <- UI.eventBoxNew
@@ -95,8 +111,8 @@ trayItemNew size = do
 trayItemCtrl :: MonadIO m => TrayItem -> TrayItemOp -> m ()
 trayItemCtrl TrayItem{..} = \case
   ItemSetTooltip tooltip -> UI.widgetSetTooltipText trayItemWid tooltip
-  ItemSetIcon setIcon -> View.imageDynSetImg trayItemIcon setIcon
-  ItemSetOverlay setIcon -> View.imageDynSetImg trayItemOverlay setIcon
+  ItemSetIcon icon -> itemIconAsSet trayItemSize icon >>= View.imageDynSetImg trayItemIcon
+  ItemSetOverlay icon -> itemIconAsSet trayItemSize icon >>= View.imageDynSetImg trayItemOverlay
   ItemSetInputHandler handler -> do
     UI.onWidgetButtonPressEvent trayItemWid $ \event -> do
       xRoot <- round <$> Gdk.getEventButtonXRoot event
@@ -112,3 +128,59 @@ trayItemCtrl TrayItem{..} = \case
     pure ()
   ItemShowPopup menu -> do
     UI.menuPopupAtWidget menu trayItemWid UI.GravitySouthWest UI.GravityNorthWest Nothing
+
+-- | Icon information from the tray item.
+data TrayItemIcon = TrayItemIcon
+  { itemThemePath :: Maybe String
+  , itemIconName :: Maybe T.Text
+  , itemIconInfo :: [(Int32, Int32, BS.ByteString)]
+  }
+
+itemIconAsSet :: MonadIO m => UI.IconSize -> TrayItemIcon -> m View.ImageSet
+itemIconAsSet iconSize TrayItemIcon{..} = do
+  iconSet <-
+    liftIO . runMaybeT $
+      maybe empty (imgNameSet iconSize itemThemePath) itemIconName
+        <|> imgInfoSet iconSize itemIconInfo
+  pure $ fromMaybe (View.ImgSName $ T.pack "missing") iconSet
+
+customIconTheme :: MonadIO m => String -> m UI.IconTheme
+customIconTheme themePath = do
+  custom <- UI.iconThemeNew
+  Gdk.screenGetDefault >>= traverse_ (UI.iconThemeSetScreen custom)
+  UI.iconThemeAppendSearchPath custom themePath
+
+  defTheme <- UI.iconThemeGetDefault
+  UI.iconThemeGetSearchPath defTheme >>= traverse_ (UI.iconThemeAppendSearchPath custom)
+  pure custom
+
+imgNameSet :: UI.IconSize -> Maybe String -> T.Text -> MaybeT IO View.ImageSet
+imgNameSet size mayTheme name = do
+  guard $ not (T.null name)
+  -- Icon should be freedesktop-compliant icon name.
+  let nonEmp p = p <$ guard (not $ null p)
+  case mayTheme >>= nonEmp of
+    Nothing -> withDefTheme
+    Just themePath ->
+      forCustomTheme themePath <|> directPath (themePath </> T.unpack name)
+  where
+    panelName = name <> T.pack "-panel" -- Looks up first with "-panel" suffix
+    loadFlags = [UI.IconLookupFlagsUseBuiltin, UI.IconLookupFlagsGenericFallback]
+    withDefTheme = UI.iconThemeGetDefault >>= setPixbuf
+    forCustomTheme themePath = customIconTheme themePath >>= setPixbuf
+    directPath path = do
+      fileIcon <- Gio.fileNewForPath path >>= Gio.fileIconNew
+      View.ImgSGIcon <$> Gio.toIcon fileIcon
+
+    setPixbuf theme = do
+      pixbuf <- MaybeT $ UI.iconThemeLoadIcon theme panelName (UI.iconSizePx size) loadFlags
+      pure (View.ImgSPixbuf pixbuf)
+
+-- NB: Why does `id` work? SNI is ARGB, Gtk is RGBA.
+imgInfoSet :: UI.IconSize -> [(Int32, Int32, BS.ByteString)] -> MaybeT IO View.ImageSet
+imgInfoSet size imgs = do
+  pixbuf <- MaybeT $ UI.iconsChoosePixbuf (UI.iconSizePx size) id icons
+  pure $ View.ImgSPixbuf pixbuf
+  where
+    icons = asRawIcon <$> imgs
+    asRawIcon (iconWidth, iconHeight, iconColors) = UI.RawIcon{..}
