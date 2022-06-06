@@ -1,5 +1,4 @@
 module System.Pulp.Applet.DesktopVisual.View (
-  ImageSet (..),
   widgetUpdateClass,
   DeskVisual,
   DeskVisualOp (..),
@@ -23,17 +22,12 @@ import Data.Foldable
 import Data.IORef
 import Data.Text qualified as T
 import Data.Vector qualified as V
-import GI.GdkPixbuf.Objects.Pixbuf qualified as Gdk
-import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gtk.Objects.Box qualified as UI
-import GI.Gtk.Objects.Image qualified as UI
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Singles qualified as UI
 import UI.Styles qualified as UI
-
--- | Setting image for Image widget
-data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon | ImgSPixbuf Gdk.Pixbuf
+import View.Imagery qualified as View
 
 widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => UI.Widget -> (s -> T.Text) -> [s] -> m ()
 widgetUpdateClass widget asClass state =
@@ -137,7 +131,7 @@ deskItemCtrl DeskItem{..} = \case
 data WinItem = WinItem
   { -- | The congregated widget
     winItemWid :: !UI.Widget
-  , winItemImg :: !UI.Image
+  , winItemImg :: !View.ImageDyn
   }
 
 winItemWidget :: WinItem -> UI.Widget
@@ -145,18 +139,10 @@ winItemWidget WinItem{winItemWid} = winItemWid
 
 winItemNew :: MonadIO m => IO () -> m WinItem
 winItemNew onClick = do
-  winItemImg <- UI.imageNew
-
-  winImg <- UI.toWidget winItemImg
-  winItemWid <- UI.buttonNewWith (Just winImg) onClick
+  winItemImg <- View.imageDynNew UI.IconSizeLargeToolbar
+  winItemWid <- UI.buttonNewWith (Just $ View.imageDynWidget winItemImg) onClick
   UI.widgetGetStyleContext winItemWid >>= flip UI.styleContextAddClass (T.pack "window-item")
-
   pure WinItem{..}
 
-winItemSetImg :: MonadIO m => WinItem -> ImageSet -> m ()
-winItemSetImg WinItem{winItemImg} = \case
-  ImgSName iconName -> UI.imageSetFromIconName winItemImg (Just iconName) size
-  ImgSGIcon gIcon -> UI.imageSetFromGicon winItemImg gIcon size
-  ImgSPixbuf pixbuf -> UI.imageSetFromPixbuf winItemImg (Just pixbuf)
-  where
-    size = fromIntegral $ fromEnum UI.IconSizeLargeToolbar
+winItemSetImg :: MonadIO m => WinItem -> View.ImageSet -> m ()
+winItemSetImg WinItem{winItemImg} = View.imageDynSetImg winItemImg

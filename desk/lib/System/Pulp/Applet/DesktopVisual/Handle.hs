@@ -28,6 +28,7 @@ import System.Pulp.Applet.DesktopVisual.View qualified as View
 import System.Pulp.PulpEnv
 import UI.Commons qualified as UI
 import UI.Task qualified as UI
+import View.Imagery qualified as View
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case

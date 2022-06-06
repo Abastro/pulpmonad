@@ -20,6 +20,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import Data.ByteString qualified as BS
 import Data.ByteString.Builder qualified as BS
+import Data.ByteString.Lazy qualified as LBS
 import Data.List
 import Data.Maybe
 import Data.Monoid
@@ -33,8 +34,7 @@ import GI.Gio.Objects.DesktopAppInfo
 import GI.Gtk.Objects.IconTheme qualified as UI
 import Status.X11.WMStatus
 import System.Pulp.Applet.DesktopVisual.Handle
-import System.Pulp.Applet.DesktopVisual.View (ImageSet (..))
-import qualified Data.ByteString.Lazy as LBS
+import View.Imagery
 
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO Optimize this one, maybe with caching
@@ -83,7 +83,7 @@ xIconImageSetter getXIcon =
     convColor emp | True <- BS.null emp = mempty
     convColor colors
       | (argb, rem) <- BS.splitAt 4 colors =
-          BS.byteString (BS.tail argb) <> BS.word8 (BS.head argb) <> convColor rem
+        BS.byteString (BS.tail argb) <> BS.word8 (BS.head argb) <> convColor rem
 
 defImageSetter :: WindowInfo -> GetXIcon -> IO ImageSet
 defImageSetter winInfo getXIcon = do
