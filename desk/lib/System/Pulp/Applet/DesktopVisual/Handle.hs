@@ -237,7 +237,8 @@ winItemMake WindowSetup{..} getXIcon onSwitch PerWinRcvs{..} view = do
     registers curDeskRef = do
       killChDesk <- UI.uiTask winDesktop changeDesktop
       killInfo <- UI.uiTask winInfo updateWindow
-      UI.onWidgetDestroy (View.winItemWidget view) (killChDesk >> killInfo)
+      -- Frees from desktops so that it is correctly adjusted
+      UI.onWidgetDestroy (View.winItemWidget view) (changeDesktop (-1) >> killChDesk >> killInfo)
       pure WinItemHandle{itemWindowView = view}
       where
         changeDesktop newDesk = do
