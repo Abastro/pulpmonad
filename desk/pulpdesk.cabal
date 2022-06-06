@@ -109,6 +109,7 @@ library
     UI.Commons
     UI.Task
     UI.Styles
+    UI.Pixbufs
     UI.Singles
     UI.Containers
     UI.Window

@@ -27,6 +27,7 @@ import System.Log.LogPrint
 import System.Pulp.Applet.DesktopVisual.View qualified as View
 import System.Pulp.PulpEnv
 import UI.Commons qualified as UI
+import UI.Pixbufs qualified as UI
 import UI.Task qualified as UI
 import View.Imagery qualified as View
 
@@ -61,6 +62,8 @@ newtype WindowSetup = WindowSetup
   { -- | With which iamge the window is going to set to.
     windowImgSetter :: WindowInfo -> GetXIcon -> IO View.ImageSet
   }
+
+-- TODO Configuration adjusting the icon size
 
 -- | Desktops visualizer widget. Forks its own X11 event handler.
 deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO UI.Widget
@@ -253,7 +256,7 @@ winItemMake WindowSetup{..} getXIcon onSwitch PerWinRcvs{..} view = do
                           Communication
 --------------------------------------------------------------------}
 
-type GetXIcon = IO (Either String [XIcon])
+type GetXIcon = IO (Either String [UI.RawIcon])
 
 data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)

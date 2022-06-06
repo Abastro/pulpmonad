@@ -9,20 +9,14 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import DBus
 import DBus.Client
-import Data.ByteString qualified as BS
 import Data.Foldable
 import Data.IORef
-import Data.Int
-import Data.List
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Text qualified as T
 import Data.Traversable
 import GI.DbusmenuGtk3.Objects.Menu qualified as DMenu
-import GI.GLib.Structs.Bytes qualified as Glib
 import GI.Gdk.Objects.Screen qualified as Gdk
-import GI.GdkPixbuf.Enums qualified as Gdk
-import GI.GdkPixbuf.Objects.Pixbuf qualified as Gdk
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gio.Objects.FileIcon qualified as Gio
@@ -33,6 +27,7 @@ import StatusNotifier.Item.Client qualified as IC
 import System.FilePath ((</>))
 import System.Pulp.Applet.SysTray.View qualified as View
 import UI.Commons qualified as UI
+import UI.Pixbufs qualified as UI
 import UI.Task qualified as UI
 import View.Imagery qualified as View
 
@@ -200,26 +195,14 @@ imgNameSet size mayTheme name = do
       View.ImgSGIcon <$> Gio.toIcon fileIcon
 
     setPixbuf theme = do
-      pixbuf <- MaybeT $ UI.iconThemeLoadIcon theme panelName (iconSizePx size) loadFlags
+      pixbuf <- MaybeT $ UI.iconThemeLoadIcon theme panelName (UI.iconSizePx size) loadFlags
       pure (View.ImgSPixbuf pixbuf)
 
+-- NB: Why does `id` work? SNI is ARGB, Gtk is RGBA.
 imgInfoSet :: UI.IconSize -> HS.ImageInfo -> MaybeT IO View.ImageSet
 imgInfoSet size imgs = do
-  (width, height, colors) : _ <- pure $ sortOn (\(_, height, _) -> abs (height - iconSizePx size)) imgs
-  guard $ BS.length colors == fromIntegral (width * height * nSample)
-  -- NB: Why does this work? SNI is ARGB, Gtk is RGBA.
-  bytes <- Glib.bytesNew (Just colors)
-  pixbuf <- Gdk.pixbufNewFromBytes bytes Gdk.ColorspaceRgb True 8 width height (width * nSample)
+  pixbuf <- MaybeT $ UI.iconsChoosePixbuf (UI.iconSizePx size) id icons
   pure $ View.ImgSPixbuf pixbuf
   where
-    nSample = 4
-
-iconSizePx :: UI.IconSize -> Int32
-iconSizePx = \case
-  UI.IconSizeMenu -> 16
-  UI.IconSizeSmallToolbar -> 16
-  UI.IconSizeLargeToolbar -> 24
-  UI.IconSizeButton -> 16
-  UI.IconSizeDnd -> 24
-  UI.IconSizeDialog -> 32
-  _ -> 8
+    icons = asRawIcon <$> imgs
+    asRawIcon (iconWidth, iconHeight, iconColors) = UI.RawIcon{..}
