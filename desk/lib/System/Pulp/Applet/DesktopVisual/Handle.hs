@@ -169,7 +169,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
 data DeskWinMod = WinRemove | WinAdd (Window -> Maybe Int)
 data DeskItemHandle = DeskItemHandle
   { updateDeskItem :: DesktopStat -> IO ()
-  , addRmWinItem :: View.WinItem -> Window -> DeskWinMod -> IO () -- False for remove, True for add
+  , addRmWinItem :: View.WinItem -> Window -> DeskWinMod -> IO ()
   , reorderWinItems :: (Window -> Maybe Int) -> (Window -> Maybe WinItemHandle) -> IO ()
   }
 

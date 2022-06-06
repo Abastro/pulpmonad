@@ -15,6 +15,7 @@ import System.Exit
 import System.Posix.Signals (sigINT)
 import System.Pulp.Applet.Clocks qualified as App
 import System.Pulp.Applet.DesktopVisual qualified as App
+import System.Pulp.Applet.SysTray qualified as App
 import System.Pulp.Applet.SystemDisplay qualified as App
 import System.Pulp.PulpEnv
 import UI.Application qualified as UI
@@ -38,7 +39,7 @@ workspaceMaps =
     , (game, "\xf43c")
     ]
 
-data BarWinParams = BarWinParams
+data BarWinArgs = BarWinArgs
   { barDockPos :: !UI.DockPos
   , barDockSize :: !UI.DockSize
   , barDockSpan :: !UI.DockSpan
@@ -46,8 +47,8 @@ data BarWinParams = BarWinParams
   }
 
 -- | Creates and links the taskbar window. Does not show the window.
-taskbarWindow :: UI.Application -> BarWinParams -> UI.Widget -> PulpIO UI.Window
-taskbarWindow app BarWinParams{..} content = do
+taskbarWindow :: UI.Application -> BarWinArgs -> UI.Widget -> PulpIO UI.Window
+taskbarWindow app BarWinArgs{..} content = do
   window <- UI.windowNew UI.WindowTypeToplevel
   UI.windowSetTitle window barTitle
   UI.windowSetDock window barDockPos barDockSize barDockSpan
@@ -88,12 +89,13 @@ main = runPulpIO $
       cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
-      left <- unlift $ taskbarWindow app leftParams =<< leftBox
-      center <- unlift $ taskbarWindow app centerParams =<< centerBox
-      traverse_ UI.widgetShowAll [left, center]
+      left <- unlift $ taskbarWindow app leftArgs =<< leftBox
+      center <- unlift $ taskbarWindow app centerArgs =<< centerBox
+      right <- unlift $ taskbarWindow app rightArgs =<< rightBox
+      traverse_ UI.widgetShowAll [left, center, right]
 
-    leftParams =
-      BarWinParams
+    leftArgs =
+      BarWinArgs
         { barDockPos = UI.DockBottom
         , barDockSize = UI.AbsoluteSize 36
         , barDockSpan = UI.DockSpan 0 (1 / 6)
@@ -118,8 +120,8 @@ main = runPulpIO $
           cacheDir <- getEnv "XMONAD_CACHE_DIR"
           safeSpawn (cacheDir </> "pulp-sysctl") []
 
-    centerParams =
-      BarWinParams
+    centerArgs =
+      BarWinArgs
         { barDockPos = UI.DockBottom
         , barDockSize = UI.AbsoluteSize 40
         , barDockSpan = UI.DockSpan (1 / 6) (5 / 6)
@@ -129,15 +131,9 @@ main = runPulpIO $
     centerBox = do
       box <- UI.boxNew UI.OrientationHorizontal 2
       UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "taskbar-box")
-      UI.boxSetCenterWidget box . Just =<< desktopVis
+      UI.boxSetCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
       traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a)\n %H:%M %p "]
       UI.toWidget box
-
-    addToBegin box wid = UI.boxPackStart box wid False False 0
-    addToEnd box wid = UI.boxPackEnd box wid False False 0
-
-    desktopVis :: PulpIO UI.Widget
-    desktopVis = App.deskVisualizer deskVisDeskSetup deskVisWinSetup
       where
         mayLabel n = maybe n T.pack $ workspaceMaps M.!? T.unpack n
         deskVisDeskSetup =
@@ -147,3 +143,26 @@ main = runPulpIO $
                 App.defShowFn stat n && desktopName /= Just (T.pack scratchpadWorkspaceTag)
             }
         deskVisWinSetup = App.WindowSetup App.defImageSetter
+
+    rightArgs =
+      BarWinArgs
+        { barDockPos = UI.DockBottom
+        , barDockSize = UI.AbsoluteSize 36
+        , barDockSpan = UI.DockSpan (5 / 6) 1
+        , barTitle = T.pack "Pulp Systemtray"
+        }
+    rightBox :: PulpIO UI.Widget
+    rightBox = do
+      box <- UI.boxNew UI.OrientationHorizontal 2
+      UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "systemtray-box")
+      liftIO $ addToEnd box =<< App.systemTray sysTrayArgs
+      UI.toWidget box
+      where
+        sysTrayArgs = App.SysTrayArgs {
+          App.trayOrientation = UI.OrientationHorizontal
+        , App.trayIconSize = UI.IconSizeLargeToolbar
+        , App.trayAlignBegin = False
+        }
+
+    addToBegin box wid = UI.boxPackStart box wid False False 0
+    addToEnd box wid = UI.boxPackEnd box wid False False 0
