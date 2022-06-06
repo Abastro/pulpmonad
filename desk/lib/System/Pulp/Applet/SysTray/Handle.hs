@@ -48,7 +48,7 @@ systemTray args@SysTrayArgs{..} = do
 data SysTrayHandle = SysTrayHandle
 
 sysTrayMake :: HS.Host -> Client -> SysTrayArgs -> View.SysTray -> IO SysTrayHandle
-sysTrayMake HS.Host{..} client args@SysTrayArgs{..} view = do
+sysTrayMake HS.Host{..} client SysTrayArgs{trayIconSize} view = do
   registers =<< newIORef M.empty
   where
     registers itemsRef = do
@@ -88,7 +88,7 @@ sysTrayMake HS.Host{..} client args@SysTrayArgs{..} view = do
         addItem :: HS.ItemInfo -> IO (Maybe TrayItemHandle)
         addItem info@HS.ItemInfo{..} = do
           itemView <- View.trayItemNew trayIconSize
-          item@TrayItemHandle{..} <- trayItemMake client args info itemView
+          item@TrayItemHandle{..} <- trayItemMake client info itemView
           itemAddRemove view True
           itemUpdateIcon iconThemePath (T.pack iconName) iconPixmaps
           itemUpdateTooltip itemToolTip
@@ -103,8 +103,8 @@ data TrayItemHandle = TrayItemHandle
   }
 
 -- MAYBE Status effect
-trayItemMake :: Client -> SysTrayArgs -> HS.ItemInfo -> View.TrayItem -> IO TrayItemHandle
-trayItemMake client SysTrayArgs{..} HS.ItemInfo{..} view = do
+trayItemMake :: Client -> HS.ItemInfo -> View.TrayItem -> IO TrayItemHandle
+trayItemMake client HS.ItemInfo{..} view = do
   mayMenu <- for menuPath $ \mPath ->
     DMenu.menuNew (T.pack . formatBusName $ itemServiceName) (T.pack . formatObjectPath $ mPath)
   View.trayItemCtrl view . View.ItemSetInputHandler $ \case

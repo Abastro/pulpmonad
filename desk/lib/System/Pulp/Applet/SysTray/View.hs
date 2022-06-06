@@ -36,7 +36,6 @@ import GI.Gtk.Objects.Box qualified as UI
 import GI.Gtk.Objects.EventBox qualified as UI
 import GI.Gtk.Objects.IconTheme qualified as UI
 import GI.Gtk.Objects.Menu qualified as UI
-import System.FilePath ((</>))
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
 import UI.Pixbufs qualified as UI
@@ -161,22 +160,22 @@ imgNameSet size mayTheme name = do
   let nonEmp p = p <$ guard (not $ null p)
   case mayTheme >>= nonEmp of
     Nothing -> withDefTheme
-    Just themePath ->
-      forCustomTheme themePath <|> directPath (themePath </> T.unpack name)
+    Just themePath -> forCustomTheme themePath <|> directPath themePath name
   where
     panelName = name <> T.pack "-panel" -- Looks up first with "-panel" suffix
     loadFlags = [UI.IconLookupFlagsUseBuiltin, UI.IconLookupFlagsGenericFallback]
     withDefTheme = UI.iconThemeGetDefault >>= setPixbuf
     forCustomTheme themePath = customIconTheme themePath >>= setPixbuf
-    directPath path = do
-      fileIcon <- Gio.fileNewForPath path >>= Gio.fileIconNew
+    directPath themePath name = do
+      fpath <- Gio.fileNewForPath themePath >>= flip Gio.fileGetChild (T.unpack name)
+      fileIcon <- Gio.fileIconNew fpath
       View.ImgSGIcon <$> Gio.toIcon fileIcon
 
     setPixbuf theme = do
       pixbuf <- MaybeT $ UI.iconThemeLoadIcon theme panelName (UI.iconSizePx size) loadFlags
       pure (View.ImgSPixbuf pixbuf)
 
--- NB: Why does `id` work? SNI is ARGB, Gtk is RGBA.
+-- NB: Why does `id` work? SNI is ARGB, GTK is RGBA.
 imgInfoSet :: UI.IconSize -> [(Int32, Int32, BS.ByteString)] -> MaybeT IO View.ImageSet
 imgInfoSet size imgs = do
   pixbuf <- MaybeT $ UI.iconsChoosePixbuf (UI.iconSizePx size) id icons
