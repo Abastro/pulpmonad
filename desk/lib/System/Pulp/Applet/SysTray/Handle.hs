@@ -86,8 +86,7 @@ sysTrayMake HS.Host{..} client args@SysTrayArgs{..} view = do
               itemAddRemove view False
               pure Nothing
 
-          -- Icon updates.
-          -- NB: Why adding item when "icon update yet missing"?
+          -- Icon updates
           HS.IconUpdated -> maybe (addItem info) $ \item@TrayItemHandle{itemUpdateIcon} ->
             Just item <$ itemUpdateIcon iconThemePath (T.pack iconName) iconPixmaps
           HS.OverlayIconUpdated -> maybe (addItem info) $ \item@TrayItemHandle{itemUpdateOverlay} ->
@@ -101,8 +100,6 @@ sysTrayMake HS.Host{..} client args@SysTrayArgs{..} view = do
 
         addItem :: HS.ItemInfo -> IO (Maybe TrayItemHandle)
         addItem info@HS.ItemInfo{..} = do
-          {- putStrLn "icon add"
-          print $ HS.supressPixelData info -}
           itemView <- View.trayItemNew trayIconSize
           item@TrayItemHandle{..} <- trayItemMake client args info itemView
           itemAddRemove view True
@@ -118,7 +115,7 @@ data TrayItemHandle = TrayItemHandle
   , itemUpdateTooltip :: Maybe (String, HS.ImageInfo, String, String) -> IO ()
   }
 
--- MAYBE Emphasis with status
+-- MAYBE Status effect
 trayItemMake :: Client -> SysTrayArgs -> HS.ItemInfo -> View.TrayItem -> IO TrayItemHandle
 trayItemMake client SysTrayArgs{..} HS.ItemInfo{..} view = do
   mayMenu <- for menuPath $ \mPath ->
@@ -139,8 +136,12 @@ trayItemMake client SysTrayArgs{..} HS.ItemInfo{..} view = do
       let defedSet = fromMaybe (View.ImgSName $ T.pack "missing") iconSet
       View.trayItemCtrl view (View.ItemSetIcon defedSet)
 
-    -- TODO Handle this overlay setting
-    itemUpdateOverlay _themePath _iconName _iconInfo = pure ()
+    itemUpdateOverlay themePath mayIconName iconInfo = do
+      let iconN = MaybeT (pure mayIconName)
+      iconSet <-
+        runMaybeT $ (imgNameSet trayIconSize themePath =<< iconN) <|> imgInfoSet trayIconSize iconInfo
+      let defedSet = fromMaybe (View.ImgSName $ T.pack "missing") iconSet
+      View.trayItemCtrl view (View.ItemSetOverlay defedSet)
 
     itemUpdateTooltip = \case
       Nothing -> View.trayItemCtrl view (View.ItemSetTooltip Nothing)
@@ -162,8 +163,6 @@ trayItemMake client SysTrayArgs{..} HS.ItemInfo{..} view = do
       View.MouseLeft | not itemIsMenu -> void $ IC.activate client itemServiceName itemServicePath xRoot yRoot
       View.MouseMiddle -> void $ IC.secondaryActivate client itemServiceName itemServicePath xRoot yRoot
       _ -> traverse_ (View.trayItemCtrl view . View.ItemShowPopup) mayMenu
-
--- TODO Need scaling somewhere
 
 customIconTheme :: MonadIO m => String -> m UI.IconTheme
 customIconTheme themePath = do

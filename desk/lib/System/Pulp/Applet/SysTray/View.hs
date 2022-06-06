@@ -25,6 +25,7 @@ import GI.Gtk.Objects.EventBox qualified as UI
 import GI.Gtk.Objects.Menu qualified as UI
 import UI.Commons qualified as UI
 import UI.Containers qualified as UI
+import UI.Styles qualified as UI
 import View.Imagery qualified as View
 
 data SysTray = SysTray
@@ -42,6 +43,7 @@ sysTrayNew :: MonadIO m => UI.Orientation -> Bool -> m SysTray
 sysTrayNew orientation sysTrayAlignBegin = do
   sysTrayBox <- UI.boxNew orientation 0
   sysTrayWid <- UI.toWidget sysTrayBox
+  UI.widgetGetStyleContext sysTrayWid >>= flip UI.styleContextAddClass (T.pack "system-tray-area")
   pure SysTray{..}
 
 sysTrayCtrl :: MonadIO m => SysTray -> SysTrayOp -> m ()
@@ -58,11 +60,13 @@ sysTrayCtrl SysTray{..} = \case
 data TrayItem = TrayItem
   { trayItemWid :: !UI.Widget
   , trayItemIcon :: !View.ImageDyn
+  , trayItemOverlay :: !View.ImageDyn
   }
 
 data TrayItemOp
   = ItemSetInputHandler !(TrayItemInput -> IO ())
   | ItemSetIcon !View.ImageSet
+  | ItemSetOverlay !View.ImageSet
   | ItemSetTooltip !(Maybe T.Text)
   | ItemShowPopup !DBus.Menu
 
@@ -77,12 +81,14 @@ trayItemWidget TrayItem{trayItemWid} = trayItemWid
 trayItemNew :: MonadIO m => UI.IconSize -> m TrayItem
 trayItemNew size = do
   trayItemIcon <- View.imageDynNew size
+  trayItemOverlay <- View.imageDynNew size
+  overlay <- UI.overlayed (View.imageDynWidget trayItemIcon) [View.imageDynWidget trayItemOverlay]
 
   interactive <- UI.eventBoxNew
   UI.widgetAddEvents interactive [Gdk.EventMaskScrollMask]
-  UI.containerAdd interactive (View.imageDynWidget trayItemIcon)
+  UI.containerAdd interactive overlay
   trayItemWid <- UI.toWidget interactive
-  -- TODO Assign item class
+  UI.widgetGetStyleContext trayItemWid >>= flip UI.styleContextAddClass (T.pack "system-tray-item")
 
   pure TrayItem{..}
 
@@ -90,6 +96,7 @@ trayItemCtrl :: MonadIO m => TrayItem -> TrayItemOp -> m ()
 trayItemCtrl TrayItem{..} = \case
   ItemSetTooltip tooltip -> UI.widgetSetTooltipText trayItemWid tooltip
   ItemSetIcon setIcon -> View.imageDynSetImg trayItemIcon setIcon
+  ItemSetOverlay setIcon -> View.imageDynSetImg trayItemOverlay setIcon
   ItemSetInputHandler handler -> do
     UI.onWidgetButtonPressEvent trayItemWid $ \event -> do
       xRoot <- round <$> Gdk.getEventButtonXRoot event
