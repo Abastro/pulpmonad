@@ -17,6 +17,7 @@ import StatusNotifier.Item.Client qualified as IC
 import System.Pulp.Applet.SysTray.View qualified as View
 import UI.Commons qualified as UI
 import UI.Task qualified as UI
+import System.Posix.Process (getProcessID)
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !UI.Orientation
@@ -26,19 +27,20 @@ data SysTrayArgs = SysTrayArgs
   }
 
 -- | Starts system tray and presents it as widget.
--- Has undefined behavior if there are more than one such instance for entire setup.
+-- Has undefined behavior if there are more than one such instance for a process.
 --
 -- Throws if the host cannot be started.
 systemTray :: SysTrayArgs -> IO UI.Widget
 systemTray args@SysTrayArgs{..} = do
   -- Creates its own dbus client.
   client <- connectSession
+  procID <- getProcessID
   host <-
     maybe (fail "Cannot create host") pure
       =<< HS.build
         HS.defaultParams
           { HS.dbusClient = Just client
-          , HS.uniqueIdentifier = "pulp-system-tray"
+          , HS.uniqueIdentifier = "pulp-system-tray-" <> show procID
           }
   trayView <- View.sysTrayNew trayOrientation trayAlignBegin
   _ <- sysTrayMake host client args trayView

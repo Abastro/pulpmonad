@@ -26,6 +26,7 @@ import UI.Window qualified as UI
 import View.Imagery qualified as View
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run (safeSpawn)
+import qualified GI.Gio.Flags as Gio
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -65,7 +66,7 @@ taskbarWindow app BarWinArgs{..} content = do
 main :: IO ()
 main = runPulpIO $
   withRunInIO $ \unlift -> do
-    Just app <- UI.applicationNew (Just $ T.pack "pulp.ui.taskbar") []
+    Just app <- UI.applicationNew (Just $ T.pack "pulp.ui.taskbar") [Gio.ApplicationFlagsNonUnique]
     UI.onApplicationActivate app (unlift $ activating app)
     UI.unixSignalAdd UI.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ UI.applicationQuit app
     status <- UI.applicationRun app Nothing
@@ -93,10 +94,12 @@ main = runPulpIO $
       center <- unlift $ taskbarWindow app centerArgs =<< centerBox
       right <- unlift $ taskbarWindow app rightArgs =<< rightBox
       traverse_ UI.widgetShowAll [left, center, right]
+    
+    dockPos = UI.DockBottom
 
     leftArgs =
       BarWinArgs
-        { barDockPos = UI.DockTop
+        { barDockPos = dockPos
         , barDockSize = UI.AbsoluteSize 36
         , barDockSpan = UI.DockSpan 0 (1 / 6)
         , barTitle = T.pack "Pulp Statusbar"
@@ -123,7 +126,7 @@ main = runPulpIO $
 
     centerArgs =
       BarWinArgs
-        { barDockPos = UI.DockTop
+        { barDockPos = dockPos
         , barDockSize = UI.AbsoluteSize 40
         , barDockSpan = UI.DockSpan (1 / 6) (5 / 6)
         , barTitle = T.pack "Pulp Taskbar"
@@ -151,7 +154,7 @@ main = runPulpIO $
 
     rightArgs =
       BarWinArgs
-        { barDockPos = UI.DockTop
+        { barDockPos = dockPos
         , barDockSize = UI.AbsoluteSize 36
         , barDockSpan = UI.DockSpan (5 / 6) 1
         , barTitle = T.pack "Pulp Systemtray"
