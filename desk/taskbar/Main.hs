@@ -104,6 +104,7 @@ main = runPulpIO $
     leftBox :: PulpIO UI.Widget
     leftBox = do
       box <- UI.boxNew UI.OrientationHorizontal 0
+      UI.widgetSetName box  (T.pack "pulp-statusbar")
       UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "statusbar-box")
       powerIcon <- View.imageStaticNew UI.IconSizeLargeToolbar $ View.ImgSName (T.pack "system-shutdown-symbolic")
       traverse_ (addToBegin box)
@@ -130,7 +131,7 @@ main = runPulpIO $
     centerBox :: PulpIO UI.Widget
     centerBox = do
       box <- UI.boxNew UI.OrientationHorizontal 2
-      UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "taskbar-box")
+      UI.widgetSetName box (T.pack "pulp-taskbar")
       UI.boxSetCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
       traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
       UI.toWidget box
@@ -158,7 +159,7 @@ main = runPulpIO $
     rightBox :: PulpIO UI.Widget
     rightBox = do
       box <- UI.boxNew UI.OrientationHorizontal 2
-      UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "systemtray-box")
+      UI.widgetSetName box (T.pack "pulp-systemtray")
       liftIO $ addToEnd box =<< App.systemTray sysTrayArgs
       UI.toWidget box
       where
