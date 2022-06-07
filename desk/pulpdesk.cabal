@@ -115,6 +115,7 @@ library
     Gtk.Application
     View.Imagery
     View.Textual
+    View.Boxes
 
     System.Log.LogPrint
 

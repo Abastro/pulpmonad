@@ -17,6 +17,3 @@ import GI.Gtk.Constants hiding (MAJOR_VERSION, MICRO_VERSION, MINOR_VERSION)
 import GI.Gtk.Enums
 import GI.Gtk.Flags
 import GI.Gtk.Objects.Widget
-
--- TODO
--- Taffybar is suboptimal, esp. dependency. Cook one up myself?

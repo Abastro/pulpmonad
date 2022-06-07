@@ -30,6 +30,7 @@ import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
 import Gtk.Styles qualified as Gtk
+import View.Boxes qualified as View
 import View.Imagery qualified as View
 import View.Textual qualified as View
 
@@ -85,7 +86,7 @@ data DeskItem = DeskItem
   { -- | The congregated widget
     deskItemWid :: !Gtk.Widget
   , deskItemName :: !View.LabelDyn
-  , deskItemWinCont :: !Gtk.Box
+  , deskItemWinCont :: !View.BoxUniDyn
   }
 
 data DeskItemOp
@@ -100,15 +101,16 @@ deskItemWidget DeskItem{deskItemWid} = deskItemWid
 
 deskItemNew :: MonadIO m => IO () -> m DeskItem
 deskItemNew onClick = do
-  deskItemWinCont <- Gtk.boxNew Gtk.OrientationHorizontal 0
-  deskItemWinWid <- Gtk.toWidget deskItemWinCont
+  deskItemWinCont <- View.boxUniDynNew (View.defBoxArg Gtk.OrientationHorizontal)
 
   deskItemName <- View.labelDynNew View.defLabelArg
   Gtk.widgetGetStyleContext (View.labelDynWidget deskItemName)
     >>= flip Gtk.styleContextAddClass (T.pack "desktop-label")
 
   deskMain <-
-    Gtk.boxed Gtk.OrientationHorizontal 0 [View.labelDynWidget deskItemName, deskItemWinWid]
+    View.boxStaticNew
+      (View.defBoxArg Gtk.OrientationHorizontal)
+      [View.labelDynWidget deskItemName, View.boxUniDynWidget deskItemWinCont]
 
   deskItemWid <- Gtk.clickyNewWith (Just deskMain) onClick
   Gtk.widgetGetStyleContext deskItemWid >>= flip Gtk.styleContextAddClass (T.pack "desktop-item")
@@ -118,15 +120,15 @@ deskItemNew onClick = do
 deskItemCtrl :: MonadIO m => DeskItem -> DeskItemOp -> m ()
 deskItemCtrl DeskItem{..} = \case
   AddWinItemAt WinItem{winItemWid} idx -> do
-    Gtk.containerAdd deskItemWinCont winItemWid
-    Gtk.boxReorderChild deskItemWinCont winItemWid $ fromIntegral idx
+    View.boxUniDynCtrl deskItemWinCont (View.BoxUniAdd winItemWid)
+    View.boxUniDynCtrl deskItemWinCont (View.BoxUniReorder winItemWid $ fromIntegral idx)
     Gtk.widgetShowAll winItemWid
   RemoveWinItem WinItem{winItemWid} -> do
     Gtk.widgetHide winItemWid
-    Gtk.containerRemove deskItemWinCont winItemWid
+    View.boxUniDynCtrl deskItemWinCont (View.BoxUniRemove winItemWid)
   ReorderWinItems winItems -> do
     for_ (V.indexed winItems) $ \(idx, WinItem{winItemWid}) -> do
-      Gtk.boxReorderChild deskItemWinCont winItemWid $ fromIntegral idx
+      View.boxUniDynCtrl deskItemWinCont (View.BoxUniReorder winItemWid $ fromIntegral idx)
 
   -- Mundane property update here
   DeskLabelName name -> View.labelDynSetLabel deskItemName name

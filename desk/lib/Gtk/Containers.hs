@@ -18,6 +18,7 @@ import Gtk.Commons
 import GI.Gtk.Objects.EventBox
 import qualified GI.Gdk.Structs.EventButton as Gdk
 
+-- | Button widget.
 buttonNewWith :: MonadIO m => Maybe Widget -> IO () -> m Widget
 buttonNewWith widget onClick = do
   btn <- buttonNew
