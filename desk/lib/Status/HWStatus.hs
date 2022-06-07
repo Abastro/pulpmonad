@@ -222,9 +222,8 @@ diskSpeed IOStat{..} =
     then 0 -- v MAYBE Use disk sector size instead of this
     else (4096 * 1000 * realToFrac numSectors) / realToFrac timeSpentms
 
--- |
---  Disk statistics. Note that the units differ.
---  Consult <https://www.kernel.org/doc/html/latest/admin-guide/iostats.html>.
+-- | Disk statistics. Note that the units differ.
+-- Consult <https://www.kernel.org/doc/html/latest/admin-guide/iostats.html>.
 data DiskStat a = DiskStat
   { readStat :: !(IOStat a)
   , writeStat :: !(IOStat a)
@@ -248,11 +247,10 @@ diskOf = \case
       numReqs : numMerges : numSectors : timeSpentms : _ -> Just $ IOStat{..}
       _ -> Nothing
 
--- |
---  Gets disk statistics accumulated from booting.
---  Since multiple disks & disk partitions exist in many cases, map of non-loop disks are returned.
+-- | Gets disk statistics accumulated from booting.
+-- Since multiple disks & disk partitions exist in many cases, map of non-loop disks are returned.
 --
---  Pulls from </proc/diskstats>.
+-- Pulls from </proc/diskstats>.
 diskStat :: IO (M.Map T.Text (DiskStat Int))
 diskStat = do
   parseFile disks ("/" </> "proc" </> "diskstats")
@@ -260,14 +258,14 @@ diskStat = do
     disks = fieldsWithHead (skipH <* identH <* identH) (many decimalH) >>= exQueryMap query
     query = queryAllAs (not . ("loop" `T.isPrefixOf`)) (traverse diskOf)
 
--- |
---  Disk statistics as rates over certain delay(ms), for certain disk/partition.
---  The disk/partition name is analogous to the one from "df" command.
+-- | Disk statistics as rates over certain delay(ms), for certain disk/partition.
+-- The disk/partition name is analogous to the one from "df" command.
 diskDelta :: Int -> IO (M.Map T.Text (DiskStat Int))
 diskDelta delay = do
   pre <- diskStat
   threadDelay (delay * 1000)
   post <- diskStat
-  pure (M.intersectionWith (liftA2 (-)) pre post)
+  let diff = M.intersectionWith (liftA2 (-)) pre post
+  pure diff
 
 -- Brightness: "/sys/class/backlight/?"
