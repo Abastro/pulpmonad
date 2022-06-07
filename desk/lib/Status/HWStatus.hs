@@ -66,13 +66,13 @@ cpuRatios cpu@CPUStat{userTime, systemTime, idleTime} = ratioTo (userTime + syst
 cpuUsed :: Num a => CPUStat a -> a
 cpuUsed CPUStat{..} = userTime + systemTime
 
--- |
---  Gets CPU statistics in accumulated from booting. Second of the pair is for each core.
---  Pulls from </proc/stat>.
+-- | Gets CPU statistics in accumulated from booting. Second of the pair is for each core.
+-- Pulls from </proc/stat>.
 cpuStat :: IO (CPUStat Int, [CPUStat Int])
 cpuStat = parseFile cpus ("/" </> "proc" </> "stat")
   where
-    cpus = fields (many decimalH) >>= exQueryMap query
+    cpus = fieldsCustom cpuFieldN (many decimalH) >>= exQueryMap query
+    cpuFieldN = identCondH ("cpu" `T.isPrefixOf`)
     query = do
       total <- queryFieldAs "cpu" cpuOf
       cores <- queryAllAs ("cpu" `T.isPrefixOf`) (traverse cpuOf . M.elems)
@@ -87,8 +87,7 @@ cpuDelta delay = do
   post <- fst <$> cpuStat
   pure (liftA2 (-) post pre)
 
--- |
---  Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
+-- | Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
 --  Pulls from </sys/class/hwmon/hwmon?/temp2_input>.
 cpuTemp :: IO Double
 cpuTemp = do
@@ -156,8 +155,8 @@ data BatStatus = Charging | Discharging | NotCharging | Full | Unknown
 --  * current: μA
 data BatStat = BatStat
   { batStatus :: BatStatus
-  , capacity :: Int
-  -- ^ Current capacity in percentage to full
+  , -- | Current capacity in percentage to full
+    capacity :: Int
   , energyFull :: Maybe Int
   , chargeFull :: Maybe Int
   , energyFullDesign :: Maybe Int
@@ -229,8 +228,8 @@ diskSpeed IOStat{..} =
 data DiskStat a = DiskStat
   { readStat :: !(IOStat a)
   , writeStat :: !(IOStat a)
-  , ioMilliSecs :: !a
-  -- ^ 10th field, not 9th
+  , -- | 10th field, not 9th
+    ioMilliSecs :: !a
   }
   deriving stock (Show, Generic1)
   deriving (Functor, Applicative) via (Generically1 DiskStat)
@@ -239,10 +238,10 @@ diskOf :: [a] -> Maybe (DiskStat a)
 diskOf = \case
   xs
     | (reads, xs') <- splitAt 4 xs
-    , (writes, ioMilliSecs : _) <- splitAt 4 xs'
-    , Just readStat <- ioOf reads
-    , Just writeStat <- ioOf writes ->
-        Just DiskStat{..}
+      , (writes, ioMilliSecs : _) <- splitAt 4 xs'
+      , Just readStat <- ioOf reads
+      , Just writeStat <- ioOf writes ->
+      Just DiskStat{..}
   _ -> Nothing
   where
     ioOf = \case

@@ -4,9 +4,11 @@ module Parse.ParseHor (
   skipH,
   remainH,
   identH,
+  identCondH,
   symbolH,
   decimalH,
   eoH,
+  fieldsCustom,
   fields,
   fieldsWithHead,
   exQueryMap,
@@ -32,26 +34,31 @@ import Text.Megaparsec.Char qualified as P
 import Text.Megaparsec.Char.Lexer qualified as Lex
 import Text.Printf
 
--- | Parses a file using a parser.
+-- | Parses a file using a parser. Throws userError when fails.
 parseFile :: P.Parsec Void T.Text a -> FilePath -> IO a
-parseFile parser path =
-  P.parse parser path <$> T.readFile path >>= \case
-    Left err -> fail $ P.errorBundlePretty err -- TODO use fast-logger to log
+parseFile parser path = do
+  txt <- T.readFile path
+  case P.parse parser path txt of
+    Left err -> fail $ P.errorBundlePretty err
     Right result -> pure result
 
 -- | Skips horizontal spaces.
 skipH :: P.MonadParsec e T.Text m => m ()
-skipH = Lex.space P.hspace1 empty empty
+skipH = P.hspace
 
 -- | Parses remaining characters until a line break.
 remainH :: P.MonadParsec e T.Text m => m T.Text
-remainH = P.takeWhileP (Just "remaining") $ (/= '\n')
+remainH = P.takeWhileP (Just "remaining") (/= '\n')
 
 -- | Space-separated identifier, which could include numbers, '_', '(' and ')'.
 identH :: P.MonadParsec e T.Text m => m T.Text
 identH = Lex.lexeme skipH (P.takeWhile1P (Just "identifier") isID)
   where
     isID c = isAlphaNum c || c == '(' || c == ')' || c == '_'
+
+-- | Identifier with restricting condition.
+identCondH :: P.MonadParsec e T.Text m => (T.Text -> Bool) -> m T.Text
+identCondH cond = P.try $ identH >>= \ident -> ident <$ guard (cond ident)
 
 -- | Horizontal symbols.
 symbolH :: P.MonadParsec e T.Text m => T.Text -> m T.Text
@@ -63,19 +70,21 @@ decimalH = Lex.lexeme skipH Lex.decimal
 
 -- | Parse an end of line, or eof.
 eoH :: P.MonadParsec e T.Text m => m ()
-eoH = () <$ P.eol <|> P.eof
+eoH = void P.eol <|> P.eof
+
+-- | Parse fields with custom parser for reading the field name.
+fieldsCustom :: P.MonadParsec e T.Text m => m T.Text -> m a -> m (M.Map T.Text a)
+fieldsCustom custom pval = M.fromList <$> field `sepEndBy` eoH
+  where
+    field = P.label "field" $ (,) <$> custom <*> pval
 
 -- | Parse fields as a map.
 fields :: P.MonadParsec e T.Text m => m a -> m (M.Map T.Text a)
-fields pval = M.fromList <$> field `sepEndBy` eoH
-  where
-    field = P.label "field" $ (,) <$> identH <*> pval
+fields = fieldsCustom identH
 
 -- | Parse fields as a map, with heading ignored for each line.
 fieldsWithHead :: P.MonadParsec e T.Text m => m hd -> m a -> m (M.Map T.Text a)
-fieldsWithHead hd pval = M.fromList <$> field `sepEndBy` eoH
-  where
-    field = P.label "field" $ (,) <$> (hd *> identH) <*> pval
+fieldsWithHead hd = fieldsCustom (hd *> identH)
 
 -- | Map query monad.
 newtype QueryMap b a = QueryMap (ExceptT String (State (M.Map T.Text b)) a)
@@ -106,7 +115,7 @@ queryField name = queryOpt name >>= maybe (fail notFoundErr) pure
 
 -- | Query a field with a mapping function.
 queryFieldAs :: T.Text -> (b -> Maybe r) -> QueryMap b r
-queryFieldAs name f = (f <$> queryField name) >>= maybe (fail illFormedErr) pure
+queryFieldAs name f = queryField name >>= maybe (fail illFormedErr) pure . f
   where
     illFormedErr = printf "Field %s ill-formed" name
 
