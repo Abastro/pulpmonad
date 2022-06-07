@@ -49,7 +49,7 @@ main = do
         gnomeRegister -- Registers xmonad with gnome
         safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "background.jpg"]
 
-      pulpBar = statusBarGeneric (xmCache </> "pulpbar") mempty
+      pulpBar = statusBarGeneric (xmCache </> "pulp-taskbar") mempty
 
   xmonad . ewmhFullscreen . pagerHints . withSB pulpBar $
     cfg
@@ -59,7 +59,7 @@ main = do
         terminal = "gnome-terminal",
         startupHook = onStart <> startupHook cfg,
         manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads,
-        layoutHook = lessBorders (Combine Union Never OnlyFloat) $ myLayout,
+        layoutHook = lessBorders (Combine Union Never OnlyFloat) myLayout,
         handleEventHook = handleEventHook cfg <> minimizeEventHook,
         modMask = mod4Mask -- Super key
       }
@@ -102,8 +102,7 @@ main = do
         }
 
 scTerm =
-  ( NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") doCenterFloat
-  )
+  NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") doCenterFloat
 
 scratchpads = [scTerm]
 
