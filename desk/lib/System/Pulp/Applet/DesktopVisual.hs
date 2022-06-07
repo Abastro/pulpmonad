@@ -24,6 +24,8 @@ import Status.X11.WMStatus
 import System.Pulp.Applet.DesktopVisual.Handle
 import View.Imagery
 
+-- TODO Somehow nautilus (and nautilus only) takes time to be notified
+
 -- MAYBE: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.5.html
 -- TODO Optimize this one, maybe with watching it over & caching
 appInfoImageSetter :: WindowInfo -> MaybeT IO ImageSet
@@ -51,7 +53,7 @@ appInfoImageSetter WindowInfo{..} = do
       pure (any isMatch classes)
 
 defImageSetter :: WindowInfo -> MaybeT IO ImageSet
-defImageSetter = appInfoImageSetter
+defImageSetter = const (fail "not handle")
 
 defShowFn :: DesktopStat -> NumWindows -> Bool
 defShowFn DesktopStat{desktopState} num = desktopState /= DeskHidden || num > 0

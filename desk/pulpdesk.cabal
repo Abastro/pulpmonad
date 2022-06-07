@@ -105,6 +105,7 @@ library
     Status.HWStatus
     Status.X11.XHandle
     Status.X11.WMStatus
+    Status.AppInfos
 
     UI.Commons
     UI.Task

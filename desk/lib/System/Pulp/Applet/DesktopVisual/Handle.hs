@@ -10,6 +10,7 @@ import Control.Concurrent.Task
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Unlift
+import Control.Monad.Trans.Maybe
 import Data.Bifunctor (first)
 import Data.Foldable
 import Data.IORef
@@ -20,7 +21,9 @@ import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Traversable
 import Data.Vector qualified as V
+import GI.Gio.Interfaces.AppInfo qualified as Gio
 import Graphics.X11.Types
+import Status.AppInfos
 import Status.X11.WMStatus
 import Status.X11.XHandle
 import System.Log.LogPrint
@@ -30,7 +33,7 @@ import UI.Commons qualified as UI
 import UI.Pixbufs qualified as UI
 import UI.Task qualified as UI
 import View.Imagery qualified as View
-import Control.Monad.Trans.Maybe
+import Control.Applicative
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -86,11 +89,11 @@ deskVisMake ::
   View.DeskVisual ->
   PulpIO DeskVisHandle
 deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -> do
-  act <- registers <$> newIORef V.empty <*> newIORef M.empty <*> newIORef M.empty <*> newIORef Nothing
+  act <- registers <$> trackAppInfo <*> newIORef V.empty <*> newIORef M.empty <*> newIORef M.empty <*> newIORef Nothing
   unlift act
   where
     WindowSetup{windowIconSize} = winSetup
-    registers desksRef winsRef ordersRef activeRef = withRunInIO $ \unlift -> do
+    registers appCol desksRef winsRef ordersRef activeRef = withRunInIO $ \unlift -> do
       killStat <- UI.uiTask desktopStats (unlift . updateDeskStats)
       killWinCh <- UI.uiTask windowsList (unlift . updateWinList)
       killActiv <- UI.uiTask windowActive (unlift . changeActivate)
@@ -125,7 +128,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           winItemView <- View.winItemNew windowIconSize $ reqActivate window
           let getIcon = winGetIcon window
           let switcher item x y = unlift (winSwitch window item x y)
-          unlift $ winItemMake winSetup getIcon switcher winRcvs winItemView
+          unlift $ winItemMake winSetup appCol getIcon switcher winRcvs winItemView
 
         updateWinList :: V.Vector Window -> PulpIO ()
         updateWinList windows = withRunInIO $ \unlift -> do
@@ -230,15 +233,18 @@ newtype WinItemHandle = WinItemHandle
 
 winItemMake ::
   WindowSetup ->
+  AppInfoCol ->
   GetXIcon ->
   (View.WinItem -> Int -> Int -> IO ()) ->
   PerWinRcvs ->
   View.WinItem ->
   PulpIO WinItemHandle
-winItemMake WindowSetup{..} getXIcon onSwitch PerWinRcvs{..} view = do
+winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = do
   -- (-1) is never a valid desktop (means the window is omnipresent)
   liftIO $ registers =<< newIORef (-1)
   where
+    imgSetter winInfo = appInfoImgSetter appCol winInfo <|> windowImgSetter winInfo
+
     registers curDeskRef = do
       killChDesk <- UI.uiTask winDesktop changeDesktop
       killInfo <- UI.uiTask winInfo updateWindow
@@ -252,8 +258,25 @@ winItemMake WindowSetup{..} getXIcon onSwitch PerWinRcvs{..} view = do
 
         updateWindow winInfo@WindowInfo{..} = do
           View.winItemSetTitle view windowTitle
-          runMaybeT (windowImgSetter winInfo) >>= View.winItemSetIcon view getXIcon
+          runMaybeT (imgSetter winInfo) >>= View.winItemSetIcon view getXIcon
           View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
+
+{-------------------------------------------------------------------
+                        Application Info
+--------------------------------------------------------------------}
+
+appInfoImgSetter :: AppInfoCol -> WindowInfo -> MaybeT IO View.ImageSet
+appInfoImgSetter appCol WindowInfo{windowClasses} = do
+  allDat <- liftIO $ getAppInfos appCol
+  appDat <- MaybeT . pure $ V.find (\dat -> any (isClMatch dat) windowClasses) allDat
+  appInfo <- MaybeT $ appGetIns appDat
+  appIcon <- MaybeT $ Gio.appInfoGetIcon appInfo
+  pure (View.ImgSGIcon appIcon)
+  where
+    isClMatch AppInfoData{..} cl =
+      Just cl == appWmClass
+        || Just (T.toLower cl) == appExecName
+        || T.toLower cl <> T.pack ".desktop" == T.toLower appId
 
 {-------------------------------------------------------------------
                           Communication
