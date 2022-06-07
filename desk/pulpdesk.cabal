@@ -142,18 +142,6 @@ test-suite test-pulpdesk
     , QuickCheck ==2.14.*
     , hspec ==2.9.*
 
-executable pulpbar
-  import:             pulp-gtk
-  main-is:            Main.hs
-  hs-source-dirs:     bar
-  ghc-options:        -threaded -rtsopts "-with-rtsopts=-N"
-  build-depends:
-      pulpdesk
-    , xdg-desktop-entry ==0.1.*
-    , gtk-strut >=0.1.4
-    , gtk-sni-tray ==0.1.*
-    , taffybar ==3.4.*
-
 executable pulp-taskbar
   import:             pulp-gtk
   main-is:            Main.hs
@@ -161,7 +149,6 @@ executable pulp-taskbar
   ghc-options:        -threaded -rtsopts "-with-rtsopts=-N"
   build-depends:
       pulpdesk
-
 
 executable pulp-sysctl
   import:             pulp-gtk

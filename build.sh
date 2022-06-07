@@ -1,6 +1,6 @@
 #!/bin/sh
 cfgid="pulpmonad"
-barid="pulpbar"
+barid="pulp-taskbar"
 
 config="$XMONAD_CONFIG_DIR"
 cache="$XMONAD_CACHE_DIR"
