@@ -5,6 +5,7 @@ module View.Textual (
   labelDynWidget,
   labelDynNew,
   labelDynSetLabel,
+  labelStaticNew,
 ) where
 
 import Control.Monad.IO.Class
@@ -43,3 +44,10 @@ labelDynNew LabelDynArgs{..} = do
 
 labelDynSetLabel :: MonadIO m => LabelDyn -> T.Text -> m ()
 labelDynSetLabel LabelDyn{labelDynLbl} = Gtk.labelSetLabel labelDynLbl
+
+-- | Construct static label.
+labelStaticNew :: MonadIO m => LabelDynArgs -> T.Text -> m Gtk.Widget
+labelStaticNew args lbl = do
+  dyn <- labelDynNew args
+  labelDynSetLabel dyn lbl
+  pure $ labelDynWidget dyn
