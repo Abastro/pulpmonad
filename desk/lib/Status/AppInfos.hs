@@ -40,8 +40,11 @@ trackAppInfo = do
   pure AppInfoCol{..}
 
 getAppInfos :: AppInfoCol -> IO (V.Vector AppInfoData)
-getAppInfos AppInfoCol{..} = readTVarIO curAppInfo >>= maybe getFromScratch pure
+getAppInfos AppInfoCol{curAppInfo} =
+  readTVarIO curAppInfo >>= maybe (getFromScratch >>= writeAndGet) pure
   where
+    writeAndGet v = atomically (v <$ writeTVar curAppInfo (Just v))
+
     getFromScratch = do
       appInfos <- V.fromList <$> Gio.appInfoGetAll
       deskInfos <- V.mapMaybeM (Gio.castTo Gio.DesktopAppInfo) appInfos
