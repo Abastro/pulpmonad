@@ -51,7 +51,7 @@ import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Status.X11.XHandle
 import Text.Printf
-import qualified UI.Pixbufs as UI
+import Gtk.Pixbufs qualified as Gtk
 
 asUtf8 :: MonadError T.Text m => BS.ByteString -> m T.Text
 asUtf8 = either (throwError . T.pack . show) pure . T.decodeUtf8'
@@ -256,7 +256,7 @@ getWindowInfo = WindowInfo <$> wmTitle <*> wmClass <*> wmState
 getWindowDesktop :: XPQuery Int
 getWindowDesktop = queryProp @Int "_NET_WM_DESKTOP" <|> pure (-1)
 
-instance XPropType CLong [UI.RawIcon] where
+instance XPropType CLong [Gtk.RawIcon] where
   parseProp = \case
     [] -> pure []
     width : height : xs
@@ -266,10 +266,10 @@ instance XPropType CLong [UI.RawIcon] where
         let iconColors = LBS.toStrict . BS.toLazyByteString $ foldMap (BS.word32BE . fromIntegral) dat
         if BS.length iconColors /= fromIntegral (4 * iconWidth * iconHeight)
           then throwError $ T.pack "Not enough pixels read for given width, height"
-          else (UI.RawIcon{..} :) <$> parseProp rem
+          else (Gtk.RawIcon{..} :) <$> parseProp rem
     _ -> throwError $ T.pack "Cannot read width, height"
 
 -- | Get the window icon.
 -- Since reading it takes time, it is not advised to listen to the property.
-getWindowIcon :: XPQuery [UI.RawIcon]
-getWindowIcon = queryProp @[UI.RawIcon] "_NET_WM_ICON"
+getWindowIcon :: XPQuery [Gtk.RawIcon]
+getWindowIcon = queryProp @[Gtk.RawIcon] "_NET_WM_ICON"

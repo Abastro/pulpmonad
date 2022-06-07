@@ -29,9 +29,9 @@ import Status.X11.XHandle
 import System.Log.LogPrint
 import System.Pulp.Applet.DesktopVisual.View qualified as View
 import System.Pulp.PulpEnv
-import UI.Commons qualified as UI
-import UI.Pixbufs qualified as UI
-import UI.Task qualified as UI
+import Gtk.Commons qualified as Gtk
+import Gtk.Pixbufs qualified as Gtk
+import Gtk.Task qualified as Gtk
 import View.Imagery qualified as View
 import Control.Applicative
 
@@ -65,13 +65,13 @@ data DesktopSetup = DesktopSetup
 data WindowSetup = WindowSetup
   { -- | With which image the window is going to set to.
     windowImgSetter :: WindowInfo -> MaybeT IO View.ImageSet
-  , windowIconSize :: UI.IconSize
+  , windowIconSize :: Gtk.IconSize
   }
 
 -- TODO Configuration adjusting the icon size
 
 -- | Desktops visualizer widget. Forks its own X11 event handler.
-deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO UI.Widget
+deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO Gtk.Widget
 deskVisualizer deskSetup winSetup = do
   rcvs <- pulpXHandle deskVisInitiate
   deskVisualView <- View.deskVisualNew
@@ -94,10 +94,10 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
   where
     WindowSetup{windowIconSize} = winSetup
     registers appCol desksRef winsRef ordersRef activeRef = withRunInIO $ \unlift -> do
-      killStat <- UI.uiTask desktopStats (unlift . updateDeskStats)
-      killWinCh <- UI.uiTask windowsList (unlift . updateWinList)
-      killActiv <- UI.uiTask windowActive (unlift . changeActivate)
-      _ <- UI.onWidgetDestroy (View.deskVisualWidget view) (killStat >> killWinCh >> killActiv)
+      killStat <- Gtk.uiTask desktopStats (unlift . updateDeskStats)
+      killWinCh <- Gtk.uiTask windowsList (unlift . updateWinList)
+      killActiv <- Gtk.uiTask windowActive (unlift . changeActivate)
+      _ <- Gtk.onWidgetDestroy (View.deskVisualWidget view) (killStat >> killWinCh >> killActiv)
       pure DeskVisHandle
       where
         updateDeskStats :: V.Vector DesktopStat -> PulpIO ()
@@ -120,7 +120,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           V.zipWithM_ (\DeskItemHandle{updateDeskItem} -> updateDeskItem) deskItems newStats
 
         removeOldWin _window WinItemHandle{itemWindowView} = do
-          UI.widgetDestroy (View.winItemWidget itemWindowView)
+          Gtk.widgetDestroy (View.winItemWidget itemWindowView)
           pure False
 
         addNewWin window () = withRunInIO $ \unlift -> do
@@ -246,10 +246,10 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = do
     imgSetter winInfo = appInfoImgSetter appCol winInfo <|> windowImgSetter winInfo
 
     registers curDeskRef = do
-      killChDesk <- UI.uiTask winDesktop changeDesktop
-      killInfo <- UI.uiTask winInfo updateWindow
+      killChDesk <- Gtk.uiTask winDesktop changeDesktop
+      killInfo <- Gtk.uiTask winInfo updateWindow
       -- Frees from desktops so that it is correctly adjusted
-      UI.onWidgetDestroy (View.winItemWidget view) (changeDesktop (-1) >> killChDesk >> killInfo)
+      Gtk.onWidgetDestroy (View.winItemWidget view) (changeDesktop (-1) >> killChDesk >> killInfo)
       pure WinItemHandle{itemWindowView = view}
       where
         changeDesktop newDesk = do
@@ -282,7 +282,7 @@ appInfoImgSetter appCol WindowInfo{windowClasses} = do
                           Communication
 --------------------------------------------------------------------}
 
-type GetXIcon = IO (Either String [UI.RawIcon])
+type GetXIcon = IO (Either String [Gtk.RawIcon])
 
 data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)

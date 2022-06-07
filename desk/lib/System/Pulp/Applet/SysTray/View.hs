@@ -31,49 +31,48 @@ import GI.Gdk.Structs.EventScroll qualified as Gdk
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gio.Objects.FileIcon qualified as Gio
-import GI.Gtk.Flags qualified as UI
-import GI.Gtk.Objects.Box qualified as UI
-import GI.Gtk.Objects.EventBox qualified as UI
-import GI.Gtk.Objects.IconTheme qualified as UI
-import GI.Gtk.Objects.Menu qualified as UI
-import UI.Commons qualified as UI
-import UI.Containers qualified as UI
-import UI.Pixbufs qualified as UI
-import UI.Styles qualified as UI
+import GI.Gtk.Objects.Box qualified as Gtk
+import GI.Gtk.Objects.EventBox qualified as Gtk
+import GI.Gtk.Objects.IconTheme qualified as Gtk
+import GI.Gtk.Objects.Menu qualified as Gtk
+import Gtk.Commons qualified as Gtk
+import Gtk.Containers qualified as Gtk
+import Gtk.Pixbufs qualified as Gtk
+import Gtk.Styles qualified as Gtk
 import View.Imagery qualified as View
 
 data SysTray = SysTray
-  { sysTrayWid :: !UI.Widget
-  , sysTrayBox :: !UI.Box
+  { sysTrayWid :: !Gtk.Widget
+  , sysTrayBox :: !Gtk.Box
   , sysTrayAlignBegin :: !Bool
   }
 
 data SysTrayOp = TrayAddItem !TrayItem | TrayRemoveItem !TrayItem
 
-sysTrayWidget :: SysTray -> UI.Widget
+sysTrayWidget :: SysTray -> Gtk.Widget
 sysTrayWidget SysTray{sysTrayWid} = sysTrayWid
 
-sysTrayNew :: MonadIO m => UI.Orientation -> Bool -> m SysTray
+sysTrayNew :: MonadIO m => Gtk.Orientation -> Bool -> m SysTray
 sysTrayNew orientation sysTrayAlignBegin = do
-  sysTrayBox <- UI.boxNew orientation 0
-  sysTrayWid <- UI.toWidget sysTrayBox
-  UI.widgetGetStyleContext sysTrayWid >>= flip UI.styleContextAddClass (T.pack "system-tray-area")
+  sysTrayBox <- Gtk.boxNew orientation 0
+  sysTrayWid <- Gtk.toWidget sysTrayBox
+  Gtk.widgetGetStyleContext sysTrayWid >>= flip Gtk.styleContextAddClass (T.pack "system-tray-area")
   pure SysTray{..}
 
 sysTrayCtrl :: MonadIO m => SysTray -> SysTrayOp -> m ()
 sysTrayCtrl SysTray{..} = \case
   TrayAddItem TrayItem{trayItemWid} -> do
     boxPack sysTrayBox trayItemWid False False 0
-    UI.widgetShowAll trayItemWid
+    Gtk.widgetShowAll trayItemWid
   TrayRemoveItem TrayItem{trayItemWid} -> do
-    UI.widgetHide trayItemWid
-    UI.widgetDestroy trayItemWid
+    Gtk.widgetHide trayItemWid
+    Gtk.widgetDestroy trayItemWid
   where
-    boxPack = if sysTrayAlignBegin then UI.boxPackStart else UI.boxPackEnd
+    boxPack = if sysTrayAlignBegin then Gtk.boxPackStart else Gtk.boxPackEnd
 
 data TrayItem = TrayItem
-  { trayItemWid :: !UI.Widget
-  , trayItemSize :: !UI.IconSize
+  { trayItemWid :: !Gtk.Widget
+  , trayItemSize :: !Gtk.IconSize
   , trayItemIcon :: !View.ImageDyn
   , trayItemOverlay :: !View.ImageDyn
   }
@@ -87,33 +86,33 @@ data TrayItemOp
 
 data MouseButton = MouseLeft | MouseMiddle | MouseRight
 data TrayItemInput
-  = TrayItemScroll !UI.ScrollDirection
+  = TrayItemScroll !Gtk.ScrollDirection
   | TrayItemClick !MouseButton !Int32 !Int32
 
-trayItemWidget :: TrayItem -> UI.Widget
+trayItemWidget :: TrayItem -> Gtk.Widget
 trayItemWidget TrayItem{trayItemWid} = trayItemWid
 
-trayItemNew :: MonadIO m => UI.IconSize -> m TrayItem
+trayItemNew :: MonadIO m => Gtk.IconSize -> m TrayItem
 trayItemNew trayItemSize = do
   trayItemIcon <- View.imageDynNew trayItemSize
   trayItemOverlay <- View.imageDynNew trayItemSize
-  overlay <- UI.overlayed (View.imageDynWidget trayItemIcon) [View.imageDynWidget trayItemOverlay]
+  overlay <- Gtk.overlayed (View.imageDynWidget trayItemIcon) [View.imageDynWidget trayItemOverlay]
 
-  interactive <- UI.eventBoxNew
-  UI.widgetAddEvents interactive [Gdk.EventMaskScrollMask]
-  UI.containerAdd interactive overlay
-  trayItemWid <- UI.toWidget interactive
-  UI.widgetGetStyleContext trayItemWid >>= flip UI.styleContextAddClass (T.pack "system-tray-item")
+  interactive <- Gtk.eventBoxNew
+  Gtk.widgetAddEvents interactive [Gdk.EventMaskScrollMask]
+  Gtk.containerAdd interactive overlay
+  trayItemWid <- Gtk.toWidget interactive
+  Gtk.widgetGetStyleContext trayItemWid >>= flip Gtk.styleContextAddClass (T.pack "system-tray-item")
 
   pure TrayItem{..}
 
 trayItemCtrl :: MonadIO m => TrayItem -> TrayItemOp -> m ()
 trayItemCtrl TrayItem{..} = \case
-  ItemSetTooltip tooltip -> UI.widgetSetTooltipText trayItemWid tooltip
+  ItemSetTooltip tooltip -> Gtk.widgetSetTooltipText trayItemWid tooltip
   ItemSetIcon icon -> itemIconAsSet trayItemSize icon >>= View.imageDynSetImg trayItemIcon
   ItemSetOverlay icon -> itemIconAsSet trayItemSize icon >>= View.imageDynSetImg trayItemOverlay
   ItemSetInputHandler handler -> do
-    UI.onWidgetButtonPressEvent trayItemWid $ \event -> do
+    Gtk.onWidgetButtonPressEvent trayItemWid $ \event -> do
       xRoot <- round <$> Gdk.getEventButtonXRoot event
       yRoot <- round <$> Gdk.getEventButtonYRoot event
       Gdk.getEventButtonButton event >>= \case
@@ -121,12 +120,12 @@ trayItemCtrl TrayItem{..} = \case
         2 -> True <$ handler (TrayItemClick MouseMiddle xRoot yRoot)
         3 -> True <$ handler (TrayItemClick MouseRight xRoot yRoot)
         _ -> pure False
-    UI.onWidgetScrollEvent trayItemWid $ \event -> do
+    Gtk.onWidgetScrollEvent trayItemWid $ \event -> do
       direction <- Gdk.getEventScrollDirection event
       True <$ handler (TrayItemScroll direction)
     pure ()
   ItemShowPopup menu -> do
-    UI.menuPopupAtWidget menu trayItemWid UI.GravitySouthWest UI.GravityNorthWest Nothing
+    Gtk.menuPopupAtWidget menu trayItemWid Gtk.GravitySouthWest Gtk.GravityNorthWest Nothing
 
 -- | Icon information from the tray item.
 data TrayItemIcon = TrayItemIcon
@@ -135,7 +134,7 @@ data TrayItemIcon = TrayItemIcon
   , itemIconInfo :: [(Int32, Int32, BS.ByteString)]
   }
 
-itemIconAsSet :: MonadIO m => UI.IconSize -> TrayItemIcon -> m View.ImageSet
+itemIconAsSet :: MonadIO m => Gtk.IconSize -> TrayItemIcon -> m View.ImageSet
 itemIconAsSet iconSize TrayItemIcon{..} = do
   iconSet <-
     liftIO . runMaybeT $
@@ -143,17 +142,17 @@ itemIconAsSet iconSize TrayItemIcon{..} = do
         <|> imgInfoSet iconSize itemIconInfo
   pure $ fromMaybe (View.ImgSName $ T.pack "missing") iconSet
 
-customIconTheme :: MonadIO m => String -> m UI.IconTheme
+customIconTheme :: MonadIO m => String -> m Gtk.IconTheme
 customIconTheme themePath = do
-  custom <- UI.iconThemeNew
-  Gdk.screenGetDefault >>= traverse_ (UI.iconThemeSetScreen custom)
-  UI.iconThemeAppendSearchPath custom themePath
+  custom <- Gtk.iconThemeNew
+  Gdk.screenGetDefault >>= traverse_ (Gtk.iconThemeSetScreen custom)
+  Gtk.iconThemeAppendSearchPath custom themePath
 
-  defTheme <- UI.iconThemeGetDefault
-  UI.iconThemeGetSearchPath defTheme >>= traverse_ (UI.iconThemeAppendSearchPath custom)
+  defTheme <- Gtk.iconThemeGetDefault
+  Gtk.iconThemeGetSearchPath defTheme >>= traverse_ (Gtk.iconThemeAppendSearchPath custom)
   pure custom
 
-imgNameSet :: UI.IconSize -> Maybe String -> T.Text -> MaybeT IO View.ImageSet
+imgNameSet :: Gtk.IconSize -> Maybe String -> T.Text -> MaybeT IO View.ImageSet
 imgNameSet size mayTheme name = do
   guard $ not (T.null name)
   -- Icon should be freedesktop-compliant icon name.
@@ -163,8 +162,8 @@ imgNameSet size mayTheme name = do
     Just themePath -> forCustomTheme themePath <|> directPath themePath name
   where
     panelName = name <> T.pack "-panel" -- Looks up first with "-panel" suffix
-    loadFlags = [UI.IconLookupFlagsUseBuiltin, UI.IconLookupFlagsGenericFallback]
-    withDefTheme = UI.iconThemeGetDefault >>= setPixbuf
+    loadFlags = [Gtk.IconLookupFlagsUseBuiltin, Gtk.IconLookupFlagsGenericFallback]
+    withDefTheme = Gtk.iconThemeGetDefault >>= setPixbuf
     forCustomTheme themePath = customIconTheme themePath >>= setPixbuf
     directPath themePath name = do
       fpath <- Gio.fileNewForPath themePath >>= flip Gio.fileGetChild (T.unpack name)
@@ -172,14 +171,14 @@ imgNameSet size mayTheme name = do
       View.ImgSGIcon <$> Gio.toIcon fileIcon
 
     setPixbuf theme = do
-      pixbuf <- MaybeT $ UI.iconThemeLoadIcon theme panelName (UI.iconSizePx size) loadFlags
+      pixbuf <- MaybeT $ Gtk.iconThemeLoadIcon theme panelName (Gtk.iconSizePx size) loadFlags
       pure (View.ImgSPixbuf pixbuf)
 
 -- NB: Why does `id` work? SNI is ARGB, GTK is RGBA.
-imgInfoSet :: UI.IconSize -> [(Int32, Int32, BS.ByteString)] -> MaybeT IO View.ImageSet
+imgInfoSet :: Gtk.IconSize -> [(Int32, Int32, BS.ByteString)] -> MaybeT IO View.ImageSet
 imgInfoSet size imgs = do
-  pixbuf <- MaybeT $ UI.iconsChoosePixbuf (UI.iconSizePx size) id icons
+  pixbuf <- MaybeT $ Gtk.iconsChoosePixbuf (Gtk.iconSizePx size) id icons
   pure $ View.ImgSPixbuf pixbuf
   where
     icons = asRawIcon <$> imgs
-    asRawIcon (iconWidth, iconHeight, iconColors) = UI.RawIcon{..}
+    asRawIcon (iconWidth, iconHeight, iconColors) = Gtk.RawIcon{..}

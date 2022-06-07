@@ -1,6 +1,6 @@
 {-# LANGUAGE MonoLocalBinds #-}
 
-module UI.Styles (
+module Gtk.Styles (
   module GI.Gtk.Objects.StyleContext,
   module GI.Gtk.Objects.CssProvider,
   updateCssClass,

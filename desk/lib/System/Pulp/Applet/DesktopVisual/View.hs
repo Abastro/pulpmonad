@@ -25,22 +25,22 @@ import Data.IORef
 import Data.Maybe
 import Data.Text qualified as T
 import Data.Vector qualified as V
-import GI.Gtk.Objects.Box qualified as UI
-import UI.Commons qualified as UI
-import UI.Containers qualified as UI
-import UI.Pixbufs qualified as UI
-import UI.Singles qualified as UI
-import UI.Styles qualified as UI
+import GI.Gtk.Objects.Box qualified as Gtk
+import Gtk.Commons qualified as Gtk
+import Gtk.Containers qualified as Gtk
+import Gtk.Pixbufs qualified as Gtk
+import Gtk.Singles qualified as Gtk
+import Gtk.Styles qualified as Gtk
 import View.Imagery qualified as View
 
-widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => UI.Widget -> (s -> T.Text) -> [s] -> m ()
+widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => Gtk.Widget -> (s -> T.Text) -> [s] -> m ()
 widgetUpdateClass widget asClass state =
-  UI.widgetGetStyleContext widget >>= UI.updateCssClass asClass state
+  Gtk.widgetGetStyleContext widget >>= Gtk.updateCssClass asClass state
 
 -- | Desktop visualizer view
 data DeskVisual = DeskVisual
-  { deskVisualWid :: !UI.Widget
-  , deskVisualCont :: !UI.Container
+  { deskVisualWid :: !Gtk.Widget
+  , deskVisualCont :: !Gtk.Container
   , deskVisualItems :: !(IORef (V.Vector DeskItem))
   }
 
@@ -48,7 +48,7 @@ data DeskVisualOp
   = CutDeskItemsTo !Int
   | AddDeskItems !(V.Vector DeskItem)
 
-deskVisualWidget :: DeskVisual -> UI.Widget
+deskVisualWidget :: DeskVisual -> Gtk.Widget
 deskVisualWidget DeskVisual{deskVisualWid} = deskVisualWid
 
 -- TODO Remove itemAt
@@ -59,10 +59,10 @@ deskVisualItemAt DeskVisual{..} idx = do
 
 deskVisualNew :: MonadIO m => m DeskVisual
 deskVisualNew = do
-  deskVisualCont <- UI.toContainer =<< UI.boxNew UI.OrientationHorizontal 5
-  deskVisualWid <- UI.toWidget deskVisualCont
-  UI.widgetGetStyleContext deskVisualWid >>= flip UI.styleContextAddClass (T.pack "desk-visual")
-  UI.widgetShowAll deskVisualWid
+  deskVisualCont <- Gtk.toContainer =<< Gtk.boxNew Gtk.OrientationHorizontal 5
+  deskVisualWid <- Gtk.toWidget deskVisualCont
+  Gtk.widgetGetStyleContext deskVisualWid >>= flip Gtk.styleContextAddClass (T.pack "desk-visual")
+  Gtk.widgetShowAll deskVisualWid
 
   deskVisualItems <- liftIO $ newIORef V.empty
   pure DeskVisual{..}
@@ -72,20 +72,20 @@ deskVisualCtrl DeskVisual{..} = \case
   CutDeskItemsTo newCnt -> do
     toDelete <- liftIO $ atomicModifyIORef' deskVisualItems $ V.splitAt newCnt
     for_ toDelete $ \DeskItem{deskItemWid} -> do
-      UI.widgetHide deskItemWid
-      UI.widgetDestroy deskItemWid
+      Gtk.widgetHide deskItemWid
+      Gtk.widgetDestroy deskItemWid
   AddDeskItems deskItems -> do
     liftIO $ modifyIORef' deskVisualItems (<> deskItems)
     for_ deskItems $ \DeskItem{deskItemWid} -> do
-      UI.containerAdd deskVisualCont deskItemWid
-      UI.widgetShowAll deskItemWid
+      Gtk.containerAdd deskVisualCont deskItemWid
+      Gtk.widgetShowAll deskItemWid
 
 -- | Desktop item view
 data DeskItem = DeskItem
   { -- | The congregated widget
-    deskItemWid :: !UI.Widget
-  , deskItemName :: !UI.Label
-  , deskItemWinCont :: !UI.Box
+    deskItemWid :: !Gtk.Widget
+  , deskItemName :: !Gtk.Label
+  , deskItemWinCont :: !Gtk.Box
   }
 
 data DeskItemOp
@@ -95,64 +95,64 @@ data DeskItemOp
   | DeskLabelName !T.Text
   | DeskVisibility !Bool
 
-deskItemWidget :: DeskItem -> UI.Widget
+deskItemWidget :: DeskItem -> Gtk.Widget
 deskItemWidget DeskItem{deskItemWid} = deskItemWid
 
 deskItemNew :: MonadIO m => IO () -> m DeskItem
 deskItemNew onClick = do
-  deskItemWinCont <- UI.boxNew UI.OrientationHorizontal 0
+  deskItemWinCont <- Gtk.boxNew Gtk.OrientationHorizontal 0
 
-  deskItemName <- UI.labelNew Nothing
-  UI.widgetGetStyleContext deskItemName >>= flip UI.styleContextAddClass (T.pack "desktop-label")
+  deskItemName <- Gtk.labelNew Nothing
+  Gtk.widgetGetStyleContext deskItemName >>= flip Gtk.styleContextAddClass (T.pack "desktop-label")
 
   deskMain <-
-    UI.boxed UI.OrientationHorizontal 0
-      =<< sequenceA [UI.toWidget deskItemName, UI.toWidget deskItemWinCont]
+    Gtk.boxed Gtk.OrientationHorizontal 0
+      =<< sequenceA [Gtk.toWidget deskItemName, Gtk.toWidget deskItemWinCont]
 
-  deskItemWid <- UI.clickyNewWith (Just deskMain) onClick
-  UI.widgetGetStyleContext deskItemWid >>= flip UI.styleContextAddClass (T.pack "desktop-item")
+  deskItemWid <- Gtk.clickyNewWith (Just deskMain) onClick
+  Gtk.widgetGetStyleContext deskItemWid >>= flip Gtk.styleContextAddClass (T.pack "desktop-item")
 
   pure DeskItem{..}
 
 deskItemCtrl :: MonadIO m => DeskItem -> DeskItemOp -> m ()
 deskItemCtrl DeskItem{..} = \case
   AddWinItemAt WinItem{winItemWid} idx -> do
-    UI.containerAdd deskItemWinCont winItemWid
-    UI.boxReorderChild deskItemWinCont winItemWid $ fromIntegral idx
-    UI.widgetShowAll winItemWid
+    Gtk.containerAdd deskItemWinCont winItemWid
+    Gtk.boxReorderChild deskItemWinCont winItemWid $ fromIntegral idx
+    Gtk.widgetShowAll winItemWid
   RemoveWinItem WinItem{winItemWid} -> do
-    UI.widgetHide winItemWid
-    UI.containerRemove deskItemWinCont winItemWid
+    Gtk.widgetHide winItemWid
+    Gtk.containerRemove deskItemWinCont winItemWid
   ReorderWinItems winItems -> do
     for_ (V.indexed winItems) $ \(idx, WinItem{winItemWid}) -> do
-      UI.boxReorderChild deskItemWinCont winItemWid $ fromIntegral idx
+      Gtk.boxReorderChild deskItemWinCont winItemWid $ fromIntegral idx
 
   -- Mundane property update here
-  DeskLabelName name -> UI.labelSetLabel deskItemName name
-  DeskVisibility flag -> if flag then UI.widgetShowAll deskItemWid else UI.widgetHide deskItemWid
+  DeskLabelName name -> Gtk.labelSetLabel deskItemName name
+  DeskVisibility flag -> if flag then Gtk.widgetShowAll deskItemWid else Gtk.widgetHide deskItemWid
 
 -- | Window item view
 data WinItem = WinItem
   { -- | The congregated widget
-    winItemWid :: !UI.Widget
+    winItemWid :: !Gtk.Widget
   , winItemImg :: !View.ImageDyn
-  , winItemSize :: !UI.IconSize
+  , winItemSize :: !Gtk.IconSize
   }
 
-winItemWidget :: WinItem -> UI.Widget
+winItemWidget :: WinItem -> Gtk.Widget
 winItemWidget WinItem{winItemWid} = winItemWid
 
-winItemNew :: MonadIO m => UI.IconSize -> IO () -> m WinItem
+winItemNew :: MonadIO m => Gtk.IconSize -> IO () -> m WinItem
 winItemNew winItemSize onClick = do
   winItemImg <- View.imageDynNew winItemSize
-  winItemWid <- UI.buttonNewWith (Just $ View.imageDynWidget winItemImg) onClick
-  UI.widgetGetStyleContext winItemWid >>= flip UI.styleContextAddClass (T.pack "window-item")
+  winItemWid <- Gtk.buttonNewWith (Just $ View.imageDynWidget winItemImg) onClick
+  Gtk.widgetGetStyleContext winItemWid >>= flip Gtk.styleContextAddClass (T.pack "window-item")
   pure WinItem{..}
 
 winItemSetTitle :: MonadIO m => WinItem -> T.Text -> m ()
-winItemSetTitle WinItem{winItemWid} = UI.widgetSetTooltipText winItemWid . Just
+winItemSetTitle WinItem{winItemWid} = Gtk.widgetSetTooltipText winItemWid . Just
 
-type RawIconSet = IO (Either String [UI.RawIcon])
+type RawIconSet = IO (Either String [Gtk.RawIcon])
 
 winItemSetIcon :: MonadIO m => WinItem -> RawIconSet -> Maybe View.ImageSet -> m ()
 winItemSetIcon WinItem{..} rawIcons = \case
@@ -164,5 +164,5 @@ winItemSetIcon WinItem{..} rawIcons = \case
     rawIconSet = runMaybeT $ liftIO rawIcons >>= \case
       Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
       Right icons -> do
-        scaled <- MaybeT $ UI.iconsChoosePixbuf (UI.iconSizePx winItemSize) UI.argbTorgba icons
+        scaled <- MaybeT $ Gtk.iconsChoosePixbuf (Gtk.iconSizePx winItemSize) Gtk.argbTorgba icons
         pure (View.ImgSPixbuf scaled)

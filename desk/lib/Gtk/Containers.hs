@@ -1,4 +1,4 @@
-module UI.Containers (
+module Gtk.Containers (
   module GI.Gtk.Objects.Container,
   buttonNewWith,
   clickyNewWith,
@@ -14,7 +14,7 @@ import GI.Gtk.Objects.Box
 import GI.Gtk.Objects.Button
 import GI.Gtk.Objects.Container
 import GI.Gtk.Objects.Overlay
-import UI.Commons
+import Gtk.Commons
 import GI.Gtk.Objects.EventBox
 import qualified GI.Gdk.Structs.EventButton as Gdk
 

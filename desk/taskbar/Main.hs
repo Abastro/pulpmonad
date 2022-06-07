@@ -6,9 +6,16 @@ import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 import Defines
-import GI.GLib qualified as UI
-import GI.Gtk.Objects.Box qualified as UI
-import GI.Gtk.Objects.IconTheme qualified as UI
+import GI.GLib.Constants qualified as Glib
+import GI.GLib.Functions qualified as Glib
+import GI.Gio.Flags qualified as Gio
+import GI.Gtk.Objects.Box qualified as Gtk
+import GI.Gtk.Objects.IconTheme qualified as Gtk
+import Gtk.Application qualified as Gtk
+import Gtk.Commons qualified as Gtk
+import Gtk.Containers qualified as Gtk
+import Gtk.Styles qualified as Gtk
+import Gtk.Window qualified as Gtk
 import Status.X11.WMStatus (DesktopStat (..))
 import System.Environment
 import System.Exit
@@ -18,15 +25,9 @@ import System.Pulp.Applet.DesktopVisual qualified as App
 import System.Pulp.Applet.SysTray qualified as App
 import System.Pulp.Applet.SystemDisplay qualified as App
 import System.Pulp.PulpEnv
-import UI.Application qualified as UI
-import UI.Commons qualified as UI
-import UI.Containers qualified as UI
-import UI.Styles qualified as UI
-import UI.Window qualified as UI
 import View.Imagery qualified as View
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run (safeSpawn)
-import qualified GI.Gio.Flags as Gio
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -41,84 +42,84 @@ workspaceMaps =
     ]
 
 data BarWinArgs = BarWinArgs
-  { barDockPos :: !UI.DockPos
-  , barDockSize :: !UI.DockSize
-  , barDockSpan :: !UI.DockSpan
+  { barDockPos :: !Gtk.DockPos
+  , barDockSize :: !Gtk.DockSize
+  , barDockSpan :: !Gtk.DockSpan
   , barTitle :: !T.Text
   }
 
 -- | Creates and links the taskbar window. Does not show the window.
-taskbarWindow :: UI.Application -> BarWinArgs -> UI.Widget -> PulpIO UI.Window
+taskbarWindow :: Gtk.Application -> BarWinArgs -> Gtk.Widget -> PulpIO Gtk.Window
 taskbarWindow app BarWinArgs{..} content = do
-  window <- UI.windowNew UI.WindowTypeToplevel
-  UI.windowSetTitle window barTitle
-  UI.windowSetDock window barDockPos barDockSize barDockSpan
-  UI.windowSetKeepBelow window True
-  UI.windowSetSkipPagerHint window True
-  UI.windowSetSkipTaskbarHint window True
-  UI.windowSetTransparent window
+  window <- Gtk.windowNew Gtk.WindowTypeToplevel
+  Gtk.windowSetTitle window barTitle
+  Gtk.windowSetDock window barDockPos barDockSize barDockSpan
+  Gtk.windowSetKeepBelow window True
+  Gtk.windowSetSkipPagerHint window True
+  Gtk.windowSetSkipTaskbarHint window True
+  Gtk.windowSetTransparent window
 
-  UI.containerAdd window content
+  Gtk.containerAdd window content
 
-  UI.applicationAddWindow app window
+  Gtk.applicationAddWindow app window
   pure window
 
 main :: IO ()
 main = runPulpIO $
   withRunInIO $ \unlift -> do
-    Just app <- UI.applicationNew (Just $ T.pack "pulp.ui.taskbar") [Gio.ApplicationFlagsNonUnique]
-    UI.onApplicationActivate app (unlift $ activating app)
-    UI.unixSignalAdd UI.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ UI.applicationQuit app
-    status <- UI.applicationRun app Nothing
+    Just app <- Gtk.applicationNew (Just $ T.pack "pulp.Gtk.taskbar") [Gio.ApplicationFlagsNonUnique]
+    Gtk.onApplicationActivate app (unlift $ activating app)
+    Glib.unixSignalAdd Glib.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ Gtk.applicationQuit app
+    status <- Gtk.applicationRun app Nothing
     when (status /= 0) . liftIO $ exitWith (ExitFailure $ fromIntegral status)
   where
-    cssProv :: IO UI.CssProvider
+    cssProv :: IO Gtk.CssProvider
     cssProv = do
-      css <- UI.cssProviderNew
+      css <- Gtk.cssProviderNew
       cfgDir <- liftIO $ getEnv "XMONAD_CONFIG_DIR"
-      UI.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-taskbar.css")
+      Gtk.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-taskbar.css")
       pure css
 
     iconThemeSetup :: IO ()
     iconThemeSetup = do
       mainDir <- getEnv "XMONAD_CONFIG_DIR"
-      defaultTheme <- UI.iconThemeGetDefault
-      UI.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
+      defaultTheme <- Gtk.iconThemeGetDefault
+      Gtk.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
 
-    activating :: UI.Application -> PulpIO ()
+    activating :: Gtk.Application -> PulpIO ()
     activating app = withRunInIO $ \unlift -> do
-      cssProv >>= flip UI.defScreenAddStyleContext UI.STYLE_PROVIDER_PRIORITY_USER
+      cssProv >>= flip Gtk.defScreenAddStyleContext Gtk.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
       left <- unlift $ taskbarWindow app leftArgs =<< leftBox
       center <- unlift $ taskbarWindow app centerArgs =<< centerBox
       right <- unlift $ taskbarWindow app rightArgs =<< rightBox
-      traverse_ UI.widgetShowAll [left, center, right]
-    
-    dockPos = UI.DockBottom
+      traverse_ Gtk.widgetShowAll [left, center, right]
+
+    dockPos = Gtk.DockBottom
 
     leftArgs =
       BarWinArgs
         { barDockPos = dockPos
-        , barDockSize = UI.AbsoluteSize 36
-        , barDockSpan = UI.DockSpan 0 (1 / 6)
+        , barDockSize = Gtk.AbsoluteSize 36
+        , barDockSpan = Gtk.DockSpan 0 (1 / 6)
         , barTitle = T.pack "Pulp Statusbar"
         }
-    leftBox :: PulpIO UI.Widget
+    leftBox :: PulpIO Gtk.Widget
     leftBox = do
-      box <- UI.boxNew UI.OrientationHorizontal 0
-      UI.widgetSetName box  (T.pack "pulp-statusbar")
-      UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "statusbar-box")
-      powerIcon <- View.imageStaticNew UI.IconSizeLargeToolbar $ View.ImgSName (T.pack "system-shutdown-symbolic")
+      box <- Gtk.boxNew Gtk.OrientationHorizontal 0
+      Gtk.widgetSetName box (T.pack "pulp-statusbar")
+      Gtk.widgetGetStyleContext box >>= flip Gtk.styleContextAddClass (T.pack "statusbar-box")
+      powerIcon <- View.imageStaticNew Gtk.IconSizeLargeToolbar $ View.ImgSName (T.pack "system-shutdown-symbolic")
       traverse_ (addToBegin box)
         =<< sequenceA
-          [UI.buttonNewWith (Just powerIcon) runPulpCtl]
+          [Gtk.buttonNewWith (Just powerIcon) runPulpCtl]
       traverse_ (addToEnd box)
         =<< sequenceA
-          [ App.mainboardDisplay UI.IconSizeLargeToolbar 42
-          , App.batDisplay UI.IconSizeLargeToolbar
+          [ App.mainboardDisplay Gtk.IconSizeLargeToolbar 42
+          , App.batDisplay Gtk.IconSizeLargeToolbar
           ]
-      UI.toWidget box
+      Gtk.toWidget box
       where
         runPulpCtl = do
           cacheDir <- getEnv "XMONAD_CACHE_DIR"
@@ -127,17 +128,17 @@ main = runPulpIO $
     centerArgs =
       BarWinArgs
         { barDockPos = dockPos
-        , barDockSize = UI.AbsoluteSize 40
-        , barDockSpan = UI.DockSpan (1 / 6) (5 / 6)
+        , barDockSize = Gtk.AbsoluteSize 40
+        , barDockSpan = Gtk.DockSpan (1 / 6) (5 / 6)
         , barTitle = T.pack "Pulp Taskbar"
         }
-    centerBox :: PulpIO UI.Widget
+    centerBox :: PulpIO Gtk.Widget
     centerBox = do
-      box <- UI.boxNew UI.OrientationHorizontal 2
-      UI.widgetSetName box (T.pack "pulp-taskbar")
-      UI.boxSetCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
+      box <- Gtk.boxNew Gtk.OrientationHorizontal 2
+      Gtk.widgetSetName box (T.pack "pulp-taskbar")
+      Gtk.boxSetCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
       traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
-      UI.toWidget box
+      Gtk.toWidget box
       where
         mayLabel n = maybe n T.pack $ workspaceMaps M.!? T.unpack n
         deskVisDeskSetup =
@@ -149,29 +150,29 @@ main = runPulpIO $
         deskVisWinSetup =
           App.WindowSetup
             { windowImgSetter = App.defImageSetter
-            , windowIconSize = UI.IconSizeLargeToolbar
+            , windowIconSize = Gtk.IconSizeLargeToolbar
             }
 
     rightArgs =
       BarWinArgs
         { barDockPos = dockPos
-        , barDockSize = UI.AbsoluteSize 36
-        , barDockSpan = UI.DockSpan (5 / 6) 1
+        , barDockSize = Gtk.AbsoluteSize 36
+        , barDockSpan = Gtk.DockSpan (5 / 6) 1
         , barTitle = T.pack "Pulp Systemtray"
         }
-    rightBox :: PulpIO UI.Widget
+    rightBox :: PulpIO Gtk.Widget
     rightBox = do
-      box <- UI.boxNew UI.OrientationHorizontal 2
-      UI.widgetSetName box (T.pack "pulp-systemtray")
+      box <- Gtk.boxNew Gtk.OrientationHorizontal 2
+      Gtk.widgetSetName box (T.pack "pulp-systemtray")
       liftIO $ addToEnd box =<< App.systemTray sysTrayArgs
-      UI.toWidget box
+      Gtk.toWidget box
       where
         sysTrayArgs =
           App.SysTrayArgs
-            { App.trayOrientation = UI.OrientationHorizontal
-            , App.trayIconSize = UI.IconSizeLargeToolbar
+            { App.trayOrientation = Gtk.OrientationHorizontal
+            , App.trayIconSize = Gtk.IconSizeLargeToolbar
             , App.trayAlignBegin = False
             }
 
-    addToBegin box wid = UI.boxPackStart box wid False False 0
-    addToEnd box wid = UI.boxPackEnd box wid False False 0
+    addToBegin box wid = Gtk.boxPackStart box wid False False 0
+    addToEnd box wid = Gtk.boxPackEnd box wid False False 0

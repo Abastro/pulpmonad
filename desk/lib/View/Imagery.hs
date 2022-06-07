@@ -22,38 +22,37 @@ import GI.Cairo.Render.Connector qualified as C
 import GI.Gdk.Structs.RGBA qualified as Gdk
 import GI.GdkPixbuf.Objects.Pixbuf qualified as Gdk
 import GI.Gio.Interfaces.Icon qualified as Gio
-import GI.Gtk.Flags qualified as UI
-import GI.Gtk.Objects.Image qualified as UI
-import UI.Commons qualified as UI
-import UI.Styles qualified as UI
+import GI.Gtk.Objects.Image qualified as Gtk
+import Gtk.Commons qualified as Gtk
+import Gtk.Styles qualified as Gtk
 import XMonad.StackSet (RationalRect (..))
 
 -- | Setting image for Image widget
 data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon | ImgSPixbuf Gdk.Pixbuf
 
 data ImageDyn = ImageDyn
-  { imageDynWid :: !UI.Widget
+  { imageDynWid :: !Gtk.Widget
   , imageDynSize :: !Int32
-  , imageDynImg :: !UI.Image
+  , imageDynImg :: !Gtk.Image
   }
 
-imageDynWidget :: ImageDyn -> UI.Widget
+imageDynWidget :: ImageDyn -> Gtk.Widget
 imageDynWidget ImageDyn{imageDynWid} = imageDynWid
 
-imageDynNew :: MonadIO m => UI.IconSize -> m ImageDyn
+imageDynNew :: MonadIO m => Gtk.IconSize -> m ImageDyn
 imageDynNew size = do
-  imageDynImg <- UI.imageNew
+  imageDynImg <- Gtk.imageNew
   let imageDynSize = fromIntegral $ fromEnum size
-  imageDynWid <- UI.toWidget imageDynImg
+  imageDynWid <- Gtk.toWidget imageDynImg
   pure ImageDyn{..}
 
 imageDynSetImg :: MonadIO m => ImageDyn -> ImageSet -> m ()
 imageDynSetImg ImageDyn{..} = \case
-  ImgSName txt -> UI.imageSetFromIconName imageDynImg (Just txt) imageDynSize
-  ImgSGIcon icon -> UI.imageSetFromGicon imageDynImg icon imageDynSize
-  ImgSPixbuf pix -> UI.imageSetFromPixbuf imageDynImg (Just pix)
+  ImgSName txt -> Gtk.imageSetFromIconName imageDynImg (Just txt) imageDynSize
+  ImgSGIcon icon -> Gtk.imageSetFromGicon imageDynImg icon imageDynSize
+  ImgSPixbuf pix -> Gtk.imageSetFromPixbuf imageDynImg (Just pix)
 
-imageStaticNew :: MonadIO m => UI.IconSize -> ImageSet -> m UI.Widget
+imageStaticNew :: MonadIO m => Gtk.IconSize -> ImageSet -> m Gtk.Widget
 imageStaticNew size sets = do
   dyn <- imageDynNew size
   imageDynSetImg dyn sets
@@ -63,36 +62,36 @@ data BarColor = BarColor !Double !Double !Double
 
 -- MAYBE Bar direction?
 data Bar = Bar
-  { barWid :: !UI.Widget
+  { barWid :: !Gtk.Widget
   , barFill :: !(TVar Double)
   }
 
-barWidget :: Bar -> UI.Widget
+barWidget :: Bar -> Gtk.Widget
 barWidget Bar{barWid} = barWid
 
 -- | Bar with initial fill of 0.
 barNew :: MonadIO m => RationalRect -> m Bar
 barNew relative = do
-  barWid <- UI.toWidget =<< UI.imageNew -- Image is the most benign
+  barWid <- Gtk.toWidget =<< Gtk.imageNew -- Image is the most benign
   -- Cannot extend the class from haskell side, soo..
-  UI.widgetGetStyleContext barWid >>= flip UI.styleContextAddClass (T.pack "bar")
-  UI.setWidgetHalign barWid UI.AlignFill
-  UI.setWidgetValign barWid UI.AlignFill
+  Gtk.widgetGetStyleContext barWid >>= flip Gtk.styleContextAddClass (T.pack "bar")
+  Gtk.setWidgetHalign barWid Gtk.AlignFill
+  Gtk.setWidgetValign barWid Gtk.AlignFill
   barFill <- liftIO $ newTVarIO 0.0
-  _ <- UI.onWidgetDraw barWid $ \ctx -> do
+  _ <- Gtk.onWidgetDraw barWid $ \ctx -> do
     fill <- readTVarIO barFill
     True <$ C.renderWithContext (drawBar barWid fill) ctx
   pure Bar{..}
   where
     drawBar area fill = do
-      barColor <- (`UI.styleContextGetColor` [UI.StateFlagsNormal]) =<< UI.widgetGetStyleContext area
+      barColor <- (`Gtk.styleContextGetColor` [Gtk.StateFlagsNormal]) =<< Gtk.widgetGetStyleContext area
       red <- Gdk.getRGBARed barColor
       green <- Gdk.getRGBAGreen barColor
       blue <- Gdk.getRGBABlue barColor
       alpha <- Gdk.getRGBAAlpha barColor
 
-      w <- UI.widgetGetAllocatedWidth area
-      h <- UI.widgetGetAllocatedHeight area
+      w <- Gtk.widgetGetAllocatedWidth area
+      h <- Gtk.widgetGetAllocatedHeight area
       let RationalRect l t r d = relative
           left = realToFrac l * realToFrac w
           top = realToFrac t * realToFrac h
@@ -105,4 +104,4 @@ barNew relative = do
 barSetFill :: MonadIO m => Bar -> Double -> m ()
 barSetFill Bar{..} fill = do
   liftIO . atomically $ writeTVar barFill fill
-  UI.widgetQueueDraw barWid
+  Gtk.widgetQueueDraw barWid

@@ -1,6 +1,6 @@
 {-# LANGUAGE MonoLocalBinds #-}
 
-module UI.Window (
+module Gtk.Window (
   module GI.Gtk.Objects.Window,
   appWindowNew,
   windowSetTransparent,
@@ -35,7 +35,7 @@ import GI.Gtk.Functions
 import GI.Gtk.Objects.Application
 import GI.Gtk.Objects.ApplicationWindow
 import GI.Gtk.Objects.Window
-import UI.Commons
+import Gtk.Commons
 import XMonad (Rectangle (..), scaleRationalRect)
 import XMonad.StackSet (RationalRect (..))
 import qualified Data.Text as T

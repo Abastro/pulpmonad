@@ -106,14 +106,14 @@ library
     Status.X11.WMStatus
     Status.AppInfos
 
-    UI.Commons
-    UI.Task
-    UI.Styles
-    UI.Pixbufs
-    UI.Singles
-    UI.Containers
-    UI.Window
-    UI.Application
+    Gtk.Commons
+    Gtk.Task
+    Gtk.Styles
+    Gtk.Pixbufs
+    Gtk.Singles
+    Gtk.Containers
+    Gtk.Window
+    Gtk.Application
     View.Imagery
     View.Textual
 

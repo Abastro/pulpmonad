@@ -15,13 +15,13 @@ import GI.DbusmenuGtk3.Objects.Menu qualified as DMenu
 import StatusNotifier.Host.Service qualified as HS
 import StatusNotifier.Item.Client qualified as IC
 import System.Pulp.Applet.SysTray.View qualified as View
-import UI.Commons qualified as UI
-import UI.Task qualified as UI
+import Gtk.Commons qualified as Gtk
+import Gtk.Task qualified as Gtk
 import System.Posix.Process (getProcessID)
 
 data SysTrayArgs = SysTrayArgs
-  { trayOrientation :: !UI.Orientation
-  , trayIconSize :: !UI.IconSize
+  { trayOrientation :: !Gtk.Orientation
+  , trayIconSize :: !Gtk.IconSize
   , -- | Whether to align from the beginning
     trayAlignBegin :: !Bool
   }
@@ -30,7 +30,7 @@ data SysTrayArgs = SysTrayArgs
 -- Has undefined behavior if there are more than one such instance for a process.
 --
 -- Throws if the host cannot be started.
-systemTray :: SysTrayArgs -> IO UI.Widget
+systemTray :: SysTrayArgs -> IO Gtk.Widget
 systemTray args@SysTrayArgs{..} = do
   -- Creates its own dbus client.
   client <- connectSession
@@ -54,8 +54,8 @@ sysTrayMake HS.Host{..} client SysTrayArgs{trayIconSize} view = do
   registers =<< newIORef M.empty
   where
     registers itemsRef = do
-      trayHandle <- addUpdateHandler $ \typ info -> UI.uiSingleRun (onUpdate info typ)
-      UI.onWidgetDestroy (View.sysTrayWidget view) $ removeUpdateHandler trayHandle
+      trayHandle <- addUpdateHandler $ \typ info -> Gtk.uiSingleRun (onUpdate info typ)
+      Gtk.onWidgetDestroy (View.sysTrayWidget view) $ removeUpdateHandler trayHandle
       pure SysTrayHandle
       where
         onUpdate :: HS.ItemInfo -> HS.UpdateType -> IO ()
@@ -137,10 +137,10 @@ trayItemMake client HS.ItemInfo{..} view = do
             (t, f) -> t <> ": " <> f
 
     onScroll = \case
-      UI.ScrollDirectionUp -> void $ IC.scroll client itemServiceName itemServicePath (-1) "vertical"
-      UI.ScrollDirectionDown -> void $ IC.scroll client itemServiceName itemServicePath 1 "vertical"
-      UI.ScrollDirectionLeft -> void $ IC.scroll client itemServiceName itemServicePath (-1) "horizontal"
-      UI.ScrollDirectionRight -> void $ IC.scroll client itemServiceName itemServicePath 1 "horizontal"
+      Gtk.ScrollDirectionUp -> void $ IC.scroll client itemServiceName itemServicePath (-1) "vertical"
+      Gtk.ScrollDirectionDown -> void $ IC.scroll client itemServiceName itemServicePath 1 "vertical"
+      Gtk.ScrollDirectionLeft -> void $ IC.scroll client itemServiceName itemServicePath (-1) "horizontal"
+      Gtk.ScrollDirectionRight -> void $ IC.scroll client itemServiceName itemServicePath 1 "horizontal"
       _ -> pure ()
 
     onClick mayMenu xRoot yRoot = \case

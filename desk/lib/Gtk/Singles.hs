@@ -1,4 +1,4 @@
-module UI.Singles (
+module Gtk.Singles (
   module GI.Gtk.Objects.Label,
   imageNew,
   iconNewFromName,
@@ -13,8 +13,8 @@ import Data.Text qualified as T
 import GI.Cairo.Render qualified as C
 import GI.Cairo.Render.Connector
 import GI.Gtk.Objects.Image
-import UI.Commons
-import UI.Task
+import Gtk.Commons
+import Gtk.Task
 import GI.Gtk.Objects.Label
 import XMonad.StackSet (RationalRect (..))
 

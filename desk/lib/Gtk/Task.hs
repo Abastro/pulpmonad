@@ -1,4 +1,4 @@
-module UI.Task where
+module Gtk.Task where
 
 import Control.Concurrent.Task
 import Control.Monad

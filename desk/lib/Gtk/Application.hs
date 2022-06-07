@@ -1,4 +1,4 @@
-module UI.Application (
+module Gtk.Application (
   module GI.Gio.Objects.Application,
   module GI.Gtk.Objects.Application,
 ) where

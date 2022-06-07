@@ -7,32 +7,29 @@ import Data.Ratio ((%))
 import Data.Text qualified as T
 import Status.HWStatus
 import Text.Printf
-import UI.Commons qualified as UI
-import UI.Containers qualified as UI
-
--- import UI.Singles qualified as UI
-
-import UI.Singles qualified as UI
-import UI.Task qualified as UI
+import Gtk.Commons qualified as Gtk
+import Gtk.Containers qualified as Gtk
+import Gtk.Singles qualified as Gtk
+import Gtk.Task qualified as Gtk
 import View.Imagery qualified as View
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.Run (safeSpawn)
 import Data.Int
 
 -- | Battery status display.
-batDisplay :: MonadIO m => UI.IconSize -> m UI.Widget
+batDisplay :: MonadIO m => Gtk.IconSize -> m Gtk.Widget
 batDisplay iconSize = do
   img <- startRegular 500 batStat >>= traverse batIcon
-  ev <- UI.buttonNewWith (View.imageDynWidget <$> img) $ safeSpawn "gnome-control-center" ["power"]
-  UI.widgetSetName ev (T.pack "bat")
-  ev <$ UI.widgetShowAll ev
+  ev <- Gtk.buttonNewWith (View.imageDynWidget <$> img) $ safeSpawn "gnome-control-center" ["power"]
+  Gtk.widgetSetName ev (T.pack "bat")
+  ev <$ Gtk.widgetShowAll ev
   where
     batIcon task = do
       img <- View.imageDynNew iconSize
       liftIO $ do
-        kill <- UI.uiTask task $ \BatStat{capacity, batStatus} ->
+        kill <- Gtk.uiTask task $ \BatStat{capacity, batStatus} ->
           View.imageDynSetImg img $ View.ImgSName $ batName ((capacity `div` 10) * 10) batStatus
-        UI.onWidgetDestroy (View.imageDynWidget img) kill
+        Gtk.onWidgetDestroy (View.imageDynWidget img) kill
       pure img
 
     batName level = \case
@@ -40,28 +37,28 @@ batDisplay iconSize = do
       _ -> T.pack $ printf "battery-level-%d-symbolic" level
 
 -- | Mainboard status display with given icon size & width.
-mainboardDisplay :: MonadIO m => UI.IconSize -> Int32 -> m UI.Widget
+mainboardDisplay :: MonadIO m => Gtk.IconSize -> Int32 -> m Gtk.Widget
 mainboardDisplay iconSize mainWidth = do
   widMem <- startRegular 500 memStat >>= traverse memIcon
-  traverse_ (`UI.setWidgetHalign` UI.AlignStart) widMem
-  traverse_ (`UI.setWidgetValign` UI.AlignCenter) widMem
+  traverse_ (`Gtk.setWidgetHalign` Gtk.AlignStart) widMem
+  traverse_ (`Gtk.setWidgetValign` Gtk.AlignCenter) widMem
 
   widCPU <- do
     cpuUse <- startRegular 50 (cpuDelta 50)
     cpuTemp <- startRegular 100 cpuTemp
     traverse cpuIcon ((,) <$> cpuUse <*> cpuTemp)
-  traverse_ (`UI.setWidgetHalign` UI.AlignEnd) widCPU
-  traverse_ (`UI.setWidgetValign` UI.AlignCenter) widCPU
+  traverse_ (`Gtk.setWidgetHalign` Gtk.AlignEnd) widCPU
+  traverse_ (`Gtk.setWidgetValign` Gtk.AlignCenter) widCPU
 
   bg <- do
-    img <- UI.imageNew -- Tried to set the image, but gtk does not accept rectangular icons.
-    UI.widgetSetSizeRequest img mainWidth (-1)
-    UI.toWidget img
+    img <- Gtk.imageNew -- Tried to set the image, but gtk does not accept rectangular icons.
+    Gtk.widgetSetSizeRequest img mainWidth (-1)
+    Gtk.toWidget img
 
-  disp <- UI.overlayed bg (toList widMem <> toList widCPU)
-  ev <- UI.buttonNewWith (Just disp) $ safeSpawn "gnome-system-monitor" ["-r"]
-  UI.widgetSetName ev (T.pack "mainboard")
-  ev <$ UI.widgetShowAll ev
+  disp <- Gtk.overlayed bg (toList widMem <> toList widCPU)
+  ev <- Gtk.buttonNewWith (Just disp) $ safeSpawn "gnome-system-monitor" ["-r"]
+  Gtk.widgetSetName ev (T.pack "mainboard")
+  ev <$ Gtk.widgetShowAll ev
   where
     memIcon task = do
       -- TODO Identify the transparency issue of the image
@@ -71,23 +68,23 @@ mainboardDisplay iconSize mainWidth = do
       fg <- ramImg
       let barRect = RationalRect (14 % 32) (8 % 32) (18 % 32) (24 % 32)
       bar <- View.barNew barRect
-      mem <- UI.overlayed hack [View.barWidget bar, fg]
-      UI.widgetSetName mem (T.pack "mem")
+      mem <- Gtk.overlayed hack [View.barWidget bar, fg]
+      Gtk.widgetSetName mem (T.pack "mem")
       liftIO $ do
-        kill <- UI.uiTask task $ View.barSetFill bar . memUsed . memRatios
-        UI.onWidgetDestroy mem kill
+        kill <- Gtk.uiTask task $ View.barSetFill bar . memUsed . memRatios
+        Gtk.onWidgetDestroy mem kill
       pure mem
 
     cpuIcon (taskUse, taskTemp) = do
       fg <- View.imageDynNew iconSize
       let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
       bar <- View.barNew barRect
-      cpu <- UI.overlayed (View.imageDynWidget fg) [View.barWidget bar]
-      UI.widgetSetName cpu (T.pack "cpu")
+      cpu <- Gtk.overlayed (View.imageDynWidget fg) [View.barWidget bar]
+      Gtk.widgetSetName cpu (T.pack "cpu")
       liftIO $ do
-        killUse <- UI.uiTask taskUse $ View.barSetFill bar . cpuUsed . cpuRatios
-        killTm <- UI.uiTask taskTemp $ View.imageDynSetImg fg . View.ImgSName . cpuN . tmpInd
-        UI.onWidgetDestroy cpu (killUse >> killTm)
+        killUse <- Gtk.uiTask taskUse $ View.barSetFill bar . cpuUsed . cpuRatios
+        killTm <- Gtk.uiTask taskTemp $ View.imageDynSetImg fg . View.ImgSName . cpuN . tmpInd
+        Gtk.onWidgetDestroy cpu (killUse >> killTm)
       pure cpu
 
     tmpInd temp = round $ (max 0 . min 100 $ temp - 20) * 0.05

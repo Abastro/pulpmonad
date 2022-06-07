@@ -1,4 +1,4 @@
-module UI.Pixbufs (
+module Gtk.Pixbufs (
   module GI.GdkPixbuf.Objects.Pixbuf,
   iconSizePx,
   RawIcon (..),

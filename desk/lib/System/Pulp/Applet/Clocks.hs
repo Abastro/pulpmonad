@@ -5,27 +5,27 @@ import Control.Monad.IO.Class
 import Data.Foldable
 import Data.Text qualified as T
 import Data.Time
-import GI.Gtk.Objects.EventBox qualified as UI
-import UI.Commons qualified as UI
-import UI.Containers qualified as UI
-import UI.Task qualified as UI
+import GI.Gtk.Objects.EventBox qualified as Gtk
+import Gtk.Commons qualified as Gtk
+import Gtk.Containers qualified as Gtk
+import Gtk.Task qualified as Gtk
 import View.Textual qualified as View
 
 -- | Text clock with given format. Queries time every second.
 --
 -- For format reference, look at 'Data.Time.formatTime' for details.
-textClock :: MonadIO m => String -> m UI.Widget
+textClock :: MonadIO m => String -> m Gtk.Widget
 textClock format = do
   lbl <- startRegular 1000 getZonedTime >>= traverse clockTxt
   -- Wraps in event box so that it could be empty :P
-  ev <- UI.eventBoxNew
-  traverse_ (UI.containerAdd ev) (View.labelDynWidget <$> lbl)
-  UI.widgetSetName ev (T.pack "clock_text")
-  UI.toWidget ev <* UI.widgetShowAll ev
+  ev <- Gtk.eventBoxNew
+  traverse_ (Gtk.containerAdd ev) (View.labelDynWidget <$> lbl)
+  Gtk.widgetSetName ev (T.pack "clock_text")
+  Gtk.toWidget ev <* Gtk.widgetShowAll ev
   where
     clockTxt task = do
-      label <- View.labelDynNew View.defLabelDyn{View.labelJustify = UI.JustificationCenter}
+      label <- View.labelDynNew View.defLabelDyn{View.labelJustify = Gtk.JustificationCenter}
       liftIO $ do
-        kill <- UI.uiTask task $ View.labelDynSetLabel label . T.pack . formatTime defaultTimeLocale format
-        UI.onWidgetDestroy (View.labelDynWidget label) kill
+        kill <- Gtk.uiTask task $ View.labelDynSetLabel label . T.pack . formatTime defaultTimeLocale format
+        Gtk.onWidgetDestroy (View.labelDynWidget label) kill
       pure label
