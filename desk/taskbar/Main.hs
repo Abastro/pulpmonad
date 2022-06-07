@@ -132,7 +132,7 @@ main = runPulpIO $
       box <- UI.boxNew UI.OrientationHorizontal 2
       UI.widgetGetStyleContext box >>= flip UI.styleContextAddClass (T.pack "taskbar-box")
       UI.boxSetCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
-      traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a)\n %H:%M %p "]
+      traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
       UI.toWidget box
       where
         mayLabel n = maybe n T.pack $ workspaceMaps M.!? T.unpack n

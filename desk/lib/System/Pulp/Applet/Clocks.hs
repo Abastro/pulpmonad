@@ -24,7 +24,7 @@ textClock format = do
   UI.toWidget ev <* UI.widgetShowAll ev
   where
     clockTxt task = do
-      label <- View.labelDynNew False
+      label <- View.labelDynNew View.defLabelDyn{View.labelJustify = UI.JustificationCenter}
       liftIO $ do
         kill <- UI.uiTask task $ View.labelDynSetLabel label . T.pack . formatTime defaultTimeLocale format
         UI.onWidgetDestroy (View.labelDynWidget label) kill
