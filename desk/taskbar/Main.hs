@@ -96,7 +96,7 @@ main = runPulpIO $
 
     leftArgs =
       BarWinArgs
-        { barDockPos = UI.DockBottom
+        { barDockPos = UI.DockTop
         , barDockSize = UI.AbsoluteSize 36
         , barDockSpan = UI.DockSpan 0 (1 / 6)
         , barTitle = T.pack "Pulp Statusbar"
@@ -122,7 +122,7 @@ main = runPulpIO $
 
     centerArgs =
       BarWinArgs
-        { barDockPos = UI.DockBottom
+        { barDockPos = UI.DockTop
         , barDockSize = UI.AbsoluteSize 40
         , barDockSpan = UI.DockSpan (1 / 6) (5 / 6)
         , barTitle = T.pack "Pulp Taskbar"
@@ -150,7 +150,7 @@ main = runPulpIO $
 
     rightArgs =
       BarWinArgs
-        { barDockPos = UI.DockBottom
+        { barDockPos = UI.DockTop
         , barDockSize = UI.AbsoluteSize 36
         , barDockSpan = UI.DockSpan (5 / 6) 1
         , barTitle = T.pack "Pulp Systemtray"

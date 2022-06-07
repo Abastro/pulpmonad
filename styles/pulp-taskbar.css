@@ -2,30 +2,33 @@
 
 /* Top level styling */
 
+/* Box on left */
 .statusbar-box {
-	border-radius: 5px 0px 0px 0px;
-	border-width: 3px 0px 0px 3px;
+	border-radius: 0px 0px 0px 5px;
+	border-width: 0px 0px 3px 3px;
 	border-style: solid;
 	border-color: rgba(72, 32, 96, 0.7);
-	padding: 3px 5px 2px 5px;
+	padding: 2px 5px 2px 5px;
 	background-color: rgba(56, 24, 72, 0.7);
 }
 
+/* Box on center */
 .taskbar-box {
-	border-radius: 5px 5px 0px 0px;
-	border-width: 3px 3px 0px 3px;
+	border-radius: 0px 0px 5px 5px;
+	border-width: 0px 3px 3px 3px;
 	border-style: solid;
 	border-color: rgba(72, 32, 96, 0.7);
-	padding: 3px 2px 2px 2px;
+	padding: 2px 2px 2px 2px;
 	background-color: rgba(56, 24, 72, 0.7);
 }
 
+/* Box on right */
 .systemtray-box {
-	border-radius: 0px 5px 0px 0px;
-	border-width: 3px 3px 0px 0px;
+	border-radius: 0px 0px 5px 0px;
+	border-width: 0px 3px 3px 0px;
 	border-style: solid;
 	border-color: rgba(72, 32, 96, 0.7);
-	padding: 3px 5px 2px 5px;
+	padding: 2px 5px 2px 5px;
 	background-color: rgba(56, 24, 72, 0.7);
 }
 
