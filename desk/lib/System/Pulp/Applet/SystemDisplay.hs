@@ -3,18 +3,18 @@ module System.Pulp.Applet.SystemDisplay where
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
 import Data.Foldable
+import Data.Int
 import Data.Ratio ((%))
 import Data.Text qualified as T
-import Status.HWStatus
-import Text.Printf
+import GI.Gtk.Objects.Image qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
-import Gtk.Singles qualified as Gtk
 import Gtk.Task qualified as Gtk
+import Status.HWStatus
+import Text.Printf
 import View.Imagery qualified as View
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.Run (safeSpawn)
-import Data.Int
 
 -- | Battery status display.
 batDisplay :: MonadIO m => Gtk.IconSize -> m Gtk.Widget

@@ -29,9 +29,9 @@ import GI.Gtk.Objects.Box qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
-import Gtk.Singles qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import View.Imagery qualified as View
+import View.Textual qualified as View
 
 widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => Gtk.Widget -> (s -> T.Text) -> [s] -> m ()
 widgetUpdateClass widget asClass state =
@@ -84,7 +84,7 @@ deskVisualCtrl DeskVisual{..} = \case
 data DeskItem = DeskItem
   { -- | The congregated widget
     deskItemWid :: !Gtk.Widget
-  , deskItemName :: !Gtk.Label
+  , deskItemName :: !View.LabelDyn
   , deskItemWinCont :: !Gtk.Box
   }
 
@@ -101,13 +101,14 @@ deskItemWidget DeskItem{deskItemWid} = deskItemWid
 deskItemNew :: MonadIO m => IO () -> m DeskItem
 deskItemNew onClick = do
   deskItemWinCont <- Gtk.boxNew Gtk.OrientationHorizontal 0
+  deskItemWinWid <- Gtk.toWidget deskItemWinCont
 
-  deskItemName <- Gtk.labelNew Nothing
-  Gtk.widgetGetStyleContext deskItemName >>= flip Gtk.styleContextAddClass (T.pack "desktop-label")
+  deskItemName <- View.labelDynNew View.defLabelArg
+  Gtk.widgetGetStyleContext (View.labelDynWidget deskItemName)
+    >>= flip Gtk.styleContextAddClass (T.pack "desktop-label")
 
   deskMain <-
-    Gtk.boxed Gtk.OrientationHorizontal 0
-      =<< sequenceA [Gtk.toWidget deskItemName, Gtk.toWidget deskItemWinCont]
+    Gtk.boxed Gtk.OrientationHorizontal 0 [View.labelDynWidget deskItemName, deskItemWinWid]
 
   deskItemWid <- Gtk.clickyNewWith (Just deskMain) onClick
   Gtk.widgetGetStyleContext deskItemWid >>= flip Gtk.styleContextAddClass (T.pack "desktop-item")
@@ -128,7 +129,7 @@ deskItemCtrl DeskItem{..} = \case
       Gtk.boxReorderChild deskItemWinCont winItemWid $ fromIntegral idx
 
   -- Mundane property update here
-  DeskLabelName name -> Gtk.labelSetLabel deskItemName name
+  DeskLabelName name -> View.labelDynSetLabel deskItemName name
   DeskVisibility flag -> if flag then Gtk.widgetShowAll deskItemWid else Gtk.widgetHide deskItemWid
 
 -- | Window item view
@@ -161,8 +162,10 @@ winItemSetIcon WinItem{..} rawIcons = \case
     View.imageDynSetImg winItemImg iconSet
   Just iconSet -> View.imageDynSetImg winItemImg iconSet
   where
-    rawIconSet = runMaybeT $ liftIO rawIcons >>= \case
-      Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
-      Right icons -> do
-        scaled <- MaybeT $ Gtk.iconsChoosePixbuf (Gtk.iconSizePx winItemSize) Gtk.argbTorgba icons
-        pure (View.ImgSPixbuf scaled)
+    rawIconSet =
+      runMaybeT $
+        liftIO rawIcons >>= \case
+          Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
+          Right icons -> do
+            scaled <- MaybeT $ Gtk.iconsChoosePixbuf (Gtk.iconSizePx winItemSize) Gtk.argbTorgba icons
+            pure (View.ImgSPixbuf scaled)

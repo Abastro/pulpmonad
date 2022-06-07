@@ -24,7 +24,7 @@ textClock format = do
   Gtk.toWidget ev <* Gtk.widgetShowAll ev
   where
     clockTxt task = do
-      label <- View.labelDynNew View.defLabelDyn{View.labelJustify = Gtk.JustificationCenter}
+      label <- View.labelDynNew View.defLabelArg{View.labelJustify = Gtk.JustificationCenter}
       liftIO $ do
         kill <- Gtk.uiTask task $ View.labelDynSetLabel label . T.pack . formatTime defaultTimeLocale format
         Gtk.onWidgetDestroy (View.labelDynWidget label) kill

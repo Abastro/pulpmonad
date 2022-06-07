@@ -110,7 +110,6 @@ library
     Gtk.Task
     Gtk.Styles
     Gtk.Pixbufs
-    Gtk.Singles
     Gtk.Containers
     Gtk.Window
     Gtk.Application

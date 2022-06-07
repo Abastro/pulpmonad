@@ -60,7 +60,7 @@ ctlButton window ctl = do
     Gtk.boxed Gtk.OrientationVertical 5
       =<< sequenceA
         [ View.imageStaticNew Gtk.IconSizeDialog (View.ImgSName $ iconOf ctl)
-        , View.labelStaticNew View.defLabelDyn (nameOf ctl)
+        , View.labelStaticNew View.defLabelArg (nameOf ctl)
         ]
   Gtk.widgetSetValign box Gtk.AlignCenter
 

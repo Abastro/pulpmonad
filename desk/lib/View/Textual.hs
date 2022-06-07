@@ -1,7 +1,7 @@
 module View.Textual (
   LabelDyn,
-  LabelDynArgs (..),
-  defLabelDyn,
+  LabelArgs (..),
+  defLabelArg,
   labelDynWidget,
   labelDynNew,
   labelDynSetLabel,
@@ -13,13 +13,13 @@ import Data.Text qualified as T
 import GI.Gtk.Objects.Label qualified as Gtk
 import Gtk.Commons qualified as Gtk
 
-data LabelDynArgs = LabelDynArgs
+data LabelArgs = LabelDynArgs
   { labelLineWrap :: !Bool
   , labelJustify :: !Gtk.Justification
   }
 
-defLabelDyn :: LabelDynArgs
-defLabelDyn =
+defLabelArg :: LabelArgs
+defLabelArg =
   LabelDynArgs
     { labelLineWrap = True
     , labelJustify = Gtk.JustificationLeft
@@ -34,7 +34,7 @@ labelDynWidget :: LabelDyn -> Gtk.Widget
 labelDynWidget LabelDyn{labelDynWid} = labelDynWid
 
 -- | Construct dynamic label. When the flag passed is true, label is line-wrapped.
-labelDynNew :: MonadIO m => LabelDynArgs -> m LabelDyn
+labelDynNew :: MonadIO m => LabelArgs -> m LabelDyn
 labelDynNew LabelDynArgs{..} = do
   labelDynLbl <- Gtk.labelNew Nothing
   labelDynWid <- Gtk.toWidget labelDynLbl
@@ -46,7 +46,7 @@ labelDynSetLabel :: MonadIO m => LabelDyn -> T.Text -> m ()
 labelDynSetLabel LabelDyn{labelDynLbl} = Gtk.labelSetLabel labelDynLbl
 
 -- | Construct static label.
-labelStaticNew :: MonadIO m => LabelDynArgs -> T.Text -> m Gtk.Widget
+labelStaticNew :: MonadIO m => LabelArgs -> T.Text -> m Gtk.Widget
 labelStaticNew args lbl = do
   dyn <- labelDynNew args
   labelDynSetLabel dyn lbl
