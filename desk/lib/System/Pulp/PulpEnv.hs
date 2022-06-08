@@ -2,7 +2,6 @@ module System.Pulp.PulpEnv (
   PulpEnv,
   PulpIO,
   PulpArg (..),
-  defPulpArg,
   runPulpIO,
   pulpXHandle,
 ) where
@@ -25,13 +24,6 @@ data PulpArg = PulpArg
   { loggerFormat :: LogFormat
   , loggerVerbosity :: !LogLevel
   }
-
-defPulpArg :: PulpArg
-defPulpArg =
-  PulpArg
-    { loggerFormat = defLogFormat
-    , loggerVerbosity = LevelInfo
-    }
 
 instance MonadLog PulpIO where
   askLog = PulpIO $ asks (\PulpEnv{pulpLogger} -> pulpLogger)

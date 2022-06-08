@@ -20,6 +20,7 @@ module System.Pulp.Applet.DesktopVisual.View (
 
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
+import Data.Default.Class
 import Data.Foldable
 import Data.IORef
 import Data.Maybe
@@ -103,7 +104,7 @@ deskItemNew :: MonadIO m => IO () -> m DeskItem
 deskItemNew onClick = do
   deskItemWinCont <- View.boxUniDynNew (View.defBoxArg Gtk.OrientationHorizontal)
 
-  deskItemName <- View.labelDynNew View.defLabelArg
+  deskItemName <- View.labelDynNew def
   Gtk.widgetGetStyleContext (View.labelDynWidget deskItemName)
     >>= flip Gtk.styleContextAddClass (T.pack "desktop-label")
 

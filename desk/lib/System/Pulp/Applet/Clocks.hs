@@ -2,6 +2,7 @@ module System.Pulp.Applet.Clocks where
 
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
+import Data.Default.Class
 import Data.Foldable
 import Data.Text qualified as T
 import Data.Time
@@ -24,7 +25,7 @@ textClock format = do
   Gtk.toWidget ev <* Gtk.widgetShowAll ev
   where
     clockTxt task = do
-      label <- View.labelDynNew View.defLabelArg{View.labelJustify = Gtk.JustificationCenter}
+      label <- View.labelDynNew def{View.labelJustify = Gtk.JustificationCenter}
       liftIO $ do
         kill <- Gtk.uiTask task $ View.labelDynSetLabel label . T.pack . formatTime defaultTimeLocale format
         Gtk.onWidgetDestroy (View.labelDynWidget label) kill

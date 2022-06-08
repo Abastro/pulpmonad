@@ -1,7 +1,6 @@
 module View.Textual (
   LabelDyn,
   LabelArgs (..),
-  defLabelArg,
   labelDynWidget,
   labelDynNew,
   labelDynSetLabel,
@@ -9,6 +8,7 @@ module View.Textual (
 ) where
 
 import Control.Monad.IO.Class
+import Data.Default.Class
 import Data.Text qualified as T
 import GI.Gtk.Objects.Label qualified as Gtk
 import Gtk.Commons qualified as Gtk
@@ -18,12 +18,12 @@ data LabelArgs = LabelDynArgs
   , labelJustify :: !Gtk.Justification
   }
 
-defLabelArg :: LabelArgs
-defLabelArg =
-  LabelDynArgs
-    { labelLineWrap = True
-    , labelJustify = Gtk.JustificationLeft
-    }
+instance Default LabelArgs where
+  def =
+    LabelDynArgs
+      { labelLineWrap = False
+      , labelJustify = Gtk.JustificationLeft
+      }
 
 data LabelDyn = LabelDyn
   { labelDynWid :: !Gtk.Widget
@@ -33,7 +33,7 @@ data LabelDyn = LabelDyn
 labelDynWidget :: LabelDyn -> Gtk.Widget
 labelDynWidget LabelDyn{labelDynWid} = labelDynWid
 
--- | Construct dynamic label. When the flag passed is true, label is line-wrapped.
+-- | Construct dynamic label.
 labelDynNew :: MonadIO m => LabelArgs -> m LabelDyn
 labelDynNew LabelDynArgs{..} = do
   labelDynLbl <- Gtk.labelNew Nothing

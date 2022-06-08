@@ -19,6 +19,7 @@ import Gtk.Window qualified as Gtk
 import Status.X11.WMStatus (DesktopStat (..))
 import System.Environment
 import System.Exit
+import System.Log.LogPrint (LogLevel (..), defLogFormat)
 import System.Posix.Signals (sigINT)
 import System.Pulp.Applet.Clocks qualified as App
 import System.Pulp.Applet.DesktopVisual qualified as App
@@ -28,7 +29,6 @@ import System.Pulp.PulpEnv
 import View.Imagery qualified as View
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run (safeSpawn)
-import System.Log.LogPrint (LogLevel(..))
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -71,7 +71,7 @@ main = do
   runWithArg isTest
 
 runWithArg :: Bool -> IO ()
-runWithArg isTest = runPulpIO defPulpArg{ loggerVerbosity = verbosity } $
+runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosity = verbosity} $
   withRunInIO $ \unlift -> do
     Just app <- Gtk.applicationNew (Just $ T.pack "pulp.Gtk.taskbar") [Gio.ApplicationFlagsNonUnique]
     Gtk.onApplicationActivate app (unlift $ activating app)
@@ -80,6 +80,7 @@ runWithArg isTest = runPulpIO defPulpArg{ loggerVerbosity = verbosity } $
     when (status /= 0) . liftIO $ exitWith (ExitFailure $ fromIntegral status)
   where
     verbosity = if isTest then LevelDebug else LevelInfo
+    dockPos = if isTest then Gtk.DockBottom else Gtk.DockTop
 
     cssProv :: IO Gtk.CssProvider
     cssProv = do
@@ -99,13 +100,12 @@ runWithArg isTest = runPulpIO defPulpArg{ loggerVerbosity = verbosity } $
       cssProv >>= flip Gtk.defScreenAddStyleContext Gtk.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
-      let dockPos = if isTest then Gtk.DockBottom else Gtk.DockTop
-      left <- unlift $ taskbarWindow app (leftArgs dockPos) =<< leftBox
-      center <- unlift $ taskbarWindow app (centerArgs dockPos) =<< centerBox
-      right <- unlift $ taskbarWindow app (rightArgs dockPos) =<< rightBox
+      left <- unlift $ taskbarWindow app leftArgs =<< leftBox
+      center <- unlift $ taskbarWindow app centerArgs =<< centerBox
+      right <- unlift $ taskbarWindow app rightArgs =<< rightBox
       traverse_ Gtk.widgetShowAll [left, center, right]
 
-    leftArgs dockPos =
+    leftArgs =
       BarWinArgs
         { barDockPos = dockPos
         , barDockSize = Gtk.AbsoluteSize 36
@@ -132,7 +132,7 @@ runWithArg isTest = runPulpIO defPulpArg{ loggerVerbosity = verbosity } $
           cacheDir <- getEnv "XMONAD_CACHE_DIR"
           safeSpawn (cacheDir </> "pulp-sysctl") []
 
-    centerArgs dockPos =
+    centerArgs =
       BarWinArgs
         { barDockPos = dockPos
         , barDockSize = Gtk.AbsoluteSize 40
@@ -160,7 +160,7 @@ runWithArg isTest = runPulpIO defPulpArg{ loggerVerbosity = verbosity } $
             , windowIconSize = Gtk.IconSizeLargeToolbar
             }
 
-    rightArgs dockPos =
+    rightArgs =
       BarWinArgs
         { barDockPos = dockPos
         , barDockSize = Gtk.AbsoluteSize 36
