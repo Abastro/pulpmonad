@@ -11,6 +11,7 @@ import Gtk.Styles qualified as Gtk
 import Gtk.Window qualified as Gtk
 import System.Environment (getEnv)
 import System.Exit
+import View.Boxes qualified as View
 import View.Imagery qualified as View
 import View.Textual qualified as View
 import XMonad.Util.Run (safeSpawn)
@@ -57,7 +58,7 @@ actOf window = \case
 ctlButton :: Gtk.Window -> SysCtl -> IO Gtk.Widget
 ctlButton window ctl = do
   box <-
-    Gtk.boxed Gtk.OrientationVertical 5
+    View.boxStaticNew (View.defBoxArg Gtk.OrientationVertical){View.boxSpacing = 5}
       =<< sequenceA
         [ View.imageStaticNew Gtk.IconSizeDialog (View.ImgSName $ iconOf ctl)
         , View.labelStaticNew View.defLabelArg (nameOf ctl)
@@ -109,8 +110,9 @@ main = do
     btns :: Gtk.Window -> IO Gtk.Widget
     btns window = do
       box <-
-        Gtk.homogBoxed Gtk.OrientationHorizontal 10
+        View.boxStaticNew (View.defBoxArg Gtk.OrientationHorizontal){View.boxSpacing = 10, View.boxHomogeneous = True}
           =<< traverse (ctlButton window) [minBound .. maxBound]
+      Gtk.widgetSetName box (T.pack "pulp-sysctl")
       Gtk.widgetGetStyleContext box >>= flip Gtk.styleContextAddClass (T.pack "btn-area")
       Gtk.widgetSetHalign box Gtk.AlignFill
       pure box

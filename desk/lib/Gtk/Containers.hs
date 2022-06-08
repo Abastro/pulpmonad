@@ -2,21 +2,17 @@ module Gtk.Containers (
   module GI.Gtk.Objects.Container,
   buttonNewWith,
   clickyNewWith,
-  boxed,
-  homogBoxed,
   overlayed,
 ) where
 
 import Control.Monad.IO.Class
 import Data.Foldable
-import Data.Int
-import GI.Gtk.Objects.Box
+import GI.Gdk.Structs.EventButton qualified as Gdk
 import GI.Gtk.Objects.Button
 import GI.Gtk.Objects.Container
+import GI.Gtk.Objects.EventBox
 import GI.Gtk.Objects.Overlay
 import Gtk.Commons
-import GI.Gtk.Objects.EventBox
-import qualified GI.Gdk.Structs.EventButton as Gdk
 
 -- | Button widget.
 buttonNewWith :: MonadIO m => Maybe Widget -> IO () -> m Widget
@@ -36,19 +32,6 @@ clickyNewWith widget onClick = do
       1 -> True <$ onClick
       _ -> pure False
   toWidget clicky
-
-boxed :: MonadIO m => Orientation -> Int32 -> [Widget] -> m Widget
-boxed orient spacing children = do
-  box <- boxNew orient spacing
-  traverse_ (containerAdd box) children
-  toWidget box
-
-homogBoxed :: MonadIO m => Orientation -> Int32 -> [Widget] -> m Widget
-homogBoxed orient spacing children = do
-  box <- boxNew orient spacing
-  traverse_ (containerAdd box) children
-  boxSetHomogeneous box True
-  toWidget box
 
 overlayed :: MonadIO m => Widget -> [Widget] -> m Widget
 overlayed core overlays = do

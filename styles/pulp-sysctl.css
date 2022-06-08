@@ -2,7 +2,7 @@ window {
   background-color: rgba(0, 0, 0, 0);
 }
 
-box.btn-area {
+#pulp-sysctl {
   padding: 10px 15px;
   border: 10px inset rgba(56, 32, 72, 0.7);
   border-radius: 20px;
