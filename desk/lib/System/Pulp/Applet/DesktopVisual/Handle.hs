@@ -164,7 +164,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
 
         winSwitch :: Window -> View.WinItem -> Int -> Int -> PulpIO ()
         winSwitch windowId winView deskOld deskNew = withRunInIO $ \unlift -> do
-          unlift $ logPrintf (T.pack "DeskVis") LevelInfo "[$1] desktop $2 -> $3" windowId deskOld deskNew
+          unlift $ logPrintf (T.pack "DeskVis") LevelDebug "[$1] desktop $2 -> $3" windowId deskOld deskNew
           desktops <- readIORef desksRef
           curOrders <- readIORef ordersRef
           -- Out of bounds: was already removed, no need to care
@@ -182,13 +182,6 @@ data DeskItemHandle = DeskItemHandle
   , addRmWinItem :: View.WinItem -> Window -> DeskWinMod -> IO ()
   , reorderWinItems :: (Window -> Maybe Int) -> (Window -> Maybe WinItemHandle) -> IO ()
   }
-
-{-
-data DeskItemState = DeskItemState
-  { deskStat :: !DesktopStat
-  , deskWindows :: !(V.Vector Window)
-  }
--}
 
 deskItemMake :: DesktopSetup -> DesktopStat -> View.DeskItem -> PulpIO DeskItemHandle
 deskItemMake DesktopSetup{..} initStat view = withRunInIO $ \_unlift -> do

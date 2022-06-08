@@ -1,5 +1,3 @@
-{-# LANGUAGE MonoLocalBinds #-}
-
 -- | Desktops visualizer widget.
 module System.Pulp.Applet.DesktopVisual (
   ImageSet (..),
