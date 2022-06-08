@@ -67,8 +67,9 @@ taskbarWindow app BarWinArgs{..} content = do
 main :: IO ()
 main = runPulpIO $
   withRunInIO $ \unlift -> do
+    isTest <- ("test" `elem`) <$> getArgs
     Just app <- Gtk.applicationNew (Just $ T.pack "pulp.Gtk.taskbar") [Gio.ApplicationFlagsNonUnique]
-    Gtk.onApplicationActivate app (unlift $ activating app)
+    Gtk.onApplicationActivate app (unlift $ activating isTest app)
     Glib.unixSignalAdd Glib.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ Gtk.applicationQuit app
     status <- Gtk.applicationRun app Nothing
     when (status /= 0) . liftIO $ exitWith (ExitFailure $ fromIntegral status)
@@ -86,19 +87,18 @@ main = runPulpIO $
       defaultTheme <- Gtk.iconThemeGetDefault
       Gtk.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
 
-    activating :: Gtk.Application -> PulpIO ()
-    activating app = withRunInIO $ \unlift -> do
+    activating :: Bool -> Gtk.Application -> PulpIO ()
+    activating isTest app = withRunInIO $ \unlift -> do
       cssProv >>= flip Gtk.defScreenAddStyleContext Gtk.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
-      left <- unlift $ taskbarWindow app leftArgs =<< leftBox
-      center <- unlift $ taskbarWindow app centerArgs =<< centerBox
-      right <- unlift $ taskbarWindow app rightArgs =<< rightBox
+      let dockPos = if isTest then Gtk.DockBottom else Gtk.DockTop
+      left <- unlift $ taskbarWindow app (leftArgs dockPos) =<< leftBox
+      center <- unlift $ taskbarWindow app (centerArgs dockPos) =<< centerBox
+      right <- unlift $ taskbarWindow app (rightArgs dockPos) =<< rightBox
       traverse_ Gtk.widgetShowAll [left, center, right]
 
-    dockPos = Gtk.DockTop
-
-    leftArgs =
+    leftArgs dockPos =
       BarWinArgs
         { barDockPos = dockPos
         , barDockSize = Gtk.AbsoluteSize 36
@@ -125,7 +125,7 @@ main = runPulpIO $
           cacheDir <- getEnv "XMONAD_CACHE_DIR"
           safeSpawn (cacheDir </> "pulp-sysctl") []
 
-    centerArgs =
+    centerArgs dockPos =
       BarWinArgs
         { barDockPos = dockPos
         , barDockSize = Gtk.AbsoluteSize 40
@@ -153,7 +153,7 @@ main = runPulpIO $
             , windowIconSize = Gtk.IconSizeLargeToolbar
             }
 
-    rightArgs =
+    rightArgs dockPos =
       BarWinArgs
         { barDockPos = dockPos
         , barDockSize = Gtk.AbsoluteSize 36
