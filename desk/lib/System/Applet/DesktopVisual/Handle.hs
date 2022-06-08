@@ -67,8 +67,6 @@ data WindowSetup = WindowSetup
   , windowIconSize :: Gtk.IconSize
   }
 
--- TODO Configuration adjusting the icon size
-
 -- | Desktops visualizer widget. Forks its own X11 event handler.
 deskVisualizer ::
   (MonadUnliftIO m, MonadLog m, MonadXHand m) =>
@@ -85,7 +83,8 @@ deskVisualizer deskSetup winSetup = do
 -- Currently handle is empty, because no external handling is permitted.
 data DeskVisHandle = DeskVisHandle
 
--- TODO Model scheme is not working, need to make it work with pure states. Later.
+-- TODO Model scheme is not working, need to make it work with pure states.
+-- ..Later. I don't have time to design a proper one
 deskVisMake ::
   (MonadUnliftIO m, MonadLog m) =>
   DeskVisRcvs ->

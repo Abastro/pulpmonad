@@ -43,7 +43,7 @@ systemTray args@SysTrayArgs{..} = do
           , HS.uniqueIdentifier = "pulp-system-tray-" <> show procID
           }
   trayView <- View.sysTrayNew trayOrientation trayAlignBegin
-  _ <- sysTrayMake host client args trayView
+  SysTrayHandle <- sysTrayMake host client args trayView
   pure (View.sysTrayWidget trayView)
 
 -- Currently, no way provided to externally handle system ray
