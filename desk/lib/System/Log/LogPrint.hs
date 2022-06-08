@@ -15,8 +15,8 @@ module System.Log.LogPrint (
   MonadLog (..),
   LevelLogger,
   logS,
-  logPrintf,
-  LogPrintfType,
+  logStrf,
+  LogStrfType,
   logStderr,
 ) where
 
@@ -89,26 +89,19 @@ logStrPrinting inp args = foldMap asLog $ gatherRights (divides inp)
       Left n -> fromMaybe (error "printf arg out of bounds") $ argVec V.!? pred n
       Right msg -> toLogStr msg
 
--- | Printf for loggers.
--- Uses default format for printing to LogStr.
---
--- >>> logPrintf (T.pack "MYSource") LevelDebug "message [$1]($2) $3 - $4" 1 2 3 4 :: LogStr
--- "[DEBUG#MYSource] message [1](2) 3 - 4\n"
-logPrintf :: LogPrintfType l => LogSrc -> LogLevel -> String -> l
-logPrintf src lvl inp = inLogPrintf src lvl inp []
+-- | Log string format.
+-- No instance for MonadLog, since printf-style vararg is unwieldy for generic monads.
+logStrf :: LogStrfType l => String -> l
+logStrf format = intLogStrf format []
 
-class LogPrintfType l where
-  inLogPrintf :: LogSrc -> LogLevel -> String -> [LogStr] -> l
+class LogStrfType l where
+  intLogStrf :: String -> [LogStr] -> l
 
--- In need of reverse
-instance {-# OVERLAPS #-} (ToLogStr a, LogPrintfType l) => LogPrintfType (a -> l) where
-  inLogPrintf src lvl inp args = \arg -> inLogPrintf src lvl inp (toLogStr arg : args)
+instance (ToLogStr a, LogStrfType l) => LogStrfType (a -> l) where
+  intLogStrf format args = \arg -> intLogStrf format (toLogStr arg : args)
 
-instance LogPrintfType LogStr where
-  inLogPrintf src lvl inp args = defLogFormat src lvl $ logStrPrinting inp (reverse args)
-
-instance {-# OVERLAPS #-} (a ~ (), MonadLog m) => LogPrintfType (m a) where
-  inLogPrintf src lvl inp args = logS src lvl $ logStrPrinting inp (reverse args)
+instance LogStrfType LogStr where
+  intLogStrf format args = logStrPrinting format (reverse args)
 
 -- | Creates a logger to stderr and runs the logging action on it.
 logStderr :: (MonadUnliftIO m) => (FastLogger -> m a) -> m a

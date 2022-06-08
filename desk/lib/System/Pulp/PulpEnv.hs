@@ -3,7 +3,6 @@ module System.Pulp.PulpEnv (
   PulpIO,
   PulpArg (..),
   runPulpIO,
-  pulpXHandle,
 ) where
 
 import Control.Monad.IO.Unlift
@@ -28,6 +27,9 @@ data PulpArg = PulpArg
 instance MonadLog PulpIO where
   askLog = PulpIO $ asks (\PulpEnv{pulpLogger} -> pulpLogger)
 
+instance MonadXHand PulpIO where
+  askXHand = PulpIO $ asks (\PulpEnv{pulpXHandling} -> pulpXHandling)
+
 -- | Run an PulpIO action. Recommended to call only once.
 runPulpIO :: PulpArg -> PulpIO a -> IO a
 runPulpIO PulpArg{..} (PulpIO act) = do
@@ -35,9 +37,3 @@ runPulpIO PulpArg{..} (PulpIO act) = do
     let pulpLogger = withVerbosity loggerVerbosity $ withFormat loggerFormat logger
     pulpXHandling <- liftIO startXIO
     runReaderT act PulpEnv{..}
-
--- | Register X handle to the background X11 connection.
-pulpXHandle :: XIO () a -> PulpIO a
-pulpXHandle initiate = do
-  xHandling <- PulpIO . asks $ \PulpEnv{pulpXHandling} -> pulpXHandling
-  liftIO $ runXHandling xHandling initiate

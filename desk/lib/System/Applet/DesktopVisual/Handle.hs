@@ -1,4 +1,4 @@
-module System.Pulp.Applet.DesktopVisual.Handle (
+module System.Applet.DesktopVisual.Handle (
   NumWindows,
   GetXIcon,
   DesktopSetup (..),
@@ -31,8 +31,7 @@ import Status.AppInfos
 import Status.X11.WMStatus
 import Status.X11.XHandle
 import System.Log.LogPrint
-import System.Pulp.Applet.DesktopVisual.View qualified as View
-import System.Pulp.PulpEnv
+import System.Applet.DesktopVisual.View qualified as View
 import View.Imagery qualified as View
 
 deskCssClass :: DesktopState -> T.Text
@@ -71,9 +70,13 @@ data WindowSetup = WindowSetup
 -- TODO Configuration adjusting the icon size
 
 -- | Desktops visualizer widget. Forks its own X11 event handler.
-deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO Gtk.Widget
+deskVisualizer ::
+  (MonadUnliftIO m, MonadLog m, MonadXHand m) =>
+  DesktopSetup ->
+  WindowSetup ->
+  m Gtk.Widget
 deskVisualizer deskSetup winSetup = do
-  rcvs <- pulpXHandle deskVisInitiate
+  rcvs <- runXHand deskVisInitiate
   deskVisualView <- View.deskVisualNew
   DeskVisHandle <- deskVisMake rcvs (deskSetup, winSetup) deskVisualView
 
@@ -84,10 +87,11 @@ data DeskVisHandle = DeskVisHandle
 
 -- TODO Model scheme is not working, need to make it work with pure states. Later.
 deskVisMake ::
+  (MonadUnliftIO m, MonadLog m) =>
   DeskVisRcvs ->
   (DesktopSetup, WindowSetup) ->
   View.DeskVisual ->
-  PulpIO DeskVisHandle
+  m DeskVisHandle
 deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -> do
   act <- registers <$> trackAppInfo <*> newIORef V.empty <*> newIORef M.empty <*> newIORef M.empty <*> newIORef Nothing
   unlift act
@@ -100,7 +104,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
       _ <- Gtk.onWidgetDestroy (View.deskVisualWidget view) (killStat >> killWinCh >> killActiv)
       pure DeskVisHandle
       where
-        updateDeskStats :: V.Vector DesktopStat -> PulpIO ()
+        updateDeskStats :: (MonadUnliftIO m, MonadLog m) => V.Vector DesktopStat -> m ()
         updateDeskStats newStats = withRunInIO $ \unlift -> do
           -- Cut down to available desktops
           let numDesk = V.length newStats
@@ -130,7 +134,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           let switcher item x y = unlift (winSwitch window item x y)
           unlift $ winItemMake winSetup appCol getIcon switcher winRcvs winItemView
 
-        updateWinList :: V.Vector Window -> PulpIO ()
+        updateWinList :: (MonadUnliftIO m, MonadLog m) => V.Vector Window -> m ()
         updateWinList windows = withRunInIO $ \unlift -> do
           -- Update window maps
           oldWinMap <- readIORef winsRef
@@ -152,7 +156,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           desktops <- readIORef desksRef
           for_ desktops $ \DeskItemHandle{reorderWinItems} -> reorderWinItems (newOrder M.!?) (curWins M.!?)
 
-        changeActivate :: Maybe Window -> PulpIO ()
+        changeActivate :: (MonadUnliftIO m, MonadLog m) => Maybe Window -> m ()
         changeActivate nextActive = withRunInIO $ \_unlift -> do
           windows <- readIORef winsRef
           prevActive <- atomicModifyIORef' activeRef (nextActive,)
@@ -162,9 +166,9 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           for_ (nextActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
             View.widgetUpdateClass (View.winItemWidget itemWindowView) winActiveCssClass [()]
 
-        winSwitch :: Window -> View.WinItem -> Int -> Int -> PulpIO ()
+        winSwitch :: (MonadUnliftIO m, MonadLog m) => Window -> View.WinItem -> Int -> Int -> m ()
         winSwitch windowId winView deskOld deskNew = withRunInIO $ \unlift -> do
-          unlift $ logPrintf (T.pack "DeskVis") LevelDebug "[$1] desktop $2 -> $3" windowId deskOld deskNew
+          unlift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "[$1] desktop $2 -> $3" windowId deskOld deskNew
           desktops <- readIORef desksRef
           curOrders <- readIORef ordersRef
           -- Out of bounds: was already removed, no need to care
@@ -183,8 +187,8 @@ data DeskItemHandle = DeskItemHandle
   , reorderWinItems :: (Window -> Maybe Int) -> (Window -> Maybe WinItemHandle) -> IO ()
   }
 
-deskItemMake :: DesktopSetup -> DesktopStat -> View.DeskItem -> PulpIO DeskItemHandle
-deskItemMake DesktopSetup{..} initStat view = withRunInIO $ \_unlift -> do
+deskItemMake :: MonadIO m => DesktopSetup -> DesktopStat -> View.DeskItem -> m DeskItemHandle
+deskItemMake DesktopSetup{..} initStat view = liftIO $ do
   creates <$> newIORef initStat <*> newIORef V.empty
   where
     creates statRef curWindows = DeskItemHandle{..}
@@ -225,16 +229,17 @@ newtype WinItemHandle = WinItemHandle
   }
 
 winItemMake ::
+  MonadIO m =>
   WindowSetup ->
   AppInfoCol ->
   GetXIcon ->
   (View.WinItem -> Int -> Int -> IO ()) ->
   PerWinRcvs ->
   View.WinItem ->
-  PulpIO WinItemHandle
-winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = do
+  m WinItemHandle
+winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = liftIO $ do
   -- (-1) is never a valid desktop (means the window is omnipresent)
-  liftIO $ registers =<< newIORef (-1)
+  registers =<< newIORef (-1)
   where
     imgSetter winInfo = appInfoImgSetter appCol winInfo <|> windowImgSetter winInfo
 

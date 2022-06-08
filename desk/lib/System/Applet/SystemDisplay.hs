@@ -1,4 +1,4 @@
-module System.Pulp.Applet.SystemDisplay where
+module System.Applet.SystemDisplay where
 
 import Control.Concurrent.Task
 import Control.Monad.IO.Class

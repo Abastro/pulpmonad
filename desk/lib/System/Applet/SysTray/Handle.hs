@@ -1,4 +1,4 @@
-module System.Pulp.Applet.SysTray.Handle (
+module System.Applet.SysTray.Handle (
   SysTrayArgs (..),
   systemTray,
 ) where
@@ -14,7 +14,7 @@ import Data.Traversable
 import GI.DbusmenuGtk3.Objects.Menu qualified as DMenu
 import StatusNotifier.Host.Service qualified as HS
 import StatusNotifier.Item.Client qualified as IC
-import System.Pulp.Applet.SysTray.View qualified as View
+import System.Applet.SysTray.View qualified as View
 import Gtk.Commons qualified as Gtk
 import Gtk.Task qualified as Gtk
 import System.Posix.Process (getProcessID)

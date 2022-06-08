@@ -1,4 +1,4 @@
-module System.Pulp.Applet.Clocks where
+module System.Applet.Clocks where
 
 import Control.Concurrent.Task
 import Control.Monad.IO.Class

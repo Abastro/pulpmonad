@@ -1,5 +1,5 @@
 -- | Desktops visualizer widget.
-module System.Pulp.Applet.DesktopVisual (
+module System.Applet.DesktopVisual (
   ImageSet (..),
   NumWindows,
   DesktopSetup (..),
@@ -11,7 +11,7 @@ module System.Pulp.Applet.DesktopVisual (
 
 import Control.Monad.Trans.Maybe
 import Status.X11.WMStatus
-import System.Pulp.Applet.DesktopVisual.Handle
+import System.Applet.DesktopVisual.Handle
 import View.Imagery
 
 defImageSetter :: WindowInfo -> MaybeT IO ImageSet

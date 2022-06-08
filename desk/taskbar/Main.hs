@@ -17,14 +17,14 @@ import Gtk.Containers qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import Gtk.Window qualified as Gtk
 import Status.X11.WMStatus (DesktopStat (..))
+import System.Applet.Clocks qualified as App
+import System.Applet.DesktopVisual qualified as App
+import System.Applet.SysTray qualified as App
+import System.Applet.SystemDisplay qualified as App
 import System.Environment
 import System.Exit
 import System.Log.LogPrint (LogLevel (..), defLogFormat)
 import System.Posix.Signals (sigINT)
-import System.Pulp.Applet.Clocks qualified as App
-import System.Pulp.Applet.DesktopVisual qualified as App
-import System.Pulp.Applet.SysTray qualified as App
-import System.Pulp.Applet.SystemDisplay qualified as App
 import System.Pulp.PulpEnv
 import View.Imagery qualified as View
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)

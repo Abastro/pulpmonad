@@ -120,17 +120,18 @@ library
 
     System.Log.LogPrint
 
+    System.Applet.Clocks
+    System.Applet.SystemDisplay
+
+    System.Applet.DesktopVisual.View
+    System.Applet.DesktopVisual.Handle
+    System.Applet.DesktopVisual
+
+    System.Applet.SysTray.View
+    System.Applet.SysTray.Handle
+    System.Applet.SysTray
+
     System.Pulp.PulpEnv
-    System.Pulp.Applet.Clocks
-    System.Pulp.Applet.SystemDisplay
-
-    System.Pulp.Applet.DesktopVisual.View
-    System.Pulp.Applet.DesktopVisual.Handle
-    System.Pulp.Applet.DesktopVisual
-
-    System.Pulp.Applet.SysTray.View
-    System.Pulp.Applet.SysTray.Handle
-    System.Pulp.Applet.SysTray
 
 test-suite test-pulpdesk
   import:             pulp-gtk

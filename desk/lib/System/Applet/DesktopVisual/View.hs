@@ -1,4 +1,4 @@
-module System.Pulp.Applet.DesktopVisual.View (
+module System.Applet.DesktopVisual.View (
   widgetUpdateClass,
   DeskVisual,
   DeskVisualOp (..),

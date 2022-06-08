@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Control.Monad
+import Data.Default.Class
 import Data.Text qualified as T
 import Defines
 import GI.Gdk.Structs.EventKey qualified as Gdk
@@ -61,7 +62,7 @@ ctlButton window ctl = do
     View.boxStaticNew (View.defBoxArg Gtk.OrientationVertical){View.boxSpacing = 5}
       =<< sequenceA
         [ View.imageStaticNew Gtk.IconSizeDialog (View.ImgSName $ iconOf ctl)
-        , View.labelStaticNew View.defLabelArg (nameOf ctl)
+        , View.labelStaticNew def (nameOf ctl)
         ]
   Gtk.widgetSetValign box Gtk.AlignCenter
 

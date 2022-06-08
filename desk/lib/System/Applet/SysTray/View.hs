@@ -1,4 +1,4 @@
-module System.Pulp.Applet.SysTray.View (
+module System.Applet.SysTray.View (
   SysTray,
   SysTrayOp (..),
   sysTrayWidget,

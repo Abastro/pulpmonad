@@ -9,6 +9,7 @@ module Status.X11.XHandle (
   startXIO,
   XHandling,
   runXHandling,
+  MonadXHand(..),
   xQueryOnce,
   xListenTo,
   xSendTo,
@@ -154,6 +155,11 @@ xWithExt extF (XIO act) = XIO (withReaderT withF act)
 newtype XHandling r = XHandling (forall a. XIO r a -> IO a)
 runXHandling :: XHandling r -> XIO r a -> IO a
 runXHandling (XHandling xHandle) = xHandle
+
+class MonadIO m => MonadXHand m where
+  askXHand :: m (XHandling ())
+  runXHand :: XIO () a -> m a
+  runXHand act = askXHand >>= \handling -> liftIO (runXHandling handling act)
 
 -- | Starts X handler and return X handling to register listeners/senders.
 -- NOTE: non-fatal X error is ignored.
