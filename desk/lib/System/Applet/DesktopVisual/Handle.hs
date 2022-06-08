@@ -229,7 +229,7 @@ newtype WinItemHandle = WinItemHandle
   }
 
 winItemMake ::
-  MonadIO m =>
+  (MonadUnliftIO m, MonadLog m) =>
   WindowSetup ->
   AppInfoCol ->
   GetXIcon ->
@@ -237,15 +237,16 @@ winItemMake ::
   PerWinRcvs ->
   View.WinItem ->
   m WinItemHandle
-winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = liftIO $ do
+winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withRunInIO $ \unlift -> do
   -- (-1) is never a valid desktop (means the window is omnipresent)
-  registers =<< newIORef (-1)
+  act <- registers <$> newIORef (-1)
+  unlift act
   where
-    imgSetter winInfo = appInfoImgSetter appCol winInfo <|> windowImgSetter winInfo
+    imgSetter winInfo = appInfoImgSetter appCol winInfo <|> mapMaybeT liftIO (windowImgSetter winInfo)
 
-    registers curDeskRef = do
+    registers curDeskRef = withRunInIO $ \unlift -> do
       killChDesk <- Gtk.uiTask winDesktop changeDesktop
-      killInfo <- Gtk.uiTask winInfo updateWindow
+      killInfo <- Gtk.uiTask winInfo (unlift . updateWindow)
       -- Frees from desktops so that it is correctly adjusted
       Gtk.onWidgetDestroy (View.winItemWidget view) (changeDesktop (-1) >> killChDesk >> killInfo)
       pure WinItemHandle{itemWindowView = view}
@@ -254,21 +255,22 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = liftI
           oldDesk <- atomicModifyIORef' curDeskRef (newDesk,)
           when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk
 
-        updateWindow winInfo@WindowInfo{..} = do
+        updateWindow winInfo@WindowInfo{..} = withRunInIO $ \unlift -> do
           View.winItemSetTitle view windowTitle
-          runMaybeT (imgSetter winInfo) >>= View.winItemSetIcon view getXIcon
+          (unlift . runMaybeT) (imgSetter winInfo) >>= View.winItemSetIcon view getXIcon
           View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------
                           Application Info
 --------------------------------------------------------------------}
 
-appInfoImgSetter :: AppInfoCol -> WindowInfo -> MaybeT IO View.ImageSet
+appInfoImgSetter :: (MonadUnliftIO m, MonadLog m) => AppInfoCol -> WindowInfo -> MaybeT m View.ImageSet
 appInfoImgSetter appCol WindowInfo{windowClasses} = do
   allDat <- liftIO $ getAppInfos appCol
   let findWith matcher = V.find (\dat -> any (matcher dat) windowClasses) allDat
-  appDat <- MaybeT . pure $ findWith classMatch <|> findWith identMatch <|> findWith execMatch
-  appInfo <- MaybeT $ appGetIns appDat
+  appDat@AppInfoData{appId} <- MaybeT . pure $ findWith classMatch <|> findWith identMatch <|> findWith execMatch
+  lift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "AppInfo: $1 -> $2" (show windowClasses) appId
+  appInfo <- MaybeT . liftIO $ appGetIns appDat
   appIcon <- MaybeT $ Gio.appInfoGetIcon appInfo
   pure (View.ImgSGIcon appIcon)
   where
