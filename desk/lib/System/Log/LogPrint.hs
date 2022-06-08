@@ -8,8 +8,10 @@ module System.Log.LogPrint (
   LogSrc,
   LogLevel (..),
   logLevelName,
+  LogFormat,
   defLogFormat,
-  withF,
+  withFormat,
+  withVerbosity,
   MonadLog (..),
   LevelLogger,
   logS,
@@ -26,6 +28,7 @@ import Data.Text qualified as T
 import Data.Vector qualified as V
 import System.Log.FastLogger
 import Data.Maybe
+import Control.Monad
 
 type LogSrc = T.Text
 data LogLevel = LevelDebug | LevelInfo | LevelWarn | LevelError
@@ -38,11 +41,13 @@ logLevelName = \case
   LevelWarn -> toLogStr "WARN"
   LevelError -> toLogStr "ERROR"
 
+type LogFormat = LogSrc -> LogLevel -> LogStr -> LogStr
+
 -- | Default log format.
 --
 -- >>> defLogFormat (T.pack "MySource") LevelInfo (toLogStr "Did something happen?")
 -- "[INFO#MySource] Did something happen?\n"
-defLogFormat :: LogSrc -> LogLevel -> LogStr -> LogStr
+defLogFormat :: LogFormat
 defLogFormat src level str = logStrPrinting "[$1$2] $3\n" [logLevelName level, srcSuffix, str]
   where
     srcSuffix = if T.null src then mempty else toLogStr "#" <> toLogStr src
@@ -50,8 +55,12 @@ defLogFormat src level str = logStrPrinting "[$1$2] $3\n" [logLevelName level, s
 type LevelLogger = LogSrc -> LogLevel -> FastLogger
 
 -- | Logger with certain format. Use this to build MonadLog.
-withF :: (LogSrc -> LogLevel -> LogStr -> LogStr) -> FastLogger -> LevelLogger
-withF format = \logger src level -> logger . format src level
+withFormat :: LogFormat -> FastLogger -> LevelLogger
+withFormat format = \logger src level -> logger . format src level
+
+-- | Control Verbosity so that it does not print so much.
+withVerbosity :: LogLevel -> LevelLogger -> LevelLogger
+withVerbosity cutoff logger = \src level str -> when (level >= cutoff) $ logger src level str
 
 -- TODO Error level handling - verbosity?
 

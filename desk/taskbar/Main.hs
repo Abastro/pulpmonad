@@ -28,6 +28,7 @@ import System.Pulp.PulpEnv
 import View.Imagery qualified as View
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run (safeSpawn)
+import System.Log.LogPrint (LogLevel(..))
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -65,15 +66,21 @@ taskbarWindow app BarWinArgs{..} content = do
   pure window
 
 main :: IO ()
-main = runPulpIO $
+main = do
+  isTest <- ("test" `elem`) <$> getArgs
+  runWithArg isTest
+
+runWithArg :: Bool -> IO ()
+runWithArg isTest = runPulpIO defPulpArg{ loggerVerbosity = verbosity } $
   withRunInIO $ \unlift -> do
-    isTest <- ("test" `elem`) <$> getArgs
     Just app <- Gtk.applicationNew (Just $ T.pack "pulp.Gtk.taskbar") [Gio.ApplicationFlagsNonUnique]
-    Gtk.onApplicationActivate app (unlift $ activating isTest app)
+    Gtk.onApplicationActivate app (unlift $ activating app)
     Glib.unixSignalAdd Glib.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ Gtk.applicationQuit app
     status <- Gtk.applicationRun app Nothing
     when (status /= 0) . liftIO $ exitWith (ExitFailure $ fromIntegral status)
   where
+    verbosity = if isTest then LevelDebug else LevelInfo
+
     cssProv :: IO Gtk.CssProvider
     cssProv = do
       css <- Gtk.cssProviderNew
@@ -87,8 +94,8 @@ main = runPulpIO $
       defaultTheme <- Gtk.iconThemeGetDefault
       Gtk.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
 
-    activating :: Bool -> Gtk.Application -> PulpIO ()
-    activating isTest app = withRunInIO $ \unlift -> do
+    activating :: Gtk.Application -> PulpIO ()
+    activating app = withRunInIO $ \unlift -> do
       cssProv >>= flip Gtk.defScreenAddStyleContext Gtk.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
