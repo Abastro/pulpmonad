@@ -6,6 +6,7 @@ module System.Pulp.Applet.DesktopVisual.Handle (
   deskVisualizer,
 ) where
 
+import Control.Applicative
 import Control.Concurrent.Task
 import Control.Monad
 import Control.Monad.Except
@@ -23,17 +24,16 @@ import Data.Traversable
 import Data.Vector qualified as V
 import GI.Gio.Interfaces.AppInfo qualified as Gio
 import Graphics.X11.Types
+import Gtk.Commons qualified as Gtk
+import Gtk.Pixbufs qualified as Gtk
+import Gtk.Task qualified as Gtk
 import Status.AppInfos
 import Status.X11.WMStatus
 import Status.X11.XHandle
 import System.Log.LogPrint
 import System.Pulp.Applet.DesktopVisual.View qualified as View
 import System.Pulp.PulpEnv
-import Gtk.Commons qualified as Gtk
-import Gtk.Pixbufs qualified as Gtk
-import Gtk.Task qualified as Gtk
 import View.Imagery qualified as View
-import Control.Applicative
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -262,21 +262,21 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = do
           View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------
-                        Application Info
+                          Application Info
 --------------------------------------------------------------------}
 
 appInfoImgSetter :: AppInfoCol -> WindowInfo -> MaybeT IO View.ImageSet
 appInfoImgSetter appCol WindowInfo{windowClasses} = do
   allDat <- liftIO $ getAppInfos appCol
-  appDat <- MaybeT . pure $ V.find (\dat -> any (isClMatch dat) windowClasses) allDat
+  let findWith matcher = V.find (\dat -> any (matcher dat) windowClasses) allDat
+  appDat <- MaybeT . pure $ findWith classMatch <|> findWith identMatch <|> findWith execMatch
   appInfo <- MaybeT $ appGetIns appDat
   appIcon <- MaybeT $ Gio.appInfoGetIcon appInfo
   pure (View.ImgSGIcon appIcon)
   where
-    isClMatch AppInfoData{..} cl =
-      Just cl == appWmClass
-        || Just (T.toLower cl) == appExecName
-        || T.toLower cl <> T.pack ".desktop" == T.toLower appId
+    classMatch AppInfoData{..} cl = Just cl == appWmClass
+    identMatch AppInfoData{..} cl = T.toLower cl <> T.pack ".desktop" == T.toLower appId
+    execMatch AppInfoData{..} cl = Just (T.toLower cl) == appExecName
 
 {-------------------------------------------------------------------
                           Communication

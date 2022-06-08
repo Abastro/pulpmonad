@@ -96,7 +96,7 @@ main = runPulpIO $
       right <- unlift $ taskbarWindow app rightArgs =<< rightBox
       traverse_ Gtk.widgetShowAll [left, center, right]
 
-    dockPos = Gtk.DockBottom
+    dockPos = Gtk.DockTop
 
     leftArgs =
       BarWinArgs
