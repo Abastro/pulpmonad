@@ -16,6 +16,8 @@ import View.Imagery qualified as View
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.Run (safeSpawn)
 
+-- TODO "Symbolic" seems to change the style
+
 -- | Battery status display.
 batDisplay :: MonadIO m => Gtk.IconSize -> m Gtk.Widget
 batDisplay iconSize = do

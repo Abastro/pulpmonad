@@ -33,6 +33,7 @@ import Status.X11.XHandle
 import System.Log.LogPrint
 import System.Applet.DesktopVisual.View qualified as View
 import qualified GI.Gio.Interfaces.Icon as Gio
+import Data.Time.Clock.POSIX
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -238,12 +239,12 @@ winItemMake ::
   m WinItemHandle
 winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withRunInIO $ \unlift -> do
   -- (-1) is never a valid desktop (means the window is omnipresent)
-  act <- registers <$> newIORef (-1)
+  act <- registers <$> newIORef (-1) <*> newIORef 0
   unlift act
   where
     imgIcon winInfo = appInfoImgSetter appCol winInfo <|> mapMaybeT liftIO (windowImgIcon winInfo)
 
-    registers curDeskRef = withRunInIO $ \unlift -> do
+    registers curDeskRef lastUpRef = withRunInIO $ \unlift -> do
       killChDesk <- Gtk.uiTask winDesktop changeDesktop
       killInfo <- Gtk.uiTask winInfo (unlift . updateWindow)
       -- Frees from desktops so that it is correctly adjusted
@@ -255,9 +256,15 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
           when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk
 
         updateWindow winInfo@WindowInfo{..} = withRunInIO $ \unlift -> do
-          View.winItemSetTitle view windowTitle
-          (unlift . runMaybeT) (imgIcon winInfo) >>= View.winItemSetIcon view getXIcon
-          View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
+          -- Limites update to once per second
+          updTime <- getPOSIXTime
+          diff <- atomicModifyIORef' lastUpRef $ \oldTime -> (updTime, updTime - oldTime)
+          when (diff > 1) $ do
+            View.winItemSetTitle view windowTitle
+            -- TODO When the icon is decided by X property,
+            -- receive updates solely from that property
+            (unlift . runMaybeT) (imgIcon winInfo) >>= View.winItemSetIcon view getXIcon
+            View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------
                           Application Info
