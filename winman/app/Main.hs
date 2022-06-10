@@ -102,7 +102,7 @@ main = do
         }
 
 scTerm =
-  NS "term" "gnome-terminal --class=term-pers" (className =? "term-pers") doCenterFloat
+  NS "term" "gnome-terminal --role=term-pers" (role =? "term-pers") doCenterFloat
 
 scratchpads = [scTerm]
 
