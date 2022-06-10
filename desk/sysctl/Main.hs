@@ -61,7 +61,7 @@ ctlButton window ctl = do
   box <-
     View.boxStaticNew (View.defBoxArg Gtk.OrientationVertical){View.boxSpacing = 5}
       =<< sequenceA
-        [ View.imageStaticNew Gtk.IconSizeDialog (View.ImgSName $ iconOf ctl)
+        [ View.imageStaticNew Gtk.IconSizeDialog True (View.ImgSName $ iconOf ctl)
         , View.labelStaticNew def (nameOf ctl)
         ]
   Gtk.widgetSetValign box Gtk.AlignCenter
