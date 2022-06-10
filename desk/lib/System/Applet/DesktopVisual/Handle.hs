@@ -32,7 +32,7 @@ import Status.X11.WMStatus
 import Status.X11.XHandle
 import System.Log.LogPrint
 import System.Applet.DesktopVisual.View qualified as View
-import View.Imagery qualified as View
+import qualified GI.Gio.Interfaces.Icon as Gio
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -62,8 +62,8 @@ data DesktopSetup = DesktopSetup
 
 -- | Window part of the setup.
 data WindowSetup = WindowSetup
-  { -- | With which image the window is going to set to.
-    windowImgSetter :: WindowInfo -> MaybeT IO View.ImageSet
+  { -- | With which icon the window is going to set to.
+    windowImgIcon :: WindowInfo -> MaybeT IO Gio.Icon
   , windowIconSize :: Gtk.IconSize
   }
 
@@ -241,7 +241,7 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
   act <- registers <$> newIORef (-1)
   unlift act
   where
-    imgSetter winInfo = appInfoImgSetter appCol winInfo <|> mapMaybeT liftIO (windowImgSetter winInfo)
+    imgIcon winInfo = appInfoImgSetter appCol winInfo <|> mapMaybeT liftIO (windowImgIcon winInfo)
 
     registers curDeskRef = withRunInIO $ \unlift -> do
       killChDesk <- Gtk.uiTask winDesktop changeDesktop
@@ -256,22 +256,21 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
 
         updateWindow winInfo@WindowInfo{..} = withRunInIO $ \unlift -> do
           View.winItemSetTitle view windowTitle
-          (unlift . runMaybeT) (imgSetter winInfo) >>= View.winItemSetIcon view getXIcon
+          (unlift . runMaybeT) (imgIcon winInfo) >>= View.winItemSetIcon view getXIcon
           View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------
                           Application Info
 --------------------------------------------------------------------}
 
-appInfoImgSetter :: (MonadUnliftIO m, MonadLog m) => AppInfoCol -> WindowInfo -> MaybeT m View.ImageSet
+appInfoImgSetter :: (MonadUnliftIO m, MonadLog m) => AppInfoCol -> WindowInfo -> MaybeT m Gio.Icon
 appInfoImgSetter appCol WindowInfo{windowClasses} = do
   allDat <- liftIO $ getAppInfos appCol
   let findWith matcher = V.find (\dat -> any (matcher dat) windowClasses) allDat
   appDat@AppInfoData{appId} <- MaybeT . pure $ findWith classMatch <|> findWith identMatch <|> findWith execMatch
   lift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "AppInfo: $1 -> $2" (show windowClasses) appId
   appInfo <- MaybeT . liftIO $ appGetIns appDat
-  appIcon <- MaybeT $ Gio.appInfoGetIcon appInfo
-  pure (View.ImgSGIcon appIcon)
+  MaybeT $ Gio.appInfoGetIcon appInfo
   where
     classMatch AppInfoData{..} cl = Just cl == appWmClass
     identMatch AppInfoData{..} cl = T.toLower cl <> T.pack ".desktop" == T.toLower appId

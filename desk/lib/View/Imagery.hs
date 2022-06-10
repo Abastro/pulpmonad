@@ -26,6 +26,8 @@ import GI.Gtk.Objects.Image qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import XMonad.StackSet (RationalRect (..))
+import qualified Gtk.Pixbufs as Gtk
+import Control.Monad
 
 -- | Setting image for Image widget
 data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon | ImgSPixbuf Gdk.Pixbuf
@@ -39,11 +41,14 @@ data ImageDyn = ImageDyn
 imageDynWidget :: ImageDyn -> Gtk.Widget
 imageDynWidget ImageDyn{imageDynWid} = imageDynWid
 
-imageDynNew :: MonadIO m => Gtk.IconSize -> m ImageDyn
-imageDynNew size = do
+-- | Create a dynamic image with certain size.
+-- If the flag is true, prevents image getting bigger.
+imageDynNew :: MonadIO m => Gtk.IconSize -> Bool -> m ImageDyn
+imageDynNew size fixSize = do
   imageDynImg <- Gtk.imageNew
   let imageDynSize = fromIntegral $ fromEnum size
   imageDynWid <- Gtk.toWidget imageDynImg
+  when fixSize $ Gtk.imageSetPixelSize imageDynImg $ Gtk.iconSizePx size
   pure ImageDyn{..}
 
 imageDynSetImg :: MonadIO m => ImageDyn -> ImageSet -> m ()
@@ -52,9 +57,10 @@ imageDynSetImg ImageDyn{..} = \case
   ImgSGIcon icon -> Gtk.imageSetFromGicon imageDynImg icon imageDynSize
   ImgSPixbuf pix -> Gtk.imageSetFromPixbuf imageDynImg (Just pix)
 
-imageStaticNew :: MonadIO m => Gtk.IconSize -> ImageSet -> m Gtk.Widget
-imageStaticNew size sets = do
-  dyn <- imageDynNew size
+-- | Static version of 'imageDynNew'.
+imageStaticNew :: MonadIO m => Gtk.IconSize -> Bool -> ImageSet -> m Gtk.Widget
+imageStaticNew size fixSize sets = do
+  dyn <- imageDynNew size fixSize
   imageDynSetImg dyn sets
   pure $ imageDynWidget dyn
 

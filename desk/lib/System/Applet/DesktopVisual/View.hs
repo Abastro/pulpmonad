@@ -34,6 +34,8 @@ import Gtk.Styles qualified as Gtk
 import View.Boxes qualified as View
 import View.Imagery qualified as View
 import View.Textual qualified as View
+import qualified GI.Gio.Interfaces.Icon as Gio
+import Control.Applicative
 
 widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => Gtk.Widget -> (s -> T.Text) -> [s] -> m ()
 widgetUpdateClass widget asClass state =
@@ -54,6 +56,7 @@ deskVisualWidget :: DeskVisual -> Gtk.Widget
 deskVisualWidget DeskVisual{deskVisualWid} = deskVisualWid
 
 -- TODO Remove itemAt
+{-# DEPRECATED deskVisualItemAt "TBDel" #-}
 deskVisualItemAt :: MonadIO m => DeskVisual -> Int -> m (Maybe DeskItem)
 deskVisualItemAt DeskVisual{..} idx = do
   deskItems <- liftIO $ readIORef deskVisualItems
@@ -148,7 +151,7 @@ winItemWidget WinItem{winItemWid} = winItemWid
 
 winItemNew :: MonadIO m => Gtk.IconSize -> IO () -> m WinItem
 winItemNew winItemSize onClick = do
-  winItemImg <- View.imageDynNew winItemSize
+  winItemImg <- View.imageDynNew winItemSize True
   winItemWid <- Gtk.buttonNewWith (Just $ View.imageDynWidget winItemImg) onClick
   Gtk.widgetGetStyleContext winItemWid >>= flip Gtk.styleContextAddClass (T.pack "window-item")
   pure WinItem{..}
@@ -158,16 +161,18 @@ winItemSetTitle WinItem{winItemWid} = Gtk.widgetSetTooltipText winItemWid . Just
 
 type RawIconSet = IO (Either String [Gtk.RawIcon])
 
-winItemSetIcon :: MonadIO m => WinItem -> RawIconSet -> Maybe View.ImageSet -> m ()
-winItemSetIcon WinItem{..} rawIcons = \case
-  Nothing -> do
-    iconSet <- fromMaybe (View.ImgSName $ T.pack "missing") <$> liftIO rawIconSet
-    View.imageDynSetImg winItemImg iconSet
-  Just iconSet -> View.imageDynSetImg winItemImg iconSet
+winItemSetIcon :: MonadIO m => WinItem -> RawIconSet -> Maybe Gio.Icon -> m ()
+winItemSetIcon WinItem{..} rawIcons mayIcon = do
+  iconSet <- runMaybeT $ giconSet <|> rawIconSet
+  View.imageDynSetImg winItemImg $ fromMaybe (View.ImgSName $ T.pack "missing") iconSet
   where
-    rawIconSet =
-      runMaybeT $
-        liftIO rawIcons >>= \case
+    giconSet = do
+      icon <- MaybeT (pure mayIcon)
+      pure (View.ImgSGIcon icon)
+
+    -- NOTE Pixbuf has sharpness loss on scaling.
+    -- MAYBE Make this go through LoadableIcon?
+    rawIconSet = liftIO rawIcons >>= \case
           Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
           Right icons -> do
             scaled <- MaybeT $ Gtk.iconsChoosePixbuf (Gtk.iconSizePx winItemSize) Gtk.argbTorgba icons

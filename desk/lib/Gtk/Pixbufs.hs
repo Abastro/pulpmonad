@@ -6,6 +6,8 @@ module Gtk.Pixbufs (
   argbTorgba,
 ) where
 
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Maybe
 import Data.ByteString qualified as BS
 import Data.ByteString.Builder qualified as BS
 import Data.ByteString.Lazy qualified as LBS
@@ -15,7 +17,6 @@ import GI.GLib.Structs.Bytes qualified as Glib
 import GI.GdkPixbuf.Enums
 import GI.GdkPixbuf.Objects.Pixbuf
 import GI.Gtk.Enums (IconSize (..))
-import Control.Monad.Trans.Maybe
 
 -- | Raw icon consisting of bytes representing RGBA/ARGB colors.
 -- Left to right, Top to bottom.
@@ -32,14 +33,14 @@ iconSizePx = \case
   IconSizeSmallToolbar -> 16
   IconSizeLargeToolbar -> 24
   IconSizeButton -> 16
-  IconSizeDnd -> 24
-  IconSizeDialog -> 32
+  IconSizeDnd -> 32
+  IconSizeDialog -> 48
   _ -> 8
 
 -- | Chooses icon into a pixbuf appropriate for given pixel size, with scaling if necessary.
 --
 -- Note that the icon is "assumed" to be square.
-iconsChoosePixbuf :: Int32 -> (BS.ByteString -> BS.ByteString) -> [RawIcon] -> IO (Maybe Pixbuf)
+iconsChoosePixbuf :: MonadIO m => Int32 -> (BS.ByteString -> BS.ByteString) -> [RawIcon] -> m (Maybe Pixbuf)
 iconsChoosePixbuf size converter icons = runMaybeT $ do
   RawIcon{..} : _ <- pure $ sortOn (\RawIcon{iconHeight} -> abs (iconHeight - size)) icons
   bytes <- Glib.bytesNew (Just $ converter iconColors)

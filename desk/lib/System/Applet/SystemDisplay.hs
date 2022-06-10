@@ -25,7 +25,7 @@ batDisplay iconSize = do
   ev <$ Gtk.widgetShowAll ev
   where
     batIcon task = do
-      img <- View.imageDynNew iconSize
+      img <- View.imageDynNew iconSize True
       liftIO $ do
         kill <- Gtk.uiTask task $ \BatStat{capacity, batStatus} ->
           View.imageDynSetImg img $ View.ImgSName $ batName ((capacity `div` 10) * 10) batStatus
@@ -63,7 +63,7 @@ mainboardDisplay iconSize mainWidth = do
     memIcon task = do
       -- TODO Identify the transparency issue of the image
       -- MAYBE Image itself providing location of bar?
-      let ramImg = View.imageStaticNew iconSize $ View.ImgSName (T.pack "ram-000")
+      let ramImg = View.imageStaticNew iconSize True $ View.ImgSName (T.pack "ram-000")
       hack <- ramImg
       fg <- ramImg
       let barRect = RationalRect (14 % 32) (8 % 32) (18 % 32) (24 % 32)
@@ -76,7 +76,7 @@ mainboardDisplay iconSize mainWidth = do
       pure mem
 
     cpuIcon (taskUse, taskTemp) = do
-      fg <- View.imageDynNew iconSize
+      fg <- View.imageDynNew iconSize True
       let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
       bar <- View.barNew barRect
       cpu <- Gtk.overlayed (View.imageDynWidget fg) [View.barWidget bar]

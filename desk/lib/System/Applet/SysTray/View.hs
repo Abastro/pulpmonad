@@ -94,8 +94,8 @@ trayItemWidget TrayItem{trayItemWid} = trayItemWid
 
 trayItemNew :: MonadIO m => Gtk.IconSize -> m TrayItem
 trayItemNew trayItemSize = do
-  trayItemIcon <- View.imageDynNew trayItemSize
-  trayItemOverlay <- View.imageDynNew trayItemSize
+  trayItemIcon <- View.imageDynNew trayItemSize True
+  trayItemOverlay <- View.imageDynNew trayItemSize True
   overlay <- Gtk.overlayed (View.imageDynWidget trayItemIcon) [View.imageDynWidget trayItemOverlay]
 
   interactive <- Gtk.eventBoxNew

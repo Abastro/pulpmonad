@@ -117,7 +117,7 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
       box <- Gtk.boxNew Gtk.OrientationHorizontal 0
       Gtk.widgetSetName box (T.pack "pulp-statusbar")
       Gtk.widgetGetStyleContext box >>= flip Gtk.styleContextAddClass (T.pack "statusbar-box")
-      powerIcon <- View.imageStaticNew Gtk.IconSizeLargeToolbar $ View.ImgSName (T.pack "system-shutdown-symbolic")
+      powerIcon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-shutdown-symbolic")
       traverse_ (addToBegin box)
         =<< sequenceA
           [Gtk.buttonNewWith (Just powerIcon) runPulpCtl]
@@ -156,7 +156,7 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
             }
         deskVisWinSetup =
           App.WindowSetup
-            { windowImgSetter = App.defImageSetter
+            { windowImgIcon = App.defImageIcon
             , windowIconSize = Gtk.IconSizeLargeToolbar
             }
 
