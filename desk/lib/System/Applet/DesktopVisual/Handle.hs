@@ -124,6 +124,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           V.zipWithM_ (\DeskItemHandle{updateDeskItem} -> updateDeskItem) deskItems newStats
 
         removeOldWin _window WinItemHandle{itemWindowView} = do
+          -- Reducing usage of widgetRemove - Hope GTK will make sure it is destroyed.
           Gtk.widgetDestroy (View.winItemWidget itemWindowView)
           pure False
 

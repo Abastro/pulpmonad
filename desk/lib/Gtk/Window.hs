@@ -49,6 +49,7 @@ windowSetTransparent :: MonadIO m => Window -> m ()
 windowSetTransparent window = do
   screen <- windowGetScreen window
   composited <- Gdk.screenIsComposited screen
+  -- Apparently this is default in GTK4! Good.
   when composited $
     Gdk.screenGetRgbaVisual screen >>= widgetSetVisual window
 

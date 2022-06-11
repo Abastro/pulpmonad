@@ -66,7 +66,7 @@ sysTrayCtrl SysTray{..} = \case
     Gtk.widgetShowAll trayItemWid
   TrayRemoveItem TrayItem{trayItemWid} -> do
     Gtk.widgetHide trayItemWid
-    Gtk.widgetDestroy trayItemWid
+    Gtk.containerRemove sysTrayBox trayItemWid
   where
     boxPack = if sysTrayAlignBegin then Gtk.boxPackStart else Gtk.boxPackEnd
 

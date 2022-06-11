@@ -44,7 +44,7 @@ widgetUpdateClass widget asClass state =
 -- | Desktop visualizer view
 data DeskVisual = DeskVisual
   { deskVisualWid :: !Gtk.Widget
-  , deskVisualCont :: !Gtk.Container
+  , deskVisualBox :: !Gtk.Box
   , deskVisualItems :: !(IORef (V.Vector DeskItem))
   }
 
@@ -64,8 +64,8 @@ deskVisualItemAt DeskVisual{..} idx = do
 
 deskVisualNew :: MonadIO m => m DeskVisual
 deskVisualNew = do
-  deskVisualCont <- Gtk.toContainer =<< Gtk.boxNew Gtk.OrientationHorizontal 5
-  deskVisualWid <- Gtk.toWidget deskVisualCont
+  deskVisualBox <- Gtk.boxNew Gtk.OrientationHorizontal 5
+  deskVisualWid <- Gtk.toWidget deskVisualBox
   Gtk.widgetGetStyleContext deskVisualWid >>= flip Gtk.styleContextAddClass (T.pack "desk-visual")
   Gtk.widgetShowAll deskVisualWid
 
@@ -78,11 +78,11 @@ deskVisualCtrl DeskVisual{..} = \case
     toDelete <- liftIO $ atomicModifyIORef' deskVisualItems $ V.splitAt newCnt
     for_ toDelete $ \DeskItem{deskItemWid} -> do
       Gtk.widgetHide deskItemWid
-      Gtk.widgetDestroy deskItemWid
+      Gtk.containerRemove deskVisualBox deskItemWid
   AddDeskItems deskItems -> do
     liftIO $ modifyIORef' deskVisualItems (<> deskItems)
     for_ deskItems $ \DeskItem{deskItemWid} -> do
-      Gtk.containerAdd deskVisualCont deskItemWid
+      Gtk.containerAdd deskVisualBox deskItemWid
       Gtk.widgetShowAll deskItemWid
 
 -- | Desktop item view
