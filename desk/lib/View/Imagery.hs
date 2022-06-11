@@ -84,6 +84,7 @@ barNew relative = do
   Gtk.setWidgetHalign barWid Gtk.AlignFill
   Gtk.setWidgetValign barWid Gtk.AlignFill
   barFill <- liftIO $ newTVarIO 0.0
+  -- Major GTK4 upgrade blocker - need relying on widget class to draw anything
   _ <- Gtk.onWidgetDraw barWid $ \ctx -> do
     fill <- readTVarIO barFill
     True <$ C.renderWithContext (drawBar barWid fill) ctx

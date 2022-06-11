@@ -5,22 +5,22 @@ module Gtk.Window (
   appWindowNew,
   windowSetTransparent,
   windowGrabOnMap,
-  DockPos(..),
-  DockSize(..),
-  DockSpan(..),
+  DockPos (..),
+  DockSize (..),
+  DockSpan (..),
   windowSetDock,
 ) where
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans.Maybe
 import Data.Int
 import Data.Vector qualified as V
 import Data.Word
 import Foreign.C.Types
-import Foreign.Marshal
 import Foreign.Ptr
-import Foreign.Storable
 import GI.GLib
+import GI.GLib qualified as Glib
 import GI.Gdk.Flags qualified as Gdk
 import GI.Gdk.Objects.Cursor qualified as Gdk
 import GI.Gdk.Objects.Display qualified as Gdk
@@ -28,17 +28,19 @@ import GI.Gdk.Objects.Monitor qualified as Gdk
 import GI.Gdk.Objects.Screen qualified as Gdk
 import GI.Gdk.Objects.Seat qualified as Gdk
 import GI.Gdk.Objects.Window qualified as Gdk
-import GI.Gdk.Structs.Atom qualified as Gdk
 import GI.Gdk.Structs.EventAny qualified as Gdk
 import GI.Gdk.Structs.Rectangle qualified as Gdk
+import GI.GdkX11.Objects.X11Display qualified as GdkX11
+import GI.GdkX11.Objects.X11Window qualified as GdkX11
 import GI.Gtk.Functions
 import GI.Gtk.Objects.Application
 import GI.Gtk.Objects.ApplicationWindow
 import GI.Gtk.Objects.Window
+import Graphics.X11.Xlib qualified as X11
+import Graphics.X11.Xlib.Extras qualified as X11
 import Gtk.Commons
 import XMonad (Rectangle (..), scaleRationalRect)
 import XMonad.StackSet (RationalRect (..))
-import qualified Data.Text as T
 
 -- | Create window for an application.
 appWindowNew :: MonadIO m => Application -> m Window
@@ -49,13 +51,17 @@ windowSetTransparent :: MonadIO m => Window -> m ()
 windowSetTransparent window = do
   screen <- windowGetScreen window
   composited <- Gdk.screenIsComposited screen
-  -- Apparently this is default in GTK4! Good.
   when composited $
     Gdk.screenGetRgbaVisual screen >>= widgetSetVisual window
 
 -- | Grab the screen on window map.
 windowGrabOnMap :: MonadIO m => Window -> m ()
 windowGrabOnMap window = do
+  -- Upgrade blocker to GTK4.
+  -- Possible Workaroud:
+  -- 1. Use X11
+  -- 2. Delegate to WM
+  -- 3. Make it a popup in pulpbar (Good way, but requires significantly more work)
   afterWidgetMapEvent window $
     Gdk.getEventAnyWindow >=> \case
       Nothing -> pure False
@@ -69,6 +75,7 @@ windowGrabOnMap window = do
 -- | Dock position. Ordered to match that of "_NET_WM_STRUT_PARTIAL"
 data DockPos = DockLeft | DockRight | DockTop | DockBottom
   deriving (Show, Enum)
+
 data DockSize = AbsoluteSize !Word32 | RelativeSize !Rational
   deriving (Show)
 data DockSpan = DockSpan {dockBegin :: !Rational, dockEnd :: !Rational}
@@ -103,7 +110,7 @@ scaleTo full ratio = floor $ fromIntegral full * ratio
 -- Assumes the provided size is enough, at least on the strut side.
 -- Can fail when there is no default display / primary montior.
 --
--- TODO handle placing on the monitor
+-- TODO Handle multi-monitor setup
 -- TODO Check input (or not)
 -- TODO Perhaps allow not applying the strut
 windowSetDock :: (MonadIO m) => Window -> DockPos -> DockSize -> DockSpan -> m ()
@@ -132,15 +139,17 @@ windowSetDock window pos size span@DockSpan{..} = do
   let beginEl = (4 + 2 * fromEnum pos, scaleTo fullSpan dockBegin)
   let endEl = (4 + 2 * fromEnum pos + 1, scaleTo fullSpan dockEnd)
   let strutVec = (scaleFactor *) <$> V.replicate 12 0 V.// [sizeEl, beginEl, endEl]
-  strutPartial <- Gdk.atomIntern (T.pack "_NET_WM_STRUT_PARTIAL") False
-  typCardinal <- Gdk.atomIntern (T.pack "CARDINAL") False
 
   afterWidgetMapEvent window $
     Gdk.getEventAnyWindow >=> \case
       Nothing -> pure False
       Just gdkWin -> do
-        let dat :: [CULong] = fromIntegral <$> V.toList strutVec
-        False <$ gdkPropertyChange gdkWin strutPartial typCardinal 32 PropModeReplace dat
+        withXWin display gdkWin $ \xDisplay xWindow -> do
+          let dat :: [CLong] = fromIntegral <$> V.toList strutVec
+          strutPartial <- X11.internAtom xDisplay "_NET_WM_STRUT_PARTIAL" False
+          typCardinal <- X11.internAtom xDisplay "CARDINAL" False
+          X11.changeProperty32 xDisplay xWindow strutPartial typCardinal X11.propModeReplace dat
+        pure False
   pure ()
   where
     fromGdkRect rect =
@@ -150,30 +159,15 @@ windowSetDock window pos size span@DockSpan{..} = do
         <*> (fromIntegral <$> Gdk.getRectangleWidth rect)
         <*> (fromIntegral <$> Gdk.getRectangleHeight rect)
 
--- | Change gdk property. This was apparently not exposed to language bindings.
--- Only CUChar, CUShort, CULong could be accepted.
--- 4th argument is format, i.e. char for 8, short for 16, long for 32.
-gdkPropertyChange ::
-  (Gdk.IsWindow w, MonadIO m, Storable a) =>
-  w ->
-  Gdk.Atom ->
-  Gdk.Atom ->
-  Int32 ->
-  PropMode ->
-  [a] ->
-  m ()
-gdkPropertyChange win property typ format mode dat = liftIO $ do
-  window <- Gdk.toWindow win
-  withManagedPtr window $ \window' ->
-    withManagedPtr property $ \property' ->
-      withManagedPtr typ $ \typ' ->
-        withArrayLen dat $ \len ptr -> do
-          let mode' = fromIntegral . fromEnum $ mode
-          let ptr' = castPtr ptr
-          let len' = fromIntegral len
-          gdk_property_change window' property' typ' format mode' ptr' len'
-
--- I dislike how Int32 is liberally used, but I digress.
-foreign import ccall "gdk_property_change"
-  gdk_property_change ::
-    Ptr Gdk.Window -> Ptr Gdk.Atom -> Ptr Gdk.Atom -> Int32 -> CUInt -> Ptr CUChar -> Int32 -> IO ()
+withXWin :: MonadIO m => Gdk.Display -> Gdk.Window -> (X11.Display -> X11.Window -> IO ()) -> m ()
+withXWin gdkDisp gdkWin act = do
+  runMaybeT $ do
+    x11Disp <- MaybeT . liftIO $ Glib.castTo GdkX11.X11Display gdkDisp
+    x11Win <- MaybeT . liftIO $ Glib.castTo GdkX11.X11Window gdkWin
+    dispPtr <- GdkX11.x11DisplayGetXdisplay x11Disp
+    winID <- GdkX11.x11WindowGetXid x11Win
+    liftIO . withManagedPtr dispPtr $ \ptr -> do
+      let xDisplay = X11.Display $ castPtr ptr
+      let xWindow = fromIntegral winID
+      act xDisplay xWindow
+  pure ()
