@@ -34,6 +34,7 @@ import System.Log.LogPrint
 import System.Applet.DesktopVisual.View qualified as View
 import qualified GI.Gio.Interfaces.Icon as Gio
 import Data.Time.Clock.POSIX
+import qualified GI.GLib as Glib
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -123,10 +124,8 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           deskItems <- readIORef desksRef
           V.zipWithM_ (\DeskItemHandle{updateDeskItem} -> updateDeskItem) deskItems newStats
 
-        removeOldWin _window WinItemHandle{itemWindowView} = do
-          -- Reducing usage of widgetRemove - Hope GTK will make sure it is destroyed.
-          Gtk.widgetDestroy (View.winItemWidget itemWindowView)
-          pure False
+        removeOldWin _window WinItemHandle{itemWindowDestroy} = do
+          False <$ liftIO itemWindowDestroy
 
         addNewWin window () = withRunInIO $ \unlift -> do
           winRcvs <- trackWinInfo window
@@ -225,8 +224,9 @@ deskItemMake DesktopSetup{..} initStat view = liftIO $ do
           numWindows <- fromIntegral . V.length <$> readIORef curWindows
           View.deskItemCtrl view (View.DeskVisibility $ showDesktop deskStat numWindows)
 
-newtype WinItemHandle = WinItemHandle
+data WinItemHandle = WinItemHandle
   { itemWindowView :: View.WinItem -- As window can move around, its view should be separately owned.
+  , itemWindowDestroy :: IO ()
   }
 
 winItemMake ::
@@ -248,10 +248,16 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
     registers curDeskRef lastUpRef = withRunInIO $ \unlift -> do
       killChDesk <- Gtk.uiTask winDesktop changeDesktop
       killInfo <- Gtk.uiTask winInfo (unlift . updateWindow)
-      -- Frees from desktops so that it is correctly adjusted
-      Gtk.onWidgetDestroy (View.winItemWidget view) (changeDesktop (-1) >> killChDesk >> killInfo)
-      pure WinItemHandle{itemWindowView = view}
+      -- Reference will only be dropped when the parent widget gets destroyed.
+      -- In that case, program close should take care of resource reclaim.
+      pure WinItemHandle{itemWindowView = view, itemWindowDestroy = destroyWindow (killChDesk >> killInfo)}
       where
+        destroyWindow freeAct = do
+          freeAct -- Stop receiving updates
+          changeDesktop (-1) -- Frees from desktops
+          -- Release the object (replacing widgetDestroy)
+          Glib.releaseObject (View.winItemWidget view)
+
         changeDesktop newDesk = do
           oldDesk <- atomicModifyIORef' curDeskRef (newDesk,)
           when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk

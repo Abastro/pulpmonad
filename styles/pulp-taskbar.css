@@ -1,3 +1,8 @@
+/* Transparent background */
+window {
+  background-color: rgba(0, 0, 0, 0);
+}
+
 /* Copied from taffybar default */
 
 /* Top level styling */
