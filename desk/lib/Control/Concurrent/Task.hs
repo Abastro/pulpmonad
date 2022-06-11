@@ -10,7 +10,6 @@ module Control.Concurrent.Task (
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
-import Control.Exception.Enclosed (tryAny)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Foldable
@@ -40,10 +39,11 @@ taskNextWait Task{emitQueue} = atomically $ readTQueue emitQueue
 
 -- | Starts regular task with delay (ms).
 -- Runs the task once to test its validity.
+-- Note that this one only catches IO error. Any other error would be re-thrown.
 startRegular :: (MonadIO m) => Int -> IO a -> m (Maybe (Task a))
 startRegular delay action = liftIO $ do
-  try action >>= \case
-    Left (err :: IOException) -> do
+  tryIO action >>= \case
+    Left err -> do
       hPutStrLn stderr $ "Error while starting task: " <> show err
       pure Nothing
     Right val -> do
@@ -51,5 +51,7 @@ startRegular delay action = liftIO $ do
       atomically $ writeTQueue var val
       tid <- forkIO . forever $ do
         threadDelay (delay * 1000)
-        tryAny action >>= traverse_ (atomically . writeTQueue var)
+        tryIO action >>= traverse_ (atomically . writeTQueue var)
       pure (Just $ Task{killTask = killThread tid, emitQueue = var})
+  where
+    tryIO = try @IOException
