@@ -4,18 +4,6 @@ packages:
   winman/pulpmonad.cabal
 
 with-compiler: ghc-9.0.2
-allow-newer:
-    coinbase-pro:*
-
-source-repository-package
-  type: git
-  location: git@github.com:Abastro/taffybar.git
-  tag: 8217af0953336a69fba06d547527f9266aba0dd4
-
-source-repository-package
-  type: git
-  location: git@github.com:Abastro/gtk-strut.git
-  tag: 9a628963f0aea641b82878cb284e4d6202962a35
 
 package *
   ghc-options: -haddock
