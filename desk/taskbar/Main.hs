@@ -73,7 +73,7 @@ main = do
 runWithArg :: Bool -> IO ()
 runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosity = verbosity} $
   withRunInIO $ \unlift -> do
-    Just app <- Gtk.applicationNew (Just $ T.pack "pulp.Gtk.taskbar") [Gio.ApplicationFlagsNonUnique]
+    Just app <- Gtk.applicationNew (Just $ T.pack "pulp.ui.taskbar") [Gio.ApplicationFlagsNonUnique]
     Gtk.onApplicationActivate app (unlift $ activating app)
     Glib.unixSignalAdd Glib.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ Gtk.applicationQuit app
     status <- Gtk.applicationRun app Nothing

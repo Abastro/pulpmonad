@@ -73,7 +73,7 @@ ctlButton window ctl = do
 main :: IO ()
 main = do
   -- Does not care crashing here
-  Just app <- Gtk.applicationNew (Just $ T.pack "pulp.Gtk.sysctl") []
+  Just app <- Gtk.applicationNew (Just $ T.pack "pulp.ui.sysctl") []
   Gtk.onApplicationActivate app (activating app)
   status <- Gtk.applicationRun app Nothing
   when (status /= 0) $ exitWith (ExitFailure $ fromIntegral status)
