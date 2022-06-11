@@ -9,11 +9,12 @@ module Status.AppInfos (
 
 import Control.Applicative
 import Control.Concurrent.STM
-import Control.Exception.Enclosed (tryAny)
 import Control.Monad.Trans.Maybe
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import GI.Gio qualified as Gio
+import Control.Monad.IO.Class
+import Control.Exception
 
 data AppInfoData = AppInfoData
   { appId :: !T.Text
@@ -57,9 +58,11 @@ getAppInfos AppInfoCol{curAppInfo} =
       pure AppInfoData{..}
 
     getExecName appInfo = runMaybeT $ do
-      exec <- either (const empty) pure =<< tryAny (Gio.appInfoGetExecutable appInfo)
+      exec <- either (const empty) pure =<< liftIO (tryNull $ Gio.appInfoGetExecutable appInfo)
       execName : _ <- pure (words exec)
       pure (T.pack execName)
 
     getWmClass appInfo = runMaybeT $ do
-      either (const empty) pure =<< tryAny (Gio.desktopAppInfoGetStartupWmClass appInfo)
+      either (const empty) pure =<< liftIO (tryNull $ Gio.desktopAppInfoGetStartupWmClass appInfo)
+
+    tryNull = try @Gio.UnexpectedNullPointerReturn
