@@ -47,7 +47,6 @@ appWindowNew app = applicationWindowNew app >>= toWindow
 -- | Make window as transparent.
 windowSetTransparent :: MonadIO m => Window -> m ()
 windowSetTransparent window = do
-  setWidgetAppPaintable window True
   screen <- windowGetScreen window
   composited <- Gdk.screenIsComposited screen
   when composited $
