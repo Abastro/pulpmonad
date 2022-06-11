@@ -1,5 +1,6 @@
 {-# LANGUAGE MonoLocalBinds #-}
 
+-- More complicated since GTK is trying to push wayland and wayland is..meh
 module Gtk.Window (
   module GI.Gtk.Objects.Window,
   appWindowNew,
@@ -107,12 +108,12 @@ dockRect size DockSpan{..} = \case
 scaleTo :: Word32 -> Rational -> Int32
 scaleTo full ratio = floor $ fromIntegral full * ratio
 
-data DockArg = DockArg {
-  dockPos :: !DockPos
-, dockSize :: !DockSize
-, dockSpan :: !DockSpan
-, dockMonitor :: !(Maybe Int32)
-}
+data DockArg = DockArg
+  { dockPos :: !DockPos
+  , dockSize :: !DockSize
+  , dockSpan :: !DockSpan
+  , dockMonitor :: !(Maybe Int32)
+  }
 
 -- | Set window as a dock on the primary monitor.
 -- Assumes the provided size is enough, at least on the strut side.
@@ -126,8 +127,10 @@ windowSetDock window DockArg{..} = do
   -- TODO Allow not applying the strut.
 
   display <- liftIO $ maybe (fail "No default display") pure =<< Gdk.displayGetDefault
-  monitor <- liftIO $ maybe (fail "No primary monitor") pure =<< do
-    maybe (Gdk.displayGetPrimaryMonitor display) (Gdk.displayGetMonitor display) dockMonitor
+  monitor <-
+    liftIO $
+      maybe (fail "No primary monitor") pure =<< do
+        maybe (Gdk.displayGetPrimaryMonitor display) (Gdk.displayGetMonitor display) dockMonitor
   screen <- Gdk.displayGetDefaultScreen display
 
   monRect <- fromGdkRect =<< Gdk.monitorGetGeometry monitor
@@ -137,9 +140,7 @@ windowSetDock window DockArg{..} = do
   let Rectangle px py width height = scaleRationalRect monRect $ dockRect dockSizeRatio dockSpan dockPos
 
   windowSetScreen window screen
-  -- Let's not put hard limit on this. User's responsibility to get the size right :P
   widgetSetSizeRequest window (fromIntegral width) (fromIntegral height)
-  windowMove window px py
 
   -- Strut: send over "_NET_WM_STRUT_PARTIAL" on map event
   let sizeEl = (fromEnum dockPos, scaleTo fullSize dockSizeRatio)
@@ -147,12 +148,17 @@ windowSetDock window DockArg{..} = do
   let endEl = (4 + 2 * fromEnum dockPos + 1, scaleTo fullSpan $ dockEnd dockSpan)
   let strutVec = (scaleFactor *) <$> V.replicate 12 0 V.// [sizeEl, beginEl, endEl]
 
-  -- Note: On Gtk4, getting surface is easier
+  -- Note: On Gtk4, getting surface is the first
   afterWidgetMapEvent window $
     Gdk.getEventAnyWindow >=> \case
       Nothing -> pure False
       Just gdkWin -> do
-        withXWin display gdkWin $ \xDisplay xWindow -> do
+        withXDisplay display $ \xDisplay -> withXWindow gdkWin $ \xWindow -> do
+          -- Window positioning
+          let scPos = scaleFactor
+          let scDim = fromIntegral scaleFactor
+          X11.moveResizeWindow xDisplay xWindow (px * scPos) (py * scPos) (width * scDim) (height * scDim)
+          -- Strut setting
           let dat :: [CLong] = fromIntegral <$> V.toList strutVec
           strutPartial <- X11.internAtom xDisplay "_NET_WM_STRUT_PARTIAL" False
           typCardinal <- X11.internAtom xDisplay "CARDINAL" False
@@ -167,15 +173,14 @@ windowSetDock window DockArg{..} = do
         <*> (fromIntegral <$> Gdk.getRectangleWidth rect)
         <*> (fromIntegral <$> Gdk.getRectangleHeight rect)
 
-withXWin :: MonadIO m => Gdk.Display -> Gdk.Window -> (X11.Display -> X11.Window -> IO ()) -> m ()
-withXWin gdkDisp gdkWin act = do
-  runMaybeT $ do
-    x11Disp <- MaybeT . liftIO $ Glib.castTo GdkX11.X11Display gdkDisp
-    x11Win <- MaybeT . liftIO $ Glib.castTo GdkX11.X11Window gdkWin
-    dispPtr <- GdkX11.x11DisplayGetXdisplay x11Disp
-    winID <- GdkX11.x11WindowGetXid x11Win
-    liftIO . withManagedPtr dispPtr $ \ptr -> do
-      let xDisplay = X11.Display $ castPtr ptr
-      let xWindow = fromIntegral winID
-      act xDisplay xWindow
-  pure ()
+withXDisplay :: Gdk.Display -> (X11.Display -> IO ()) -> IO ()
+withXDisplay gdkDisp act = void . runMaybeT $ do
+  x11Disp <- MaybeT $ Glib.castTo GdkX11.X11Display gdkDisp
+  dispPtr <- GdkX11.x11DisplayGetXdisplay x11Disp
+  liftIO . withManagedPtr dispPtr $ \ptr -> act (X11.Display $ castPtr ptr)
+
+withXWindow :: Gdk.Window -> (X11.Window -> IO ()) -> IO ()
+withXWindow gdkWin act = void . runMaybeT $ do
+  x11Win <- MaybeT $ Glib.castTo GdkX11.X11Window gdkWin
+  winID <- GdkX11.x11WindowGetXid x11Win
+  liftIO $ act (fromIntegral winID)
