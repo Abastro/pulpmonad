@@ -63,13 +63,14 @@ mainboardDisplay iconSize mainWidth = do
   ev <$ Gtk.widgetShowAll ev
   where
     memIcon task = do
+      -- TODO Images to represent memory temp changes
       -- TODO Identify the transparency issue of the image
       -- MAYBE Image itself providing location of bar?
       let ramImg = View.imageStaticNew iconSize True $ View.ImgSName (T.pack "ram-000")
       hack <- ramImg
       fg <- ramImg
       let barRect = RationalRect (14 % 32) (8 % 32) (18 % 32) (24 % 32)
-      bar <- View.barNew barRect
+      bar <- View.barNew Gtk.OrientationVertical barRect
       mem <- Gtk.overlayed hack [View.barWidget bar, fg]
       Gtk.widgetSetName mem (T.pack "mem")
       liftIO $ do
@@ -80,7 +81,7 @@ mainboardDisplay iconSize mainWidth = do
     cpuIcon (taskUse, taskTemp) = do
       fg <- View.imageDynNew iconSize True
       let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
-      bar <- View.barNew barRect
+      bar <- View.barNew Gtk.OrientationVertical barRect
       cpu <- Gtk.overlayed (View.imageDynWidget fg) [View.barWidget bar]
       Gtk.widgetSetName cpu (T.pack "cpu")
       liftIO $ do

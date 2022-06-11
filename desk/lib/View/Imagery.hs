@@ -76,8 +76,8 @@ barWidget :: Bar -> Gtk.Widget
 barWidget Bar{barWid} = barWid
 
 -- | Bar with initial fill of 0.
-barNew :: MonadIO m => RationalRect -> m Bar
-barNew relative = do
+barNew :: MonadIO m => Gtk.Orientation -> RationalRect -> m Bar
+barNew orient relative = do
   barWid <- Gtk.toWidget =<< Gtk.imageNew -- Image is the most benign
   -- Cannot extend the class from haskell side, soo..
   Gtk.widgetGetStyleContext barWid >>= flip Gtk.styleContextAddClass (T.pack "bar")
@@ -91,11 +91,17 @@ barNew relative = do
   pure Bar{..}
   where
     drawBar area fill = do
-      barColor <- (`Gtk.styleContextGetColor` [Gtk.StateFlagsNormal]) =<< Gtk.widgetGetStyleContext area
+      barColor <- do
+        ctxt <- Gtk.widgetGetStyleContext area
+        Gtk.styleContextGetColor ctxt =<< Gtk.styleContextGetState ctxt
       red <- Gdk.getRGBARed barColor
       green <- Gdk.getRGBAGreen barColor
       blue <- Gdk.getRGBABlue barColor
       alpha <- Gdk.getRGBAAlpha barColor
+      let (fillX, fillY) = case orient of
+            Gtk.OrientationHorizontal -> (fill, 1.0)
+            Gtk.OrientationVertical -> (1.0, fill)
+            _ -> (1.0, 1.0)
 
       w <- Gtk.widgetGetAllocatedWidth area
       h <- Gtk.widgetGetAllocatedHeight area
@@ -105,7 +111,7 @@ barNew relative = do
           right = realToFrac r * realToFrac w
           down = realToFrac d * realToFrac h
       C.setSourceRGBA red green blue alpha
-      C.rectangle left down (right - left) ((top - down) * fill)
+      C.rectangle left down ((right - left) * fillX) ((top - down) * fillY)
       C.fill
 
 barSetFill :: MonadIO m => Bar -> Double -> m ()
