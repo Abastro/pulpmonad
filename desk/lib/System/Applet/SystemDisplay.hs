@@ -17,6 +17,7 @@ import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.Run (safeSpawn)
 
 -- TODO "Symbolic" seems to change the style
+-- TODO Warning colors when too full
 
 -- | Battery status display.
 batDisplay :: MonadIO m => Gtk.IconSize -> m Gtk.Widget

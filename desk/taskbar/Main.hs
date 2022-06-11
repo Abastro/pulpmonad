@@ -114,16 +114,10 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     leftBox = do
       box <- Gtk.boxNew Gtk.OrientationHorizontal 0
       Gtk.widgetSetName box (T.pack "pulp-statusbar")
-      Gtk.widgetGetStyleContext box >>= flip Gtk.styleContextAddClass (T.pack "statusbar-box")
       powerIcon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-shutdown-symbolic")
       traverse_ (addToBegin box)
         =<< sequenceA
           [Gtk.buttonNewWith (Just powerIcon) runPulpCtl]
-      traverse_ (addToEnd box)
-        =<< sequenceA
-          [ App.mainboardDisplay Gtk.IconSizeLargeToolbar 42
-          , App.batDisplay Gtk.IconSizeLargeToolbar
-          ]
       Gtk.toWidget box
       where
         runPulpCtl = do
@@ -143,6 +137,11 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
       Gtk.widgetSetName box (T.pack "pulp-taskbar")
       Gtk.boxSetCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
       traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
+      traverse_ (addToEnd box)
+        =<< sequenceA
+          [ App.mainboardDisplay Gtk.IconSizeLargeToolbar 42
+          , App.batDisplay Gtk.IconSizeLargeToolbar
+          ]
       Gtk.toWidget box
       where
         mayLabel n = maybe n T.pack $ workspaceMaps M.!? T.unpack n

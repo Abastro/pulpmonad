@@ -14,6 +14,7 @@ module View.Imagery (
 ) where
 
 import Control.Concurrent.STM
+import Control.Monad
 import Control.Monad.IO.Class
 import Data.Int
 import Data.Text qualified as T
@@ -24,10 +25,9 @@ import GI.GdkPixbuf.Objects.Pixbuf qualified as Gdk
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gtk.Objects.Image qualified as Gtk
 import Gtk.Commons qualified as Gtk
+import Gtk.Pixbufs qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import XMonad.StackSet (RationalRect (..))
-import qualified Gtk.Pixbufs as Gtk
-import Control.Monad
 
 -- | Setting image for Image widget
 data ImageSet = ImgSName T.Text | ImgSGIcon Gio.Icon | ImgSPixbuf Gdk.Pixbuf
@@ -66,7 +66,7 @@ imageStaticNew size fixSize sets = do
 
 data BarColor = BarColor !Double !Double !Double
 
--- MAYBE Bar direction?
+-- MAYBE Use ProgressBar instead
 data Bar = Bar
   { barWid :: !Gtk.Widget
   , barFill :: !(TVar Double)
