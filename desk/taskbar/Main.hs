@@ -56,8 +56,6 @@ taskbarWindow app BarWinArgs{..} content = do
   Gtk.windowSetTitle window barTitle
   Gtk.windowSetDock window barDockPos barDockSize barDockSpan
   Gtk.windowSetKeepBelow window True
-  Gtk.windowSetSkipPagerHint window True
-  Gtk.windowSetSkipTaskbarHint window True
   Gtk.windowSetTransparent window
 
   Gtk.containerAdd window content
