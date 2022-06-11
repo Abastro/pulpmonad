@@ -2,6 +2,7 @@ module Main (main) where
 
 import Defines
 import XMonad
+import XMonad.Actions.GridSelect
 import XMonad.Actions.MouseResize (mouseResize)
 import XMonad.Config.Desktop (desktopConfig)
 import XMonad.Config.Gnome (gnomeRegister)
@@ -18,13 +19,13 @@ import XMonad.Layout.Maximize
 import XMonad.Layout.Minimize
 import XMonad.Layout.NoBorders
 import XMonad.Layout.PerWorkspace
+import XMonad.Layout.Renamed
 import XMonad.Layout.Tabbed
 import XMonad.StackSet (shift)
 import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
-import XMonad.Actions.GridSelect
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
@@ -53,15 +54,15 @@ main = do
 
   xmonad . ewmhFullscreen . pagerHints . withSB pulpBar $
     cfg
-      { focusedBorderColor = "#eeaaaa",
-        normalBorderColor = "#cccccc",
-        workspaces = mySpaces,
-        terminal = "gnome-terminal",
-        startupHook = onStart <> startupHook cfg,
-        manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads,
-        layoutHook = lessBorders (Combine Union Never OnlyFloat) myLayout,
-        handleEventHook = handleEventHook cfg <> minimizeEventHook,
-        modMask = mod4Mask -- Super key
+      { focusedBorderColor = "#eeaaaa"
+      , normalBorderColor = "#cccccc"
+      , workspaces = mySpaces
+      , terminal = "gnome-terminal"
+      , startupHook = onStart <> startupHook cfg
+      , manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads
+      , layoutHook = lessBorders (Combine Union Never OnlyFloat) myLayout
+      , handleEventHook = handleEventHook cfg <> minimizeEventHook
+      , modMask = mod4Mask -- Super key
       }
       `additionalMouseBindings` mouseMove
       `additionalKeysP` concat [keysUtility xmDir, keysBasic xmCache, keysSpecial, keysScreenshot]
@@ -72,24 +73,24 @@ main = do
     mouseMove =
       [((controlMask, middleClick), \w -> runQuery isFloating w --> (focus w >> kill))]
     keysUtility xmDir =
-      [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "xmbindings.png"]),
-        ("M-d", safeSpawnProg "nautilus"),
-        ("M-M1-t", namedScratchpadAction scratchpads (name scTerm))
+      [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "xmbindings.png"])
+      , ("M-d", safeSpawnProg "nautilus")
+      , ("M-M1-t", namedScratchpadAction scratchpads (name scTerm))
       ]
     keysBasic xmCache =
-      [ ("M-p", safeSpawnProg "synapse"),
-        ("<XF86MonBrightnessUp>", safeSpawn "light" ["-A", "5"]),
-        ("<XF86MonBrightnessDown>", safeSpawn "light" ["-U", "5"]),
-        ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "+5%"]),
-        ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "-5%"]),
-        ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"]),
-        ("M-S-x", safeSpawnProg (xmCache </> "pulp-sysctl")),
-        ("M-s", goToSelected gotoCfg)
+      [ ("M-p", safeSpawnProg "synapse")
+      , ("<XF86MonBrightnessUp>", safeSpawn "light" ["-A", "5"])
+      , ("<XF86MonBrightnessDown>", safeSpawn "light" ["-U", "5"])
+      , ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "+5%"])
+      , ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "-5%"])
+      , ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
+      , ("M-S-x", safeSpawnProg (xmCache </> "pulp-sysctl"))
+      , ("M-s", goToSelected gotoCfg)
       ]
     keysScreenshot =
-      [ ("<Print>", spawn "sleep 0.2; gnome-screenshot"),
-        ("M1-<Print>", spawn "sleep 0.2; gnome-screenshot -w"),
-        ("C-<Print>", spawn "gnome-screenshot -i")
+      [ ("<Print>", spawn "sleep 0.2; gnome-screenshot")
+      , ("M1-<Print>", spawn "sleep 0.2; gnome-screenshot -w")
+      , ("C-<Print>", spawn "gnome-screenshot -i")
       ]
     keysSpecial =
       [("M-M1-d", debugStack)]
@@ -107,32 +108,34 @@ scTerm =
 scratchpads = [scTerm]
 
 myLayout =
-  mouseResize . avoidStruts . minimize . maximize
-    . onWorkspaces [code, game] myTab
-    $ tall ||| wide ||| myTab
+  mouseResize . avoidStruts
+    . onWorkspaces [code, game] mTab
+    $ mTall ||| mWide ||| mTab
   where
-    myTabCfg = (theme adwaitaDarkTheme) {decoHeight = 50}
+    mTall = renamed [Replace "Tall"] $ minimize . maximize $ tall
+    mWide = renamed [Replace "Wide"] $ minimize . maximize $ wide
+    mTab = renamed [Replace "Tabs"] $ minimize . maximize $ tabbed shrinkText myTabCfg
+
+    myTabCfg = (theme adwaitaDarkTheme){decoHeight = 50}
     tall = Tall 1 (3 / 100) (1 / 2)
     wide = Mirror (Tall 1 (3 / 100) (1 / 2))
-    -- Tabbed Left is not great for now. Gotta work my own later
-    myTab = tabbed shrinkText myTabCfg
 
 staticManage =
   composeAll
-    [ isDialog --> doCenterFloat,
-      isSplash --> doIgnore,
-      isTooltip --> doIgnore,
-      className =? "Gimp" --> doF (shift pics),
-      role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink,
-      className =? "Inkscape" --> doF (shift pics),
-      className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE,
-      className =? "Soffice" <&&> isFullscreen --> doFullFloat,
-      className =? "Gnome-calculator" --> doCenterFloat,
-      className =? "Gnome-system-monitor" --> doCenterFloat,
-      className =? "Gnome-control-center" --> doCenterFloat,
-      className =? "term-float" --> doCenterFloat,
-      className =? "Eog" --> doCenterFloat,
-      className =? "Steam" --> doF (shift game),
-      className =? "kakaotalk.exe"
+    [ isDialog --> doCenterFloat
+    , isSplash --> doIgnore
+    , isTooltip --> doIgnore
+    , className =? "Gimp" --> doF (shift pics)
+    , role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink
+    , className =? "Inkscape" --> doF (shift pics)
+    , className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE
+    , className =? "Soffice" <&&> isFullscreen --> doFullFloat
+    , className =? "Gnome-calculator" --> doCenterFloat
+    , className =? "Gnome-system-monitor" --> doCenterFloat
+    , className =? "Gnome-control-center" --> doCenterFloat
+    , className =? "term-float" --> doCenterFloat
+    , className =? "Eog" --> doCenterFloat
+    , className =? "Steam" --> doF (shift game)
+    , className =? "kakaotalk.exe"
         <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doHideIgnore
     ]

@@ -19,6 +19,7 @@ import Gtk.Window qualified as Gtk
 import Status.X11.WMStatus (DesktopStat (..))
 import System.Applet.Clocks qualified as App
 import System.Applet.DesktopVisual qualified as App
+import System.Applet.Layout qualified as App
 import System.Applet.SysTray qualified as App
 import System.Applet.SystemDisplay qualified as App
 import System.Environment
@@ -29,7 +30,6 @@ import System.Pulp.PulpEnv
 import View.Imagery qualified as View
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run (safeSpawn)
-import qualified System.Applet.Layout as App
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -119,6 +119,8 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
       traverse_ (addToBegin box)
         =<< sequenceA
           [Gtk.buttonNewWith (Just powerIcon) runPulpCtl]
+      traverse_ (addToEnd box)
+        =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
       Gtk.toWidget box
       where
         runPulpCtl = do
@@ -139,8 +141,7 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
       Gtk.boxSetCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
       traverse_ (addToBegin box)
         =<< sequenceA
-          [ App.textClock "%b %_d (%a)\n%H:%M %p"
-          , App.layout App.LayoutArg{ layoutPrettyName = id }
+          [ App.layout App.LayoutArg{layoutPrettyName = id}
           ]
       traverse_ (addToEnd box)
         =<< sequenceA
