@@ -1,6 +1,6 @@
 /* Transparent background */
 window {
-  background-color: rgba(0, 0, 0, 0);
+	background-color: rgba(0, 0, 0, 0);
 }
 
 /* Copied from taffybar default */
@@ -74,7 +74,7 @@ button:hover {
 .desktop-label {
 	padding-left: 4px;
 	padding-right: 2px;
-	font-family: "Font Awesome 6 Free Solid";
+	font-family: "Font Awesome 6 Free Solid", sans-serif;
 	font-size: 10pt;
 }
 
@@ -109,11 +109,16 @@ button:hover {
 #clock_text label {
 	font-family: "Ubuntu", sans-serif;
 	font-size: 8pt;
+	margin-left: 3px;
+	margin-right: 3px;
+}
+
+#window-layout {
 	margin-left: 5px;
+	margin-right: 5px;
 }
 
 #window-layout label {
-	font-family: "Ubuntu", sans-serif;
-	font-size: 8pt;
-	margin-left: 5px;
+	font-family: "Font Awesome 6 Free Solid", sans-serif;
+	font-size: 10pt;
 }

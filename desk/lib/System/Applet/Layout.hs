@@ -5,7 +5,6 @@ import Control.Monad.IO.Class
 import Data.Default.Class
 import Data.Text qualified as T
 import GI.Gdk.Structs.EventButton qualified as Gdk
-import GI.Gtk.Objects.EventBox qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
 import Gtk.Task qualified as Gtk
@@ -79,16 +78,16 @@ data LayoutView = LayoutView
 layoutViewNew :: MonadIO m => m LayoutView
 layoutViewNew = do
   layoutLbl <- View.labelDynNew def
-  evBox <- Gtk.eventBoxNew
-  Gtk.containerAdd evBox (View.labelDynWidget layoutLbl)
+  -- Button to show the decoration
+  btn <- Gtk.buttonNewWith (Just $ View.labelDynWidget layoutLbl) $ pure ()
 
-  layoutWid <- Gtk.toWidget evBox
+  layoutWid <- Gtk.toWidget btn
   Gtk.widgetSetName layoutWid (T.pack "window-layout")
   pure LayoutView{..}
 
 layoutSetAction :: MonadIO m => LayoutView -> IO () -> IO () -> m ()
 layoutSetAction LayoutView{layoutWid} leftClick rightClick = do
-  Gtk.onWidgetButtonPressEvent layoutWid $ \event -> do
+  Gtk.onWidgetButtonReleaseEvent layoutWid $ \event -> do
     Gdk.getEventButtonButton event >>= \case
       1 -> True <$ leftClick
       3 -> True <$ rightClick

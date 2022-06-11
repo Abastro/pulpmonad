@@ -141,7 +141,7 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
       Gtk.boxSetCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
       traverse_ (addToBegin box)
         =<< sequenceA
-          [ App.layout App.LayoutArg{layoutPrettyName = id}
+          [ App.layout App.LayoutArg{layoutPrettyName = (T.pack "\xf0ce " <>)}
           ]
       traverse_ (addToEnd box)
         =<< sequenceA
