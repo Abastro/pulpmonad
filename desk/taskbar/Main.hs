@@ -54,7 +54,7 @@ taskbarWindow :: Gtk.Application -> BarWinArgs -> Gtk.Widget -> PulpIO Gtk.Windo
 taskbarWindow app BarWinArgs{..} content = do
   window <- Gtk.windowNew Gtk.WindowTypeToplevel
   Gtk.windowSetTitle window barTitle
-  Gtk.windowSetDock window barDockPos barDockSize barDockSpan
+  Gtk.windowSetDock window $ Gtk.DockArg barDockPos barDockSize barDockSpan Nothing
   Gtk.windowSetKeepBelow window True
   Gtk.windowSetTransparent window
 

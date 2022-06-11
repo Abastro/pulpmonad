@@ -8,6 +8,7 @@ module Gtk.Window (
   DockPos (..),
   DockSize (..),
   DockSpan (..),
+  DockArg (..),
   windowSetDock,
 ) where
 
@@ -106,28 +107,34 @@ dockRect size DockSpan{..} = \case
 scaleTo :: Word32 -> Rational -> Int32
 scaleTo full ratio = floor $ fromIntegral full * ratio
 
+data DockArg = DockArg {
+  dockPos :: !DockPos
+, dockSize :: !DockSize
+, dockSpan :: !DockSpan
+, dockMonitor :: !(Maybe Int32)
+}
+
 -- | Set window as a dock on the primary monitor.
 -- Assumes the provided size is enough, at least on the strut side.
 -- Can fail when there is no default display / primary montior.
---
--- TODO Handle multi-monitor setup
--- TODO Check input (or not)
--- TODO Perhaps allow not applying the strut
-windowSetDock :: (MonadIO m) => Window -> DockPos -> DockSize -> DockSpan -> m ()
-windowSetDock window pos size span@DockSpan{..} = do
+-- NB: Input is not checked
+windowSetDock :: (MonadIO m) => Window -> DockArg -> m ()
+windowSetDock window DockArg{..} = do
   windowSetTypeHint window WindowTypeHintDock
   windowSetSkipPagerHint window True
   windowSetSkipTaskbarHint window True
+  -- TODO Allow not applying the strut.
 
   display <- liftIO $ maybe (fail "No default display") pure =<< Gdk.displayGetDefault
-  monitor <- liftIO $ maybe (fail "No primary monitor") pure =<< Gdk.displayGetPrimaryMonitor display
+  monitor <- liftIO $ maybe (fail "No primary monitor") pure =<< do
+    maybe (Gdk.displayGetPrimaryMonitor display) (Gdk.displayGetMonitor display) dockMonitor
   screen <- Gdk.displayGetDefaultScreen display
 
   monRect <- fromGdkRect =<< Gdk.monitorGetGeometry monitor
   scaleFactor <- Gdk.monitorGetScaleFactor monitor
-  let (fullSize, fullSpan) = fullSizeSpan monRect pos
-  let dockSize = sizeRatio fullSize size
-  let Rectangle px py width height = scaleRationalRect monRect $ dockRect dockSize span pos
+  let (fullSize, fullSpan) = fullSizeSpan monRect dockPos
+  let dockSizeRatio = sizeRatio fullSize dockSize
+  let Rectangle px py width height = scaleRationalRect monRect $ dockRect dockSizeRatio dockSpan dockPos
 
   windowSetScreen window screen
   -- Let's not put hard limit on this. User's responsibility to get the size right :P
@@ -135,11 +142,12 @@ windowSetDock window pos size span@DockSpan{..} = do
   windowMove window px py
 
   -- Strut: send over "_NET_WM_STRUT_PARTIAL" on map event
-  let sizeEl = (fromEnum pos, scaleTo fullSize dockSize)
-  let beginEl = (4 + 2 * fromEnum pos, scaleTo fullSpan dockBegin)
-  let endEl = (4 + 2 * fromEnum pos + 1, scaleTo fullSpan dockEnd)
+  let sizeEl = (fromEnum dockPos, scaleTo fullSize dockSizeRatio)
+  let beginEl = (4 + 2 * fromEnum dockPos, scaleTo fullSpan $ dockBegin dockSpan)
+  let endEl = (4 + 2 * fromEnum dockPos + 1, scaleTo fullSpan $ dockEnd dockSpan)
   let strutVec = (scaleFactor *) <$> V.replicate 12 0 V.// [sizeEl, beginEl, endEl]
 
+  -- Note: On Gtk4, getting surface is easier
   afterWidgetMapEvent window $
     Gdk.getEventAnyWindow >=> \case
       Nothing -> pure False
