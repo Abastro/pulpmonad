@@ -29,6 +29,7 @@ import System.Pulp.PulpEnv
 import View.Imagery qualified as View
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 import XMonad.Util.Run (safeSpawn)
+import qualified System.Applet.Layout as App
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -136,7 +137,11 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
       box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       Gtk.widgetSetName box (T.pack "pulp-taskbar")
       Gtk.boxSetCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
-      traverse_ (addToBegin box) =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
+      traverse_ (addToBegin box)
+        =<< sequenceA
+          [ App.textClock "%b %_d (%a)\n%H:%M %p"
+          , App.layout App.LayoutArg{ layoutPrettyName = id }
+          ]
       traverse_ (addToEnd box)
         =<< sequenceA
           [ App.mainboardDisplay Gtk.IconSizeLargeToolbar 42
@@ -168,7 +173,7 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     rightBox = do
       box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       Gtk.widgetSetName box (T.pack "pulp-systemtray")
-      liftIO $ addToEnd box =<< App.systemTray sysTrayArgs
+      addToEnd box =<< liftIO (App.systemTray sysTrayArgs)
       Gtk.toWidget box
       where
         sysTrayArgs =

@@ -17,6 +17,9 @@ module Status.X11.WMStatus (
   DesktopStat (..),
   getDesktopStat,
   reqCurrentDesktop,
+  getDesktopLayout,
+  LayoutCmd (..),
+  reqDesktopLayout,
   getAllWindows,
   getActiveWindow,
   reqActiveWindow,
@@ -49,9 +52,9 @@ import Foreign.C.Types
 import Foreign.Storable
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
+import Gtk.Pixbufs qualified as Gtk
 import Status.X11.XHandle
 import Text.Printf
-import Gtk.Pixbufs qualified as Gtk
 
 asUtf8 :: MonadError T.Text m => BS.ByteString -> m T.Text
 asUtf8 = either (throwError . T.pack . show) pure . T.decodeUtf8'
@@ -205,6 +208,23 @@ reqCurrentDesktop = do
     setEventType event clientMessage
     setClientMessageEvent' event root typCurDesk 32 [fromIntegral idx, fromIntegral currentTime]
 
+getDesktopLayout :: XPQuery T.Text
+getDesktopLayout = queryProp @T.Text "_XMONAD_CURRENT_LAYOUT"
+
+data LayoutCmd = NextLayout | ResetLayout
+layoutDat = \case
+  NextLayout -> 1
+  ResetLayout -> -1
+
+-- | Request setting desktop layout. Send 1 for next layout, -1 for default layout.
+reqDesktopLayout :: XIO () (LayoutCmd -> IO ())
+reqDesktopLayout = do
+  root <- xWindow
+  typLayout <- xAtom "_XMONAD_CURRENT_LAYOUT"
+  xSendTo structureNotifyMask root $ \event cmd -> liftIO $ do
+    setEventType event clientMessage
+    setClientMessageEvent' event root typLayout 32 [layoutDat cmd, fromIntegral currentTime]
+
 -- | Get all windows.
 getAllWindows :: XPQuery (V.Vector Window)
 getAllWindows = V.fromList <$> queryProp @[Window] "_NET_CLIENT_LIST"
@@ -260,7 +280,7 @@ instance XPropType CLong [Gtk.RawIcon] where
   parseProp = \case
     [] -> pure []
     width : height : xs
-      | iconWidth  <- fromIntegral width
+      | iconWidth <- fromIntegral width
         , iconHeight <- fromIntegral height
         , (dat, rem) <- splitAt (fromIntegral $ iconWidth * iconHeight) xs -> do
         let iconColors = LBS.toStrict . BS.toLazyByteString $ foldMap (BS.word32BE . fromIntegral) dat

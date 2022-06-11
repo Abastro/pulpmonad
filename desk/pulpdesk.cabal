@@ -122,6 +122,7 @@ library
 
     System.Applet.Clocks
     System.Applet.SystemDisplay
+    System.Applet.Layout
 
     System.Applet.DesktopVisual.View
     System.Applet.DesktopVisual.Handle
