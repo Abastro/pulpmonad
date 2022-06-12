@@ -60,6 +60,7 @@ taskbarWindow app BarWinArgs{..} content = do
   Gtk.windowSetTransparent window
 
   Gtk.containerAdd window content
+  Gtk.widgetGetStyleContext content >>= flip Gtk.styleContextAddClass (T.pack "pulp-bar")
 
   Gtk.applicationAddWindow app window
   pure window
@@ -107,7 +108,7 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     leftArgs =
       BarWinArgs
         { barDockPos = dockPos
-        , barDockSize = Gtk.AbsoluteSize 36
+        , barDockSize = Gtk.AbsoluteSize 32
         , barDockSpan = Gtk.DockSpan 0 (1 / 6)
         , barTitle = T.pack "Pulp Statusbar"
         }
@@ -130,7 +131,7 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     centerArgs =
       BarWinArgs
         { barDockPos = dockPos
-        , barDockSize = Gtk.AbsoluteSize 40
+        , barDockSize = Gtk.AbsoluteSize 36
         , barDockSpan = Gtk.DockSpan (1 / 6) (5 / 6)
         , barTitle = T.pack "Pulp Taskbar"
         }
@@ -166,7 +167,7 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     rightArgs =
       BarWinArgs
         { barDockPos = dockPos
-        , barDockSize = Gtk.AbsoluteSize 36
+        , barDockSize = Gtk.AbsoluteSize 32
         , barDockSpan = Gtk.DockSpan (5 / 6) 1
         , barTitle = T.pack "Pulp Systemtray"
         }
