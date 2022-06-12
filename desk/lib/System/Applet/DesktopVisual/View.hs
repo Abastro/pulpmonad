@@ -3,7 +3,6 @@ module System.Applet.DesktopVisual.View (
   DeskVisual,
   DeskVisualOp (..),
   deskVisualWidget,
-  deskVisualItemAt,
   deskVisualNew,
   deskVisualCtrl,
   DeskItem,
@@ -54,13 +53,6 @@ data DeskVisualOp
 
 deskVisualWidget :: DeskVisual -> Gtk.Widget
 deskVisualWidget DeskVisual{deskVisualWid} = deskVisualWid
-
--- TODO Remove itemAt
-{-# DEPRECATED deskVisualItemAt "TBDel" #-}
-deskVisualItemAt :: MonadIO m => DeskVisual -> Int -> m (Maybe DeskItem)
-deskVisualItemAt DeskVisual{..} idx = do
-  deskItems <- liftIO $ readIORef deskVisualItems
-  pure $ deskItems V.!? idx
 
 deskVisualNew :: MonadIO m => m DeskVisual
 deskVisualNew = do
