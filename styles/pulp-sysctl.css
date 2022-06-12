@@ -4,9 +4,9 @@ window {
 
 #pulp-sysctl {
   padding: 10px 15px;
-  border: 10px inset rgba(56, 32, 72, 0.7);
+  border: 10px inset rgba(40, 16, 56, 0.7);
   border-radius: 20px;
-  background-color: rgba(96, 64, 120, 0.7);
+  background-color: rgba(84, 56, 108, 0.7);
 }
 
 button {
@@ -20,13 +20,13 @@ button:focus {
 }
 
 .btn-sys {
-  border-color: rgb(120, 100, 140);
-  background-color: rgb(140, 120, 160);
+  border-color: rgb(100, 80, 120);
+  background-color: rgb(120, 100, 140);
 }
 
 .btn-logout {
-  border-color: rgb(150, 120, 80);
-  background-color: rgb(180, 150, 100);
+  border-color: rgb(140, 120, 60);
+  background-color: rgb(160, 140, 90);
 }
 
 .btn-reboot {
@@ -35,6 +35,6 @@ button:focus {
 }
 
 .btn-poweroff {
-  border-color: rgb(135, 60, 60);
-  background-color: rgb(180, 80, 80);
+  border-color: rgb(120, 60, 60);
+  background-color: rgb(160, 80, 80);
 }
