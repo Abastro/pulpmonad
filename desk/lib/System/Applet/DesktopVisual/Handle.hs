@@ -127,12 +127,12 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
         removeOldWin _window WinItemHandle{itemWindowDestroy} = do
           False <$ liftIO itemWindowDestroy
 
-        addNewWin window () = withRunInIO $ \unlift -> do
-          winRcvs <- trackWinInfo window
+        addNewWin window () = withRunInIO $ \unlift -> runMaybeT $ do
+          winRcvs <- MaybeT $ trackWinInfo window
           winItemView <- View.winItemNew windowIconSize $ reqActivate window
           let getIcon = winGetIcon window
           let switcher item x y = unlift (winSwitch window item x y)
-          unlift $ winItemMake winSetup appCol getIcon switcher winRcvs winItemView
+          liftIO . unlift $ winItemMake winSetup appCol getIcon switcher winRcvs winItemView
 
         updateWinList :: (MonadUnliftIO m, MonadLog m) => V.Vector Window -> m ()
         updateWinList windows = withRunInIO $ \unlift -> do
@@ -143,7 +143,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
             unlift $
               M.mergeA
                 (M.filterAMissing removeOldWin)
-                (M.traverseMissing addNewWin)
+                (M.traverseMaybeMissing addNewWin)
                 (M.zipWithMatched $ \_ handle _ -> handle)
                 oldWinMap
                 newWinMap
@@ -300,7 +300,7 @@ data DeskVisRcvs = DeskVisRcvs
   { desktopStats :: Task (V.Vector DesktopStat)
   , windowsList :: Task (V.Vector Window)
   , windowActive :: Task (Maybe Window)
-  , trackWinInfo :: Window -> IO PerWinRcvs
+  , trackWinInfo :: Window -> IO (Maybe PerWinRcvs)
   , reqActivate :: Window -> IO ()
   , reqToDesktop :: Int -> IO ()
   , winGetIcon :: Window -> GetXIcon
@@ -323,9 +323,10 @@ deskVisInitiate = do
   windowsList <- errorAct $ watchXQuery rootWin getAllWindows pure
   windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
 
-  trackWinInfo <- xQueryOnce $ \window -> do
-    winDesktop <- errorAct $ watchXQuery window getWindowDesktop pure
-    winInfo <- errorAct $ watchXQuery window getWindowInfo pure
+  -- MAYBE log warning when window without the info is detected?
+  trackWinInfo <- xQueryOnce $ \window -> fmap eitherMay . runExceptT $ do
+    winDesktop <- ExceptT $ watchXQuery window getWindowDesktop pure
+    winInfo <- ExceptT $ watchXQuery window getWindowInfo pure
     pure PerWinRcvs{..}
 
   reqActivate <- reqActiveWindow True
@@ -336,6 +337,7 @@ deskVisInitiate = do
 
   pure DeskVisRcvs{..}
   where
+    eitherMay = either (const Nothing) Just
     onError window err = do
       liftIO (fail $ formatXQError window err)
     errorAct act = do

@@ -9,7 +9,7 @@ module Status.X11.XHandle (
   startXIO,
   XHandling,
   runXHandling,
-  MonadXHand(..),
+  MonadXHand (..),
   xQueryOnce,
   xListenTo,
   xSendTo,
@@ -221,6 +221,7 @@ xHandling = withRunInIO $ \unliftX -> pure $
 -- | Take X query commands, give the action to query the result.
 -- The query will be performed in the X thread.
 -- WARNING: the returned action can block while querying the result.
+-- The `query` should not throw.
 xQueryOnce :: (a -> XIO r b) -> XIO r (a -> IO b)
 xQueryOnce query = do
   hand <- xHandling
