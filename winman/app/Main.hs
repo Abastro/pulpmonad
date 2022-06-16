@@ -42,13 +42,13 @@ _leftClick, _rightClick, middleClick :: Button
 main :: IO ()
 main = do
   dirs <- getDirectories
-  let xmDir = cfgDir dirs
+  let xmData = dataDir dirs
       xmCache = cacheDir dirs
 
       onStart = do
         setWMName "LG3D"
         gnomeRegister -- Registers xmonad with gnome
-        safeSpawn "feh" ["--bg-scale", xmDir </> "asset" </> "background.jpg"]
+        safeSpawn "feh" ["--bg-scale", xmData </> "asset" </> "background.jpg"]
 
       pulpBar = statusBarGeneric (xmCache </> "pulp-taskbar") mempty
 
@@ -65,15 +65,15 @@ main = do
       , modMask = mod4Mask -- Super key
       }
       `additionalMouseBindings` mouseMove
-      `additionalKeysP` concat [keysUtility xmDir, keysBasic xmCache, keysSpecial, keysScreenshot]
+      `additionalKeysP` concat [keysUtility xmData, keysBasic xmCache, keysSpecial, keysScreenshot]
       `removeKeysP` keysRemoved
   where
     cfg = ewmh desktopConfig
     -- MAYBE keybindings to cfg file
     mouseMove =
       [((controlMask, middleClick), \w -> runQuery isFloating w --> (focus w >> kill))]
-    keysUtility xmDir =
-      [ ("M-S-/", safeSpawn "eog" [xmDir </> "asset" </> "xmbindings.png"])
+    keysUtility xmData =
+      [ ("M-S-/", safeSpawn "eog" [xmData </> "asset" </> "xmbindings.png"])
       , ("M-d", safeSpawnProg "nautilus")
       , ("M-M1-t", namedScratchpadAction scratchpads (name scTerm))
       ]

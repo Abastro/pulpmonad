@@ -81,7 +81,7 @@ main = do
     cssProv :: IO Gtk.CssProvider
     cssProv = do
       css <- Gtk.cssProviderNew
-      cfgDir <- getEnv "XMONAD_CONFIG_DIR"
+      cfgDir <- getEnv "XMONAD_DATA_DIR"
       Gtk.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-sysctl.css")
       pure css
 

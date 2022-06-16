@@ -85,13 +85,13 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     cssProv :: IO Gtk.CssProvider
     cssProv = do
       css <- Gtk.cssProviderNew
-      cfgDir <- liftIO $ getEnv "XMONAD_CONFIG_DIR"
+      cfgDir <- liftIO $ getEnv "XMONAD_DATA_DIR"
       Gtk.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-taskbar.css")
       pure css
 
     iconThemeSetup :: IO ()
     iconThemeSetup = do
-      mainDir <- getEnv "XMONAD_CONFIG_DIR"
+      mainDir <- getEnv "XMONAD_DATA_DIR"
       defaultTheme <- Gtk.iconThemeGetDefault
       Gtk.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
 
