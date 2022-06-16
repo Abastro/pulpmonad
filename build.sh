@@ -4,6 +4,7 @@ barid="pulp-taskbar"
 
 config="$XMONAD_CONFIG_DIR"
 cache="$XMONAD_CACHE_DIR"
+data="$XMONAD_DATA_DIR"
 xmonad_name="xmonad-$ENV_ARCH-$ENV_OS"
 
 # Cabal installation
@@ -16,5 +17,6 @@ ln -sf "$cache/$cfgid" "$cache/$xmonad_name"
 xdgcfg="$HOME/.config"
 cp -T "$config/cfg/.gtkrc-2.0" "$xdgcfg/gtk-2.0/.gtkrc-2.0"
 cp -T "$config/cfg/settings.ini" "$xdgcfg/gtk-3.0/settings.ini"
-# Seems like stalonetray only works if $XDG_CONFIG_HOME defined
-cp -T "$config/cfg/.stalonetrayrc" "$HOME/.stalonetrayrc"
+
+# Copy assets
+cp -R "$config/asset" "$data/asset"

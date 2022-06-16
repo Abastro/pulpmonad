@@ -1,7 +1,6 @@
 #!/bin/sh
 cfg="$XMONAD_CONFIG_DIR"
 
-# MAYBE Copying assets?
 sudo apt install light pasystray network-manager-gnome blueman synapse ssh-askpass-gnome
 
 if ! command -v status-notifier-watcher; then

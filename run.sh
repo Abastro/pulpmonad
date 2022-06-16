@@ -1,8 +1,5 @@
 #!/bin/sh
 
-# TODO Fix mysterious crash.. :/
-# Seems like stuff is not working
-
 config="$XMONAD_CONFIG_DIR"
 cache="$XMONAD_CACHE_DIR"
 xmonad_name="xmonad-$ENV_ARCH-$ENV_OS"
