@@ -75,7 +75,8 @@ data Bar = Bar
 barWidget :: Bar -> Gtk.Widget
 barWidget Bar{barWid} = barWid
 
--- | Bar with initial fill of 0.
+-- | Bar with initial fill of 0. Rectangle is left-top-right-bottom.
+-- (Required only because impossible to have %-margin in GTK)
 barNew :: MonadIO m => Gtk.Orientation -> RationalRect -> m Bar
 barNew orient relative = do
   barWid <- Gtk.toWidget =<< Gtk.imageNew -- Image is the most benign

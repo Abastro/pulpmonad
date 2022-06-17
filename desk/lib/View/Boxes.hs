@@ -1,5 +1,6 @@
 module View.Boxes (
   BoxArg (..),
+  BoxPack (..),
   BoxUniDyn,
   BoxUniDynOp (..),
   defBoxArg,
@@ -18,16 +19,18 @@ import Gtk.Containers qualified as Gtk
 
 data BoxArg = BoxArg
   { boxOrient :: !Gtk.Orientation
-  , boxPackFromEnd :: !Bool
+  , boxPacking :: !BoxPack
   , boxSpacing :: !Int32
   , boxHomogeneous :: !Bool
   }
+
+data BoxPack = BoxPackDef | BoxPackStart | BoxPackEnd
 
 defBoxArg :: Gtk.Orientation -> BoxArg
 defBoxArg orient =
   BoxArg
     { boxOrient = orient
-    , boxPackFromEnd = False
+    , boxPacking = BoxPackDef
     , boxSpacing = 0
     , boxHomogeneous = False
     }
@@ -36,7 +39,7 @@ defBoxArg orient =
 data BoxUniDyn = BoxUniDyn
   { boxDynWid :: !Gtk.Widget
   , boxDynBox :: !Gtk.Box
-  , boxDynFromEnd :: !Bool
+  , boxDynPack :: !BoxPack
   }
 
 data BoxUniDynOp
@@ -55,7 +58,7 @@ boxUniDynNew BoxArg{..} = do
   boxDynBox <- Gtk.boxNew boxOrient boxSpacing
   Gtk.boxSetHomogeneous boxDynBox boxHomogeneous
   boxDynWid <- Gtk.toWidget boxDynBox
-  pure BoxUniDyn{boxDynFromEnd = boxPackFromEnd, ..}
+  pure BoxUniDyn{boxDynPack = boxPacking, ..}
 
 boxUniDynCtrl :: MonadIO m => BoxUniDyn -> BoxUniDynOp -> m ()
 boxUniDynCtrl BoxUniDyn{..} = \case
@@ -63,10 +66,10 @@ boxUniDynCtrl BoxUniDyn{..} = \case
   BoxUniRemove wid -> Gtk.containerRemove boxDynBox wid
   BoxUniReorder wid idx -> Gtk.boxReorderChild boxDynBox wid idx
   where
-    boxPack box wid =
-      if boxDynFromEnd
-        then Gtk.boxPackEnd box wid False False 0
-        else Gtk.boxPackStart box wid False False 0
+    boxPack box wid = case boxDynPack of
+      BoxPackDef -> Gtk.containerAdd box wid
+      BoxPackStart -> Gtk.boxPackStart box wid False False 0
+      BoxPackEnd -> Gtk.boxPackEnd box wid False False 0
 
 -- | Static box with fixed children.
 boxStaticNew :: MonadIO m => BoxArg -> [Gtk.Widget] -> m Gtk.Widget

@@ -53,7 +53,11 @@ sysTrayWidget SysTray{sysTrayBox} = View.boxUniDynWidget sysTrayBox
 
 sysTrayNew :: MonadIO m => Gtk.Orientation -> Bool -> m SysTray
 sysTrayNew orientation sysTrayAlignBegin = do
-  sysTrayBox <- View.boxUniDynNew (View.defBoxArg orientation){View.boxPackFromEnd = sysTrayAlignBegin}
+  sysTrayBox <-
+    View.boxUniDynNew
+      (View.defBoxArg orientation)
+        { View.boxPacking = if sysTrayAlignBegin then View.BoxPackStart else View.BoxPackEnd
+        }
   Gtk.widgetGetStyleContext (View.boxUniDynWidget sysTrayBox)
     >>= flip Gtk.styleContextAddClass (T.pack "system-tray-area")
   pure SysTray{..}
