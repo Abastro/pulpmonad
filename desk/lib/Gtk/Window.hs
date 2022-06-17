@@ -1,5 +1,3 @@
-{-# LANGUAGE MonoLocalBinds #-}
-
 -- More complicated since GTK is trying to push wayland and wayland is..meh
 module Gtk.Window (
   module GI.Gtk.Objects.Window,

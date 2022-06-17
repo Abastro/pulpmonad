@@ -1,3 +1,4 @@
+-- Just because GI-Gtk has weird instance declarations..
 {-# LANGUAGE MonoLocalBinds #-}
 
 module Gtk.Styles (

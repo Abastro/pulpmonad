@@ -1,5 +1,3 @@
-{-# LANGUAGE MonoLocalBinds #-}
-
 module Gtk.Commons (
   module GI.Gtk.Enums,
   module GI.Gdk.Enums,
