@@ -9,6 +9,7 @@ import Data.Text qualified as T
 import GI.Gtk.Objects.Image qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
+import Gtk.Styles qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Status.HWStatus
 import Text.Printf
@@ -16,7 +17,21 @@ import View.Imagery qualified as View
 import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.Run (safeSpawn)
 
--- TODO "Symbolic" seems to change the style
+data Temperature = T20 | T40 | T60 | T80 | T100 | T120
+  deriving (Eq, Ord, Enum, Bounded)
+
+tempVal :: Double -> Temperature
+tempVal temp = toEnum . round $ (max 19 (min 121 temp) - 20) / 20
+
+tempClass :: Temperature -> T.Text
+tempClass = \case
+  T20 -> T.pack "temp-20"
+  T40 -> T.pack "temp-40"
+  T60 -> T.pack "temp-60"
+  T80 -> T.pack "temp-80"
+  T100 -> T.pack "temp-100"
+  T120 -> T.pack "temp-120"
+
 -- TODO Warning colors when too full
 
 -- | Battery status display.
@@ -80,16 +95,16 @@ mainboardDisplay iconSize mainWidth = do
       pure mem
 
     cpuIcon (taskUse, taskTemp) = do
-      fg <- View.imageDynNew iconSize True
+      fg <- View.imageStaticNew iconSize True $ View.ImgSName (T.pack "cpu-symbolic")
       let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
       bar <- View.barNew Gtk.OrientationVertical barRect
-      cpu <- Gtk.overlayed (View.imageDynWidget fg) [View.barWidget bar]
+      cpu <- Gtk.overlayed fg [View.barWidget bar]
       Gtk.widgetSetName cpu (T.pack "cpu")
       liftIO $ do
         killUse <- Gtk.uiTask taskUse $ View.barSetFill bar . cpuUsed . cpuRatios
-        killTm <- Gtk.uiTask taskTemp $ View.imageDynSetImg fg . View.ImgSName . cpuN . tmpInd
+        killTm <- Gtk.uiTask taskTemp $ updateTemp fg . tempVal
         Gtk.onWidgetDestroy cpu (killUse >> killTm)
       pure cpu
 
-    tmpInd temp = round $ (max 0 . min 100 $ temp - 20) * 0.05
-    cpuN (n :: Int) = T.pack $ printf "cpu-%03d" (n * 20)
+    updateTemp fg tempV = Gtk.widgetGetStyleContext fg >>= Gtk.updateCssClass tempClass [tempV]
+

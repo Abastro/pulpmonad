@@ -111,11 +111,33 @@ button:hover {
 	color: rgb(24, 160, 240);
 }
 
+#cpu>image {
+	color: rgb(216, 216, 216);
+}
+#cpu>image.temp-20 {
+	color: rgb(216, 210, 210);
+}
+#cpu>image.temp-40 {
+	color: rgb(255, 200, 170);
+}
+#cpu>image.temp-60 {
+	color: rgb(255, 190, 120);
+}
+#cpu>image.temp-80 {
+	color: rgb(255, 150, 80);
+}
+#cpu>image.temp-100 {
+	color: rgb(255, 100, 40);
+}
+#cpu>image.temp-120 {
+	color: rgb(255, 60, 0);
+}
+
 #cpu>.bar {
 	color: rgb(240, 160, 24);
 }
 
-/* Clock styling */
+/* Text clock */
 #clock_text label {
 	font-family: "Ubuntu", sans-serif;
 	font-size: 7pt;
@@ -123,6 +145,7 @@ button:hover {
 	margin-right: 3px;
 }
 
+/* Window layout */
 #window-layout {
 	margin-left: 5px;
 	margin-right: 5px;
