@@ -19,5 +19,5 @@ cp -T "$config/cfg/.gtkrc-2.0" "$xdgcfg/gtk-2.0/.gtkrc-2.0"
 cp -T "$config/cfg/settings.ini" "$xdgcfg/gtk-3.0/settings.ini"
 
 # Copy assets & styles
-cp -R "$config/asset" "$data/asset"
-cp -R "$config/styles" "$data/styles"
+cp -R "$config/asset" "$data"
+cp -R "$config/styles" "$data"
