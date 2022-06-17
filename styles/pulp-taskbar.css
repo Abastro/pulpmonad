@@ -103,11 +103,15 @@ button:hover {
 	color: rgb(216, 216, 216);
 }
 
-#mem > .bar {
+#mem>image {
+	color: rgb(216, 216, 216);
+}
+
+#mem>.bar {
 	color: rgb(24, 160, 240);
 }
 
-#cpu > .bar {
+#cpu>.bar {
 	color: rgb(240, 160, 24);
 }
 

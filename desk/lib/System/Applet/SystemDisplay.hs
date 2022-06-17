@@ -67,7 +67,7 @@ mainboardDisplay iconSize mainWidth = do
       -- TODO Images to represent memory temp changes
       -- TODO Identify the transparency issue of the image
       -- MAYBE Image itself providing location of bar?
-      let ramImg = View.imageStaticNew iconSize True $ View.ImgSName (T.pack "ram-000")
+      let ramImg = View.imageStaticNew iconSize True $ View.ImgSName (T.pack "ram-symbolic")
       hack <- ramImg
       fg <- ramImg
       let barRect = RationalRect (14 % 32) (8 % 32) (18 % 32) (24 % 32)
