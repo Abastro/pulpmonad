@@ -82,18 +82,20 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     verbosity = if isTest then LevelDebug else LevelInfo
     dockPos = if isTest then Gtk.DockBottom else Gtk.DockTop
 
+    dataDirToUse = if isTest then "XMONAD_CONFIG_DIR" else "XMONAD_DATA_DIR"
+
     cssProv :: IO Gtk.CssProvider
     cssProv = do
       css <- Gtk.cssProviderNew
-      cfgDir <- liftIO $ getEnv "XMONAD_DATA_DIR"
-      Gtk.cssProviderLoadFromPath css $ T.pack (cfgDir </> "styles" </> "pulp-taskbar.css")
+      dataDir <- liftIO $ getEnv dataDirToUse
+      Gtk.cssProviderLoadFromPath css $ T.pack (dataDir </> "styles" </> "pulp-taskbar.css")
       pure css
 
     iconThemeSetup :: IO ()
     iconThemeSetup = do
-      mainDir <- getEnv "XMONAD_DATA_DIR"
+      dataDir <- getEnv dataDirToUse
       defaultTheme <- Gtk.iconThemeGetDefault
-      Gtk.iconThemeAppendSearchPath defaultTheme (mainDir </> "asset" </> "icons")
+      Gtk.iconThemeAppendSearchPath defaultTheme (dataDir </> "asset" </> "icons")
 
     activating :: Gtk.Application -> PulpIO ()
     activating app = withRunInIO $ \unlift -> do

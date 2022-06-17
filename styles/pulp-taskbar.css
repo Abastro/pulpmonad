@@ -99,11 +99,15 @@ button:hover {
 
 /* Mainboard styling */
 
-#mem .bar {
+#bat {
+	color: rgb(216, 216, 216);
+}
+
+#mem > .bar {
 	color: rgb(24, 160, 240);
 }
 
-#cpu .bar {
+#cpu > .bar {
 	color: rgb(240, 160, 24);
 }
 
