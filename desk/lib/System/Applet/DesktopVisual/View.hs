@@ -17,6 +17,7 @@ module System.Applet.DesktopVisual.View (
   winItemSetIcon,
 ) where
 
+import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import Data.Default.Class
@@ -25,6 +26,7 @@ import Data.IORef
 import Data.Maybe
 import Data.Text qualified as T
 import Data.Vector qualified as V
+import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gtk.Objects.Box qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
@@ -33,8 +35,6 @@ import Gtk.Styles qualified as Gtk
 import View.Boxes qualified as View
 import View.Imagery qualified as View
 import View.Textual qualified as View
-import qualified GI.Gio.Interfaces.Icon as Gio
-import Control.Applicative
 
 widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => Gtk.Widget -> (s -> T.Text) -> [s] -> m ()
 widgetUpdateClass widget asClass state =
@@ -43,7 +43,8 @@ widgetUpdateClass widget asClass state =
 -- | Desktop visualizer view
 data DeskVisual = DeskVisual
   { deskVisualWid :: !Gtk.Widget
-  , deskVisualBox :: !Gtk.Box
+  , -- Gtk Box, because we have unique actions
+    deskVisualBox :: !Gtk.Box
   , deskVisualItems :: !(IORef (V.Vector DeskItem))
   }
 
@@ -164,8 +165,9 @@ winItemSetIcon WinItem{..} rawIcons mayIcon = do
 
     -- NOTE Pixbuf has sharpness loss on scaling.
     -- MAYBE Make this go through LoadableIcon?
-    rawIconSet = liftIO rawIcons >>= \case
-          Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
-          Right icons -> do
-            scaled <- MaybeT $ Gtk.iconsChoosePixbuf (Gtk.iconSizePx winItemSize) Gtk.argbTorgba icons
-            pure (View.ImgSPixbuf scaled)
+    rawIconSet =
+      liftIO rawIcons >>= \case
+        Left err -> MaybeT $ Nothing <$ liftIO (putStrLn $ "Cannot recognize icon: " <> err)
+        Right icons -> do
+          scaled <- MaybeT $ Gtk.iconsChoosePixbuf (Gtk.iconSizePx winItemSize) Gtk.argbTorgba icons
+          pure (View.ImgSPixbuf scaled)

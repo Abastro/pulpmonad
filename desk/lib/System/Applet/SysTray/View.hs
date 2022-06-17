@@ -31,7 +31,6 @@ import GI.Gdk.Structs.EventScroll qualified as Gdk
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gio.Objects.FileIcon qualified as Gio
-import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Objects.EventBox qualified as Gtk
 import GI.Gtk.Objects.IconTheme qualified as Gtk
 import GI.Gtk.Objects.Menu qualified as Gtk
@@ -39,36 +38,34 @@ import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
 import Gtk.Styles qualified as Gtk
+import View.Boxes qualified as View
 import View.Imagery qualified as View
 
 data SysTray = SysTray
-  { sysTrayWid :: !Gtk.Widget
-  , sysTrayBox :: !Gtk.Box
+  { sysTrayBox :: !View.BoxUniDyn
   , sysTrayAlignBegin :: !Bool
   }
 
 data SysTrayOp = TrayAddItem !TrayItem | TrayRemoveItem !TrayItem
 
 sysTrayWidget :: SysTray -> Gtk.Widget
-sysTrayWidget SysTray{sysTrayWid} = sysTrayWid
+sysTrayWidget SysTray{sysTrayBox} = View.boxUniDynWidget sysTrayBox
 
 sysTrayNew :: MonadIO m => Gtk.Orientation -> Bool -> m SysTray
 sysTrayNew orientation sysTrayAlignBegin = do
-  sysTrayBox <- Gtk.boxNew orientation 0
-  sysTrayWid <- Gtk.toWidget sysTrayBox
-  Gtk.widgetGetStyleContext sysTrayWid >>= flip Gtk.styleContextAddClass (T.pack "system-tray-area")
+  sysTrayBox <- View.boxUniDynNew (View.defBoxArg orientation){View.boxPackFromEnd = sysTrayAlignBegin}
+  Gtk.widgetGetStyleContext (View.boxUniDynWidget sysTrayBox)
+    >>= flip Gtk.styleContextAddClass (T.pack "system-tray-area")
   pure SysTray{..}
 
 sysTrayCtrl :: MonadIO m => SysTray -> SysTrayOp -> m ()
 sysTrayCtrl SysTray{..} = \case
   TrayAddItem TrayItem{trayItemWid} -> do
-    boxPack sysTrayBox trayItemWid False False 0
+    View.boxUniDynCtrl sysTrayBox (View.BoxUniAdd trayItemWid)
     Gtk.widgetShowAll trayItemWid
   TrayRemoveItem TrayItem{trayItemWid} -> do
     Gtk.widgetHide trayItemWid
-    Gtk.containerRemove sysTrayBox trayItemWid
-  where
-    boxPack = if sysTrayAlignBegin then Gtk.boxPackStart else Gtk.boxPackEnd
+    View.boxUniDynCtrl sysTrayBox (View.BoxUniRemove trayItemWid)
 
 data TrayItem = TrayItem
   { trayItemWid :: !Gtk.Widget
