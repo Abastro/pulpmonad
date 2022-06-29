@@ -8,6 +8,7 @@ module Gtk.ImageBar (
   ImageBar (..),
   imageBarPos,
   imageBarSetFill,
+  imageBarSetIcon,
 ) where
 
 import Data.Coerce
@@ -22,6 +23,7 @@ import GI.Cairo.Render.Connector qualified as C
 import GI.Cairo.Structs.Context qualified as C
 import GI.Gdk.Functions qualified as Gdk
 import GI.Gtk.Functions (renderBackground, renderFrame)
+import GI.Gtk.Objects.Bin
 import GI.Gtk.Objects.Image
 import GI.Gtk.Structs.WidgetClass
 import Gtk.Commons
@@ -35,12 +37,11 @@ instance TypedObject ImageBar where
 instance GObject ImageBar
 
 -- MAYBE Add orientable? Sounds hard
-type instance ParentTypes ImageBar = Widget ': ParentTypes Widget
+type instance ParentTypes ImageBar = Bin ': ParentTypes Bin
 instance HasParentTypes ImageBar
 
 data ImageBarPrivate = ImageBarPrivate
-  { foregroundImage :: !Image
-  , barOrientation :: !Orientation
+  { barOrientation :: !Orientation
   , -- | Portion where bar is displayed. left - top - width - height.
     barPortion :: !RationalRect
   , barFill :: !(IORef Double)
@@ -49,17 +50,17 @@ data ImageBarPrivate = ImageBarPrivate
 -- MAYBE Export portion to CSS?
 
 instance DerivedGObject ImageBar where
-  type GObjectParentType ImageBar = Widget
+  type GObjectParentType ImageBar = Bin
   type GObjectPrivateData ImageBar = ImageBarPrivate
   objectTypeName = T.pack "image-bar"
   objectClassInit = imageBarClassInit
   objectInstanceInit = imageBarInstanceInit
 
-type instance AttributeList ImageBar = AttributeList Widget
+type instance AttributeList ImageBar = AttributeList Bin
 instance HasAttributeList ImageBar
-type instance SignalList ImageBar = SignalList Widget
+type instance SignalList ImageBar = SignalList Bin
 instance
-  ( info ~ ResolveWidgetMethod t ImageBar
+  ( info ~ ResolveBinMethod t ImageBar
   , OverloadedMethod info ImageBar p
   ) =>
   IsLabel t (ImageBar -> p)
@@ -69,6 +70,7 @@ instance
 withWidgetClass :: GObjectClass -> (WidgetClass -> IO b) -> IO b
 withWidgetClass gclass act = withTransient (coerce gclass) $ act . WidgetClass
 
+-- TODO Widget class name
 imageBarClassInit :: GObjectClass -> IO ()
 imageBarClassInit = flip withWidgetClass $ \widgetClass -> do
   Just oldDestroy <- get widgetClass #destroy
@@ -84,11 +86,13 @@ imageBarClassInit = flip withWidgetClass $ \widgetClass -> do
     , #getPreferredWidthForHeight :&= prefRatio #getPreferredWidthForHeight
     , #sizeAllocate :&= sizeAllocate oldAllocate
     ]
+
+  #setCssName widgetClass (T.pack "image-bar")
   where
     destroy oldDestroy widget = do
       Just mine <- castTo ImageBar widget
-      ImageBarPrivate{foregroundImage} <- gobjectGetPrivateData mine
-      #destroy foregroundImage -- The image needs to be destroyed
+      image <- imageBarGetImage mine
+      #destroy image -- The image needs to be destroyed
       oldDestroy widget
 
     draw widget ctx = do
@@ -98,35 +102,44 @@ imageBarClassInit = flip withWidgetClass $ \widgetClass -> do
 
     prefSize f widget = do
       Just mine <- castTo ImageBar widget
-      ImageBarPrivate{foregroundImage} <- gobjectGetPrivateData mine
-      f foregroundImage
+      image <- imageBarGetImage mine
+      f image
     prefRatio f widget other = do
       Just mine <- castTo ImageBar widget
-      ImageBarPrivate{foregroundImage} <- gobjectGetPrivateData mine
-      f foregroundImage other
+      image <- imageBarGetImage mine
+      f image other
 
     sizeAllocate oldAllocate widget rect = do
       Just mine <- castTo ImageBar widget
-      ImageBarPrivate{foregroundImage} <- gobjectGetPrivateData mine
+      image <- imageBarGetImage mine
       -- Allocate entire rectangle to the foreground image
-      #sizeAllocate foregroundImage rect
+      #sizeAllocate image rect
 
       oldAllocate widget rect
 
 imageBarInstanceInit :: GObjectClass -> ImageBar -> IO ImageBarPrivate
-imageBarInstanceInit _gclass _widget = do
-  -- Window not needed: Takes no input.
+imageBarInstanceInit _gclass widget = do
+  -- Window not needed (Takes no input)
 
-  foregroundImage <- new Image []
+  image <- new Image []
+  #add widget image
+
   let barOrientation = OrientationHorizontal
   let barPortion = RationalRect 0 0 1 1
   barFill <- newIORef 0
 
   pure ImageBarPrivate{..}
 
+imageBarGetImage :: ImageBar -> IO Image
+imageBarGetImage widget = do
+  Just child <- binGetChild widget
+  Just image <- castTo Image child
+  pure image
+
 imageBarDraw :: ImageBar -> C.Context -> IO ()
 imageBarDraw widget ctxt = do
   ImageBarPrivate{..} <- gobjectGetPrivateData widget
+  image <- imageBarGetImage widget
 
   style <- #getStyleContext widget
   width <- fromIntegral <$> #getAllocatedWidth widget
@@ -155,18 +168,23 @@ imageBarDraw widget ctxt = do
     C.fill
 
   -- Lastly, render the foreground image
-  #draw foregroundImage ctxt
-
--- TODO Image Icon Set
--- TODO CSS Handling
+  #draw image ctxt
 
 -- I do not know how to properly set up labels :/
 
+-- | Set Image bar position.
+-- The portion is x, y, width, height.
 imageBarPos :: ImageBar -> Orientation -> RationalRect -> IO ()
 imageBarPos widget orient portion = do
-  gobjectModifyPrivateData widget $ \dat -> dat{ barOrientation = orient, barPortion = portion }
+  gobjectModifyPrivateData widget $ \dat -> dat{barOrientation = orient, barPortion = portion}
 
 imageBarSetFill :: ImageBar -> Double -> IO ()
 imageBarSetFill widget fill = do
   ImageBarPrivate{barFill} <- gobjectGetPrivateData widget
   writeIORef barFill fill
+  #queueDraw widget
+
+imageBarSetIcon :: ImageBar -> T.Text -> IconSize -> IO ()
+imageBarSetIcon widget iconName iconSize = do
+  image <- imageBarGetImage widget
+  imageSetFromIconName image (Just iconName) (fromIntegral $ fromEnum iconSize)

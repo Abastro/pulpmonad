@@ -3,12 +3,14 @@ module System.Applet.SystemDisplay where
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
 import Data.Foldable
+import Data.GI.Base qualified as Glib
 import Data.Int
 import Data.Ratio ((%))
 import Data.Text qualified as T
 import GI.Gtk.Objects.Image qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
+import Gtk.ImageBar qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Status.HWStatus
@@ -54,10 +56,13 @@ batDisplay iconSize = do
       Charging -> T.pack $ printf "battery-level-%d-charging-symbolic" level
       _ -> T.pack $ printf "battery-level-%d-symbolic" level
 
+-- TODO Identify the transparency issue of the image
+-- MAYBE Image itself providing location of bar?
+
 -- | Mainboard status display with given icon size & width.
 mainboardDisplay :: MonadIO m => Gtk.IconSize -> Int32 -> m Gtk.Widget
 mainboardDisplay iconSize mainWidth = do
-  widMem <- startRegular 500 memStat >>= traverse memIcon
+  widMem <- startRegular 500 memStat >>= traverse testIcon
   traverse_ (`Gtk.setWidgetHalign` Gtk.AlignStart) widMem
   traverse_ (`Gtk.setWidgetValign` Gtk.AlignCenter) widMem
 
@@ -78,33 +83,27 @@ mainboardDisplay iconSize mainWidth = do
   Gtk.widgetSetName ev (T.pack "mainboard")
   ev <$ Gtk.widgetShowAll ev
   where
-    memIcon task = do
-      -- TODO Images to represent memory temp changes
-      -- TODO Identify the transparency issue of the image
-      -- MAYBE Image itself providing location of bar?
-      let ramImg = View.imageStaticNew iconSize True $ View.ImgSName (T.pack "ram-symbolic")
-      hack <- ramImg
-      fg <- ramImg
-      let barRect = RationalRect (14 % 32) (8 % 32) (18 % 32) (24 % 32)
-      bar <- View.barNew Gtk.OrientationVertical barRect
-      mem <- Gtk.overlayed hack [View.barWidget bar, fg]
+    testIcon task = do
+      mem <- Glib.new Gtk.ImageBar []
+      let barRect = RationalRect (14 % 32) (8 % 32) (4 % 32) (16 % 32)
       Gtk.widgetSetName mem (T.pack "mem")
       liftIO $ do
-        kill <- Gtk.uiTask task $ View.barSetFill bar . memUsed . memRatios
+        Gtk.imageBarPos mem Gtk.OrientationVertical barRect
+        Gtk.imageBarSetIcon mem (T.pack "ram-symbolic") iconSize
+        kill <- Gtk.uiTask task $ Gtk.imageBarSetFill mem . memUsed . memRatios
         Gtk.onWidgetDestroy mem kill
-      pure mem
+      Gtk.toWidget mem
 
     cpuIcon (taskUse, taskTemp) = do
-      fg <- View.imageStaticNew iconSize True $ View.ImgSName (T.pack "cpu-symbolic")
-      let barRect = RationalRect (28 % 64) (25 % 64) (36 % 64) (39 % 64)
-      bar <- View.barNew Gtk.OrientationVertical barRect
-      cpu <- Gtk.overlayed fg [View.barWidget bar]
+      cpu <- Glib.new Gtk.ImageBar []
+      let barRect = RationalRect (28 % 64) (25 % 64) (8 % 64) (14 % 64)
       Gtk.widgetSetName cpu (T.pack "cpu")
       liftIO $ do
-        killUse <- Gtk.uiTask taskUse $ View.barSetFill bar . cpuUsed . cpuRatios
-        killTm <- Gtk.uiTask taskTemp $ updateTemp fg . tempVal
+        Gtk.imageBarPos cpu Gtk.OrientationVertical barRect
+        Gtk.imageBarSetIcon cpu (T.pack "cpu-symbolic") iconSize
+        killUse <- Gtk.uiTask taskUse $ Gtk.imageBarSetFill cpu . cpuUsed . cpuRatios
+        killTm <- Gtk.uiTask taskTemp $ updateTemp cpu . tempVal
         Gtk.onWidgetDestroy cpu (killUse >> killTm)
-      pure cpu
+      Gtk.toWidget cpu
 
     updateTemp fg tempV = Gtk.widgetGetStyleContext fg >>= Gtk.updateCssClass tempClass [tempV]
-
