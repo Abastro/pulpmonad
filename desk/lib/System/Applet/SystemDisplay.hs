@@ -56,7 +56,6 @@ batDisplay iconSize = do
       Charging -> T.pack $ printf "battery-level-%d-charging-symbolic" level
       _ -> T.pack $ printf "battery-level-%d-symbolic" level
 
--- TODO Identify the transparency issue of the image
 -- MAYBE Image itself providing location of bar?
 
 -- | Mainboard status display with given icon size & width.

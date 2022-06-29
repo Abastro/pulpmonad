@@ -105,6 +105,7 @@ button:hover {
 
 image-bar#mem>image {
 	color: rgb(216, 216, 216);
+	-gtk-icon-shadow: none;
 }
 
 image-bar#mem {
@@ -113,6 +114,7 @@ image-bar#mem {
 
 image-bar#cpu>image {
 	color: rgb(216, 216, 216);
+	-gtk-icon-shadow: none;
 }
 image-bar#cpu.temp-20>image {
 	color: rgb(216, 210, 210);
