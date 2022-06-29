@@ -1,10 +1,12 @@
+{-# LANGUAGE OverloadedLabels #-}
+
 module Main (main) where
 
 import Control.Monad
-import Data.Default.Class
 import Data.Text qualified as T
 import Defines
 import GI.Gdk.Structs.EventKey qualified as Gdk
+import GI.Gtk.Objects.Label qualified as Gtk
 import Gtk.Application qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
@@ -14,8 +16,11 @@ import System.Environment (getEnv)
 import System.Exit
 import View.Boxes qualified as View
 import View.Imagery qualified as View
-import View.Textual qualified as View
 import XMonad.Util.Run (safeSpawn)
+import Data.GI.Base.Attributes
+import Data.GI.Base.Constructible
+
+-- TODO Internalize to the pulp-taskbar
 
 data SysCtl = Build | Refresh | Logout | Reboot | Poweroff
   deriving (Enum, Bounded, Show)
@@ -62,7 +67,7 @@ ctlButton window ctl = do
     View.boxStaticNew (View.defBoxArg Gtk.OrientationVertical){View.boxSpacing = 5}
       =<< sequenceA
         [ View.imageStaticNew Gtk.IconSizeDialog True (View.ImgSName $ iconOf ctl)
-        , View.labelStaticNew def (nameOf ctl)
+        , Gtk.toWidget =<< new Gtk.Label [#label := nameOf ctl]
         ]
   Gtk.widgetSetValign box Gtk.AlignCenter
 

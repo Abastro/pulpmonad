@@ -114,7 +114,7 @@ trayItemCtrl TrayItem{..} = \case
   ItemSetOverlay icon -> itemIconAsSet trayItemSize icon >>= View.imageDynSetImg trayItemOverlay
   ItemSetInputHandler handler -> do
     Gtk.onWidgetButtonPressEvent trayItemWid $ \event -> do
-      -- Another GTK4 upgrade blocker
+      -- GTK4 upgrade blocker
       xRoot <- round <$> get event #xRoot
       yRoot <- round <$> get event #yRoot
       get event #button >>= \case

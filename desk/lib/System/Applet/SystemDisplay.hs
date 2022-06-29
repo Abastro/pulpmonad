@@ -82,7 +82,7 @@ mainboardDisplay iconSize mainWidth = do
   disp <- Gtk.overlayed bg (toList widMem <> toList widCPU)
   ev <- Gtk.buttonNewWith (Just disp) $ safeSpawn "gnome-system-monitor" ["-r"]
   #setName ev (T.pack "mainboard")
-  ev <$ Gtk.widgetShowAll ev
+  ev <$ #showAll ev
   where
     testIcon task = do
       mem <- new Gtk.ImageBar []

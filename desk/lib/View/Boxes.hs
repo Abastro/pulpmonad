@@ -20,6 +20,8 @@ import Gtk.Commons qualified as Gtk
 import Data.GI.Base.Constructible
 import Data.GI.Base.Attributes
 
+-- TODO Instead, offload UI to XML - how?
+
 data BoxArg = BoxArg
   { boxOrient :: !Gtk.Orientation
   , boxPacking :: !BoxPack
