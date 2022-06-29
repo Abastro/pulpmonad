@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLabels #-}
+
 module System.Applet.SysTray.View (
   SysTray,
   SysTrayOp (..),
@@ -20,14 +22,14 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import Data.ByteString qualified as BS
 import Data.Foldable
+import Data.GI.Base.Attributes
+import Data.GI.Base.Constructible
 import Data.Int
 import Data.Maybe
 import Data.Text qualified as T
 import GI.DbusmenuGtk3.Objects.Menu qualified as DBus
 import GI.Gdk.Flags qualified as Gdk
 import GI.Gdk.Objects.Screen qualified as Gdk
-import GI.Gdk.Structs.EventButton qualified as Gdk
-import GI.Gdk.Structs.EventScroll qualified as Gdk
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gio.Objects.FileIcon qualified as Gio
@@ -37,7 +39,6 @@ import GI.Gtk.Objects.Menu qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
-import Gtk.Styles qualified as Gtk
 import View.Boxes qualified as View
 import View.Imagery qualified as View
 
@@ -58,17 +59,16 @@ sysTrayNew orientation sysTrayAlignBegin = do
       (View.defBoxArg orientation)
         { View.boxPacking = if sysTrayAlignBegin then View.BoxPackStart else View.BoxPackEnd
         }
-  Gtk.widgetGetStyleContext (View.boxUniDynWidget sysTrayBox)
-    >>= flip Gtk.styleContextAddClass (T.pack "system-tray-area")
+  #getStyleContext (View.boxUniDynWidget sysTrayBox) >>= flip #addClass (T.pack "system-tray-area")
   pure SysTray{..}
 
 sysTrayCtrl :: MonadIO m => SysTray -> SysTrayOp -> m ()
 sysTrayCtrl SysTray{..} = \case
   TrayAddItem TrayItem{trayItemWid} -> do
     View.boxUniDynCtrl sysTrayBox (View.BoxUniAdd trayItemWid)
-    Gtk.widgetShowAll trayItemWid
+    #showAll trayItemWid
   TrayRemoveItem TrayItem{trayItemWid} -> do
-    Gtk.widgetHide trayItemWid
+    #hide trayItemWid
     View.boxUniDynCtrl sysTrayBox (View.BoxUniRemove trayItemWid)
 
 data TrayItem = TrayItem
@@ -99,31 +99,31 @@ trayItemNew trayItemSize = do
   trayItemOverlay <- View.imageDynNew trayItemSize True
   overlay <- Gtk.overlayed (View.imageDynWidget trayItemIcon) [View.imageDynWidget trayItemOverlay]
 
-  interactive <- Gtk.eventBoxNew
-  Gtk.widgetAddEvents interactive [Gdk.EventMaskScrollMask]
-  Gtk.containerAdd interactive overlay
+  interactive <- new Gtk.EventBox []
+  #addEvents interactive [Gdk.EventMaskScrollMask]
+  #add interactive overlay
   trayItemWid <- Gtk.toWidget interactive
-  Gtk.widgetGetStyleContext trayItemWid >>= flip Gtk.styleContextAddClass (T.pack "system-tray-item")
+  #getStyleContext trayItemWid >>= flip #addClass (T.pack "system-tray-item")
 
   pure TrayItem{..}
 
 trayItemCtrl :: MonadIO m => TrayItem -> TrayItemOp -> m ()
 trayItemCtrl TrayItem{..} = \case
-  ItemSetTooltip tooltip -> Gtk.widgetSetTooltipText trayItemWid tooltip
+  ItemSetTooltip tooltip -> #setTooltipText trayItemWid tooltip
   ItemSetIcon icon -> itemIconAsSet trayItemSize icon >>= View.imageDynSetImg trayItemIcon
   ItemSetOverlay icon -> itemIconAsSet trayItemSize icon >>= View.imageDynSetImg trayItemOverlay
   ItemSetInputHandler handler -> do
     Gtk.onWidgetButtonPressEvent trayItemWid $ \event -> do
       -- Another GTK4 upgrade blocker
-      xRoot <- round <$> Gdk.getEventButtonXRoot event
-      yRoot <- round <$> Gdk.getEventButtonYRoot event
-      Gdk.getEventButtonButton event >>= \case
+      xRoot <- round <$> get event #xRoot
+      yRoot <- round <$> get event #yRoot
+      get event #button >>= \case
         1 -> True <$ handler (TrayItemClick MouseLeft xRoot yRoot)
         2 -> True <$ handler (TrayItemClick MouseMiddle xRoot yRoot)
         3 -> True <$ handler (TrayItemClick MouseRight xRoot yRoot)
         _ -> pure False
     Gtk.onWidgetScrollEvent trayItemWid $ \event -> do
-      direction <- Gdk.getEventScrollDirection event
+      direction <- get event #direction
       True <$ handler (TrayItemScroll direction)
     pure ()
   ItemShowPopup menu -> do

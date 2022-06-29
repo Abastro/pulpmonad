@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLabels #-}
+
 -- | Image-like Views.
 module View.Imagery (
   ImageSet (..),
@@ -10,6 +12,7 @@ module View.Imagery (
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.GI.Base.Constructible
 import Data.Int
 import Data.Text qualified as T
 import GI.GdkPixbuf.Objects.Pixbuf qualified as Gdk
@@ -34,17 +37,17 @@ imageDynWidget ImageDyn{imageDynWid} = imageDynWid
 -- If the flag is true, prevents image getting bigger.
 imageDynNew :: MonadIO m => Gtk.IconSize -> Bool -> m ImageDyn
 imageDynNew size fixSize = do
-  imageDynImg <- Gtk.imageNew
+  imageDynImg <- new Gtk.Image []
   let imageDynSize = fromIntegral $ fromEnum size
   imageDynWid <- Gtk.toWidget imageDynImg
-  when fixSize $ Gtk.imageSetPixelSize imageDynImg $ Gtk.iconSizePx size
+  when fixSize $ #setPixelSize imageDynImg $ Gtk.iconSizePx size
   pure ImageDyn{..}
 
 imageDynSetImg :: MonadIO m => ImageDyn -> ImageSet -> m ()
 imageDynSetImg ImageDyn{..} = \case
-  ImgSName txt -> Gtk.imageSetFromIconName imageDynImg (Just txt) imageDynSize
-  ImgSGIcon icon -> Gtk.imageSetFromGicon imageDynImg icon imageDynSize
-  ImgSPixbuf pix -> Gtk.imageSetFromPixbuf imageDynImg (Just pix)
+  ImgSName txt -> #setFromIconName imageDynImg (Just txt) imageDynSize
+  ImgSGIcon icon -> #setFromGicon imageDynImg icon imageDynSize
+  ImgSPixbuf pix -> #setFromPixbuf imageDynImg (Just pix)
 
 -- | Static version of 'imageDynNew'.
 imageStaticNew :: MonadIO m => Gtk.IconSize -> Bool -> ImageSet -> m Gtk.Widget

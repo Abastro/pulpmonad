@@ -14,6 +14,7 @@ module Gtk.ImageBar (
 import Data.Coerce
 import Data.GI.Base
 import Data.GI.Base.GObject
+import Data.GI.Base.GParamSpec
 import Data.GI.Base.Overloading
 import Data.IORef
 import Data.Text qualified as T
@@ -29,7 +30,8 @@ import GI.Gtk.Structs.WidgetClass
 import Gtk.Commons
 import XMonad.StackSet (RationalRect (..))
 
--- ImageBar is a final class, so no class dedicated for ImageBar
+-- TODO Figure out how to attach label for attributes
+
 newtype ImageBar = ImageBar (ManagedPtr ImageBar)
 
 instance TypedObject ImageBar where
@@ -70,9 +72,35 @@ instance
 withWidgetClass :: GObjectClass -> (WidgetClass -> IO b) -> IO b
 withWidgetClass gclass act = withTransient (coerce gclass) $ act . WidgetClass
 
--- TODO Widget class name
 imageBarClassInit :: GObjectClass -> IO ()
-imageBarClassInit = flip withWidgetClass $ \widgetClass -> do
+imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
+  -- As GObject
+  gobjectInstallProperty @ImageBar
+    gClass
+    PropertyInfo
+      { name = T.pack "orient"
+      , nick = T.pack "Orientation"
+      , blurb = T.pack "Orientation of the bar"
+      , setter = \widget orient -> do
+          gobjectModifyPrivateData widget $ \dat -> dat{barOrientation = orient}
+      , getter = \widget -> do
+          barOrientation <$> gobjectGetPrivateData widget
+      , flags = Nothing
+      }
+  gobjectInstallProperty @ImageBar
+    gClass
+    PropertyInfo
+      { name = T.pack "portion"
+      , nick = T.pack "Portion"
+      , blurb = T.pack "Portion of the bar"
+      , setter = \widget portion -> do
+          gobjectModifyPrivateData widget $ \dat -> dat{barPortion = portion}
+      , getter = \widget -> do
+          barPortion <$> gobjectGetPrivateData widget
+      , flags = Nothing
+      }
+
+  -- As Widget
   Just oldDestroy <- get widgetClass #destroy
   Just oldAllocate <- get widgetClass #sizeAllocate
 

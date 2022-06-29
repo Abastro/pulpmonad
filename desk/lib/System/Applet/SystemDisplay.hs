@@ -1,9 +1,11 @@
+{-# LANGUAGE OverloadedLabels #-}
+
 module System.Applet.SystemDisplay where
 
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
 import Data.Foldable
-import Data.GI.Base qualified as Glib
+import Data.GI.Base.Constructible
 import Data.Int
 import Data.Ratio ((%))
 import Data.Text qualified as T
@@ -41,8 +43,8 @@ batDisplay :: MonadIO m => Gtk.IconSize -> m Gtk.Widget
 batDisplay iconSize = do
   img <- startRegular 500 batStat >>= traverse batIcon
   ev <- Gtk.buttonNewWith (View.imageDynWidget <$> img) $ safeSpawn "gnome-control-center" ["power"]
-  Gtk.widgetSetName ev (T.pack "bat")
-  ev <$ Gtk.widgetShowAll ev
+  #setName ev (T.pack "bat")
+  ev <$ #showAll ev
   where
     batIcon task = do
       img <- View.imageDynNew iconSize True
@@ -62,30 +64,30 @@ batDisplay iconSize = do
 mainboardDisplay :: MonadIO m => Gtk.IconSize -> Int32 -> m Gtk.Widget
 mainboardDisplay iconSize mainWidth = do
   widMem <- startRegular 500 memStat >>= traverse testIcon
-  traverse_ (`Gtk.setWidgetHalign` Gtk.AlignStart) widMem
-  traverse_ (`Gtk.setWidgetValign` Gtk.AlignCenter) widMem
+  traverse_ (flip #setHalign Gtk.AlignStart) widMem
+  traverse_ (flip #setValign Gtk.AlignCenter) widMem
 
   widCPU <- do
     cpuUse <- startRegular 50 (cpuDelta 50)
     cpuTemp <- startRegular 100 cpuTemp
     traverse cpuIcon ((,) <$> cpuUse <*> cpuTemp)
-  traverse_ (`Gtk.setWidgetHalign` Gtk.AlignEnd) widCPU
-  traverse_ (`Gtk.setWidgetValign` Gtk.AlignCenter) widCPU
+  traverse_ (flip #setHalign Gtk.AlignEnd) widCPU
+  traverse_ (flip #setValign Gtk.AlignCenter) widCPU
 
   bg <- do
-    img <- Gtk.imageNew -- Tried to set the image, but gtk does not accept rectangular icons.
-    Gtk.widgetSetSizeRequest img mainWidth (-1)
+    img <- new Gtk.Image [] -- Tried to set the image, but gtk does not accept rectangular icons.
+    #setSizeRequest img mainWidth (-1)
     Gtk.toWidget img
 
   disp <- Gtk.overlayed bg (toList widMem <> toList widCPU)
   ev <- Gtk.buttonNewWith (Just disp) $ safeSpawn "gnome-system-monitor" ["-r"]
-  Gtk.widgetSetName ev (T.pack "mainboard")
+  #setName ev (T.pack "mainboard")
   ev <$ Gtk.widgetShowAll ev
   where
     testIcon task = do
-      mem <- Glib.new Gtk.ImageBar []
+      mem <- new Gtk.ImageBar []
       let barRect = RationalRect (14 % 32) (8 % 32) (4 % 32) (16 % 32)
-      Gtk.widgetSetName mem (T.pack "mem")
+      #setName mem (T.pack "mem")
       liftIO $ do
         Gtk.imageBarPos mem Gtk.OrientationVertical barRect
         Gtk.imageBarSetIcon mem (T.pack "ram-symbolic") iconSize
@@ -94,9 +96,9 @@ mainboardDisplay iconSize mainWidth = do
       Gtk.toWidget mem
 
     cpuIcon (taskUse, taskTemp) = do
-      cpu <- Glib.new Gtk.ImageBar []
+      cpu <- new Gtk.ImageBar []
       let barRect = RationalRect (28 % 64) (25 % 64) (8 % 64) (14 % 64)
-      Gtk.widgetSetName cpu (T.pack "cpu")
+      #setName cpu (T.pack "cpu")
       liftIO $ do
         Gtk.imageBarPos cpu Gtk.OrientationVertical barRect
         Gtk.imageBarSetIcon cpu (T.pack "cpu-symbolic") iconSize
@@ -105,4 +107,4 @@ mainboardDisplay iconSize mainWidth = do
         Gtk.onWidgetDestroy cpu (killUse >> killTm)
       Gtk.toWidget cpu
 
-    updateTemp fg tempV = Gtk.widgetGetStyleContext fg >>= Gtk.updateCssClass tempClass [tempV]
+    updateTemp fg tempV = #getStyleContext fg >>= Gtk.updateCssClass tempClass [tempV]

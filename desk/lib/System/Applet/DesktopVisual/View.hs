@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLabels #-}
+
 module System.Applet.DesktopVisual.View (
   widgetUpdateClass,
   DeskVisual,
@@ -20,25 +22,26 @@ module System.Applet.DesktopVisual.View (
 import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
-import Data.Default.Class
 import Data.Foldable
+import Data.GI.Base.Constructible
 import Data.IORef
 import Data.Maybe
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gtk.Objects.Box qualified as Gtk
+import GI.Gtk.Objects.Label qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import View.Boxes qualified as View
 import View.Imagery qualified as View
-import View.Textual qualified as View
+import Data.GI.Base.Attributes
 
 widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => Gtk.Widget -> (s -> T.Text) -> [s] -> m ()
 widgetUpdateClass widget asClass state =
-  Gtk.widgetGetStyleContext widget >>= Gtk.updateCssClass asClass state
+  #getStyleContext widget >>= Gtk.updateCssClass asClass state
 
 -- | Desktop visualizer view
 data DeskVisual = DeskVisual
@@ -59,8 +62,8 @@ deskVisualNew :: MonadIO m => m DeskVisual
 deskVisualNew = do
   deskVisualBox <- Gtk.boxNew Gtk.OrientationHorizontal 5
   deskVisualWid <- Gtk.toWidget deskVisualBox
-  Gtk.widgetGetStyleContext deskVisualWid >>= flip Gtk.styleContextAddClass (T.pack "desk-visual")
-  Gtk.widgetShowAll deskVisualWid
+  #getStyleContext deskVisualWid >>= flip #addClass (T.pack "desk-visual")
+  #showAll deskVisualWid
 
   deskVisualItems <- liftIO $ newIORef V.empty
   pure DeskVisual{..}
@@ -70,19 +73,19 @@ deskVisualCtrl DeskVisual{..} = \case
   CutDeskItemsTo newCnt -> do
     toDelete <- liftIO $ atomicModifyIORef' deskVisualItems $ V.splitAt newCnt
     for_ toDelete $ \DeskItem{deskItemWid} -> do
-      Gtk.widgetHide deskItemWid
-      Gtk.containerRemove deskVisualBox deskItemWid
+      #hide deskItemWid
+      #remove deskVisualBox deskItemWid
   AddDeskItems deskItems -> do
     liftIO $ modifyIORef' deskVisualItems (<> deskItems)
     for_ deskItems $ \DeskItem{deskItemWid} -> do
-      Gtk.containerAdd deskVisualBox deskItemWid
-      Gtk.widgetShowAll deskItemWid
+      #add deskVisualBox deskItemWid
+      #showAll deskItemWid
 
 -- | Desktop item view
 data DeskItem = DeskItem
   { -- | The congregated widget
     deskItemWid :: !Gtk.Widget
-  , deskItemName :: !View.LabelDyn
+  , deskItemName :: !Gtk.Label
   , deskItemWinCont :: !View.BoxUniDyn
   }
 
@@ -100,17 +103,17 @@ deskItemNew :: MonadIO m => IO () -> m DeskItem
 deskItemNew onClick = do
   deskItemWinCont <- View.boxUniDynNew (View.defBoxArg Gtk.OrientationHorizontal)
 
-  deskItemName <- View.labelDynNew def
-  Gtk.widgetGetStyleContext (View.labelDynWidget deskItemName)
-    >>= flip Gtk.styleContextAddClass (T.pack "desktop-label")
+  deskItemName <- new Gtk.Label []
+  #getStyleContext deskItemName >>= flip #addClass (T.pack "desktop-label")
+  deskItemNameWid <- Gtk.toWidget deskItemName
 
   deskMain <-
     View.boxStaticNew
       (View.defBoxArg Gtk.OrientationHorizontal)
-      [View.labelDynWidget deskItemName, View.boxUniDynWidget deskItemWinCont]
+      [deskItemNameWid, View.boxUniDynWidget deskItemWinCont]
 
   deskItemWid <- Gtk.clickyNewWith (Just deskMain) onClick
-  Gtk.widgetGetStyleContext deskItemWid >>= flip Gtk.styleContextAddClass (T.pack "desktop-item")
+  #getStyleContext deskItemWid >>= flip #addClass (T.pack "desktop-item")
 
   pure DeskItem{..}
 
@@ -119,17 +122,17 @@ deskItemCtrl DeskItem{..} = \case
   AddWinItemAt WinItem{winItemWid} idx -> do
     View.boxUniDynCtrl deskItemWinCont (View.BoxUniAdd winItemWid)
     View.boxUniDynCtrl deskItemWinCont (View.BoxUniReorder winItemWid $ fromIntegral idx)
-    Gtk.widgetShowAll winItemWid
+    #showAll winItemWid
   RemoveWinItem WinItem{winItemWid} -> do
-    Gtk.widgetHide winItemWid
+    #hide winItemWid
     View.boxUniDynCtrl deskItemWinCont (View.BoxUniRemove winItemWid)
   ReorderWinItems winItems -> do
     for_ (V.indexed winItems) $ \(idx, WinItem{winItemWid}) -> do
       View.boxUniDynCtrl deskItemWinCont (View.BoxUniReorder winItemWid $ fromIntegral idx)
 
   -- Mundane property update here
-  DeskLabelName name -> View.labelDynSetLabel deskItemName name
-  DeskVisibility flag -> if flag then Gtk.widgetShowAll deskItemWid else Gtk.widgetHide deskItemWid
+  DeskLabelName name -> set deskItemName [#label := name]
+  DeskVisibility flag -> if flag then #showAll deskItemWid else #hide deskItemWid
 
 -- | Window item view
 data WinItem = WinItem
@@ -146,7 +149,7 @@ winItemNew :: MonadIO m => Gtk.IconSize -> IO () -> m WinItem
 winItemNew winItemSize onClick = do
   winItemImg <- View.imageDynNew winItemSize True
   winItemWid <- Gtk.buttonNewWith (Just $ View.imageDynWidget winItemImg) onClick
-  Gtk.widgetGetStyleContext winItemWid >>= flip Gtk.styleContextAddClass (T.pack "window-item")
+  #getStyleContext winItemWid >>= flip #addClass (T.pack "window-item")
   pure WinItem{..}
 
 winItemSetTitle :: MonadIO m => WinItem -> T.Text -> m ()

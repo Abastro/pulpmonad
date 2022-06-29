@@ -1,16 +1,18 @@
+{-# LANGUAGE OverloadedLabels #-}
+
 module System.Applet.Layout (LayoutArg (..), layout) where
 
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
-import Data.Default.Class
+import Data.GI.Base.Attributes
+import Data.GI.Base.Constructible
 import Data.Text qualified as T
-import GI.Gdk.Structs.EventButton qualified as Gdk
+import GI.Gtk.Objects.Label qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Status.X11.WMStatus
 import Status.X11.XHandle
-import View.Textual qualified as View
 
 newtype LayoutArg = LayoutArg
   { layoutPrettyName :: T.Text -> T.Text
@@ -72,14 +74,15 @@ layoutInitiate = do
 
 data LayoutView = LayoutView
   { layoutWid :: !Gtk.Widget
-  , layoutLbl :: !View.LabelDyn
+  , layoutLbl :: !Gtk.Label
   }
 
 layoutViewNew :: MonadIO m => m LayoutView
 layoutViewNew = do
-  layoutLbl <- View.labelDynNew def
+  layoutLbl <- new Gtk.Label []
+  layLblWid <- Gtk.toWidget layoutLbl
   -- Button to show the decoration
-  btn <- Gtk.buttonNewWith (Just $ View.labelDynWidget layoutLbl) $ pure ()
+  btn <- Gtk.buttonNewWith (Just layLblWid) $ pure ()
 
   layoutWid <- Gtk.toWidget btn
   Gtk.widgetSetName layoutWid (T.pack "window-layout")
@@ -88,11 +91,11 @@ layoutViewNew = do
 layoutSetAction :: MonadIO m => LayoutView -> IO () -> IO () -> m ()
 layoutSetAction LayoutView{layoutWid} leftClick rightClick = do
   Gtk.onWidgetButtonReleaseEvent layoutWid $ \event -> do
-    Gdk.getEventButtonButton event >>= \case
+    get event #button >>= \case
       1 -> True <$ leftClick
       3 -> True <$ rightClick
       _ -> pure False
   pure ()
 
 layoutSetLabel :: MonadIO m => LayoutView -> T.Text -> m ()
-layoutSetLabel LayoutView{layoutLbl} = View.labelDynSetLabel layoutLbl
+layoutSetLabel LayoutView{layoutLbl} lbl = set layoutLbl [#label := lbl]

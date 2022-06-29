@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLabels  #-}
+
 module View.Boxes (
   BoxArg (..),
   BoxPack (..),
@@ -15,7 +17,8 @@ import Data.Foldable
 import Data.Int
 import GI.Gtk.Objects.Box qualified as Gtk
 import Gtk.Commons qualified as Gtk
-import Gtk.Containers qualified as Gtk
+import Data.GI.Base.Constructible
+import Data.GI.Base.Attributes
 
 data BoxArg = BoxArg
   { boxOrient :: !Gtk.Orientation
@@ -55,21 +58,20 @@ boxUniDynWidget BoxUniDyn{boxDynWid} = boxDynWid
 
 boxUniDynNew :: MonadIO m => BoxArg -> m BoxUniDyn
 boxUniDynNew BoxArg{..} = do
-  boxDynBox <- Gtk.boxNew boxOrient boxSpacing
-  Gtk.boxSetHomogeneous boxDynBox boxHomogeneous
+  boxDynBox <- new Gtk.Box [#orientation := boxOrient, #spacing := boxSpacing, #homogeneous := boxHomogeneous]
   boxDynWid <- Gtk.toWidget boxDynBox
   pure BoxUniDyn{boxDynPack = boxPacking, ..}
 
 boxUniDynCtrl :: MonadIO m => BoxUniDyn -> BoxUniDynOp -> m ()
 boxUniDynCtrl BoxUniDyn{..} = \case
   BoxUniAdd wid -> boxPack boxDynBox wid
-  BoxUniRemove wid -> Gtk.containerRemove boxDynBox wid
-  BoxUniReorder wid idx -> Gtk.boxReorderChild boxDynBox wid idx
+  BoxUniRemove wid -> #remove boxDynBox wid
+  BoxUniReorder wid idx -> #reorderChild boxDynBox wid idx
   where
-    boxPack box wid = case boxDynPack of
-      BoxPackDef -> Gtk.containerAdd box wid
-      BoxPackStart -> Gtk.boxPackStart box wid False False 0
-      BoxPackEnd -> Gtk.boxPackEnd box wid False False 0
+    boxPack (box :: Gtk.Box) wid = case boxDynPack of
+      BoxPackDef -> #add box wid
+      BoxPackStart -> #packStart box wid False False 0
+      BoxPackEnd -> #packEnd box wid False False 0
 
 -- | Static box with fixed children.
 boxStaticNew :: MonadIO m => BoxArg -> [Gtk.Widget] -> m Gtk.Widget
