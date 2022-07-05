@@ -2,25 +2,35 @@
 
 module System.Applet.SysCtrl (sysCtrlBtn) where
 
+import Control.Concurrent.Task
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.GI.Base.Constructible
 import Data.Text qualified as T
 import GI.Gtk.Objects.Label qualified as Gtk
+import Graphics.X11.Types
+import Graphics.X11.Xlib.Extras
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
 import Gtk.Window qualified as Gtk
+import Status.X11.XHandle
 import View.Boxes qualified as View
 import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
+import qualified Gtk.Task as Gtk
 
 -- | System control button with shutdown symbol icon.
 -- Shows the system control dialog.
-sysCtrlBtn :: MonadIO m => m Gtk.Widget
+sysCtrlBtn :: (MonadIO m, MonadXHand m) => m Gtk.Widget
 sysCtrlBtn = do
+  watch <- runXHand sysCtrlListen
   icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-shutdown-symbolic")
-  Gtk.buttonNewWith (Just icon) (liftIO . void $ sysCtrlWin)
+  wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ sysCtrlWin)
+  liftIO $ do
+    killWatch <- Gtk.uiTask watch (\SysCtlMsg -> Gtk.widgetActivate wid)
+    Gtk.onWidgetDestroy wid killWatch
+  pure wid
 
 data SysCtl = Build | Refresh | Logout | Reboot | Poweroff
   deriving (Enum, Bounded, Show)
@@ -75,7 +85,6 @@ ctlButton window ctl = do
   #getStyleContext btn >>= flip #addClass (styleOf ctl)
   pure btn
 
--- TODO A way to expose this window from WM message
 sysCtrlWin :: IO Gtk.Window
 sysCtrlWin = do
   window <-
@@ -113,3 +122,21 @@ sysCtrlWin = do
       #getStyleContext box >>= flip #addClass (T.pack "btn-area")
       #setHalign box Gtk.AlignFill
       pure box
+
+{-------------------------------------------------------------------
+                          Communication
+--------------------------------------------------------------------}
+
+data SysCtlMsg = SysCtlMsg
+
+sysCtrlListen :: XIO () (Task SysCtlMsg)
+sysCtrlListen = do
+  rootWin <- xWindow
+  ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"
+  ctrlSys <- xAtom "_XMONAD_CTRL_SYS"
+  xListenTo structureNotifyMask rootWin Nothing $ \case
+    ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
+      | msgTyp == ctrlTyp
+        , fromIntegral subTyp == ctrlSys -> do
+        pure (Just SysCtlMsg)
+    _ -> pure Nothing

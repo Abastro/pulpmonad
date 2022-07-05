@@ -26,6 +26,7 @@ import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
+import XEvents
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
@@ -77,14 +78,14 @@ main = do
       , ("M-d", safeSpawnProg "nautilus")
       , ("M-M1-t", namedScratchpadAction scratchpads (name scTerm))
       ]
-    keysBasic xmCache =
+    keysBasic _xmCache =
       [ ("M-p", safeSpawnProg "synapse")
       , ("<XF86MonBrightnessUp>", safeSpawn "light" ["-A", "5"])
       , ("<XF86MonBrightnessDown>", safeSpawn "light" ["-U", "5"])
       , ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "+5%"])
       , ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "-5%"])
       , ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
-      , ("M-S-x", safeSpawnProg (xmCache </> "pulp-sysctl"))
+      , ("M-S-x", xCtrlMsg XSysCtl)
       , ("M-s", goToSelected gotoCfg)
       ]
     keysScreenshot =
