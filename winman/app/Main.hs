@@ -66,7 +66,7 @@ main = do
       , modMask = mod4Mask -- Super key
       }
       `additionalMouseBindings` mouseMove
-      `additionalKeysP` concat [keysUtility xmData, keysBasic xmCache, keysSpecial, keysScreenshot]
+      `additionalKeysP` concat [keysUtility xmData, keysBasic, keysSpecial, keysScreenshot]
       `removeKeysP` keysRemoved
   where
     cfg = ewmh desktopConfig
@@ -78,7 +78,7 @@ main = do
       , ("M-d", safeSpawnProg "nautilus")
       , ("M-M1-t", namedScratchpadAction scratchpads (name scTerm))
       ]
-    keysBasic _xmCache =
+    keysBasic =
       [ ("M-p", safeSpawnProg "synapse")
       , ("<XF86MonBrightnessUp>", safeSpawn "light" ["-A", "5"])
       , ("<XF86MonBrightnessDown>", safeSpawn "light" ["-U", "5"])
@@ -96,7 +96,7 @@ main = do
     keysSpecial =
       [("M-M1-d", debugStack)]
     keysRemoved =
-      ["M-q", "M-S-q", "M-S-p"]
+      ["M-q", "M-S-p"]
 
     gotoCfg =
       def

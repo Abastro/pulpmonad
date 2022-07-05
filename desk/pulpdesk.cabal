@@ -153,11 +153,3 @@ executable pulp-taskbar
   ghc-options:        -threaded -rtsopts "-with-rtsopts=-N"
   build-depends:
       pulpdesk
-
-executable pulp-sysctl
-  import:             pulp-gtk
-  main-is:            Main.hs
-  hs-source-dirs:     sysctl
-  ghc-options:        -threaded -rtsopts "-with-rtsopts=-N"
-  build-depends:
-      pulpdesk
