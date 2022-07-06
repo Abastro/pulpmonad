@@ -23,11 +23,11 @@ import XMonad.Util.Run (safeSpawn)
 
 -- | System control button with shutdown symbol icon.
 -- Shows the system control dialog.
-sysCtrlBtn :: (MonadIO m, MonadXHand m) => m Gtk.Widget
-sysCtrlBtn = do
+sysCtrlBtn :: (MonadIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
+sysCtrlBtn parent = do
   watch <- runXHand sysCtrlListen
   icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-shutdown-symbolic")
-  wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ sysCtrlWin)
+  wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ sysCtrlWin parent)
   liftIO $ do
     killWatch <- Gtk.uiTask watch (\SysCtlMsg -> Gtk.widgetActivate wid)
     on wid #destroy killWatch
@@ -78,8 +78,8 @@ ctlButton window ctl = do
   #getStyleContext btn >>= flip #addClass (styleOf ctl)
   pure btn
 
-sysCtrlWin :: IO Gtk.Window
-sysCtrlWin = do
+sysCtrlWin :: Gtk.Window -> IO Gtk.Window
+sysCtrlWin parent = do
   window <-
     new
       Gtk.Window
@@ -88,6 +88,7 @@ sysCtrlWin = do
       , #windowPosition := Gtk.WindowPositionCenter
       , #skipPagerHint := True
       , #skipTaskbarHint := True
+      , #transientFor := parent
       , #modal := True
       ]
   #setDefaultSize window 460 140

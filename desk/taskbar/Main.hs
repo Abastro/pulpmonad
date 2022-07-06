@@ -54,8 +54,8 @@ data BarWinArgs = BarWinArgs
   }
 
 -- | Creates and links the taskbar window. Does not show the window.
-taskbarWindow :: Gtk.Application -> BarWinArgs -> Gtk.Widget -> PulpIO Gtk.Window
-taskbarWindow app BarWinArgs{..} content = do
+taskbarWindow :: Gtk.Application -> BarWinArgs -> (Gtk.Window -> PulpIO Gtk.Widget) -> PulpIO Gtk.Window
+taskbarWindow app BarWinArgs{..} mkContent = do
   window <-
     new
       Gtk.Window
@@ -66,6 +66,7 @@ taskbarWindow app BarWinArgs{..} content = do
   Gtk.windowSetDock window $ Gtk.DockArg barDockPos barDockSize barDockSpan Nothing
   Gtk.windowSetTransparent window
 
+  content <- mkContent window
   #add window content
   #getStyleContext content >>= flip #addClass (T.pack "pulp-bar")
 
@@ -109,9 +110,9 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
       cssProvMain >>= flip Gtk.defScreenAddStyleContext Gtk.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
-      left <- unlift $ taskbarWindow app leftArgs =<< leftBox
-      center <- unlift $ taskbarWindow app centerArgs =<< centerBox
-      right <- unlift $ taskbarWindow app rightArgs =<< rightBox
+      left <- unlift $ taskbarWindow app leftArgs leftBox
+      center <- unlift $ taskbarWindow app centerArgs centerBox
+      right <- unlift $ taskbarWindow app rightArgs rightBox
       traverse_ #showAll [left, center, right]
 
     leftArgs =
@@ -121,12 +122,12 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
         , barDockSpan = Gtk.DockSpan 0 (1 / 6)
         , barTitle = T.pack "Pulp Statusbar"
         }
-    leftBox :: PulpIO Gtk.Widget
-    leftBox = do
+    leftBox :: Gtk.Window -> PulpIO Gtk.Widget
+    leftBox win = do
       box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       #setName box (T.pack "pulp-statusbar")
       traverse_ (addToBegin box)
-        =<< sequenceA [App.sysCtrlBtn, App.wmCtrlBtn]
+        =<< sequenceA [App.sysCtrlBtn win, App.wmCtrlBtn win]
       traverse_ (addToEnd box)
         =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
       Gtk.toWidget box
@@ -138,8 +139,8 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
         , barDockSpan = Gtk.DockSpan (1 / 6) (5 / 6)
         , barTitle = T.pack "Pulp Taskbar"
         }
-    centerBox :: PulpIO Gtk.Widget
-    centerBox = do
+    centerBox :: Gtk.Window -> PulpIO Gtk.Widget
+    centerBox _win = do
       box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       #setName box (T.pack "pulp-taskbar")
       #setCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
@@ -174,8 +175,8 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
         , barDockSpan = Gtk.DockSpan (5 / 6) 1
         , barTitle = T.pack "Pulp Systemtray"
         }
-    rightBox :: PulpIO Gtk.Widget
-    rightBox = do
+    rightBox :: Gtk.Window -> PulpIO Gtk.Widget
+    rightBox _win = do
       box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       #setName box (T.pack "pulp-systemtray")
       addToEnd box =<< liftIO (App.systemTray sysTrayArgs)

@@ -23,11 +23,11 @@ import XMonad.Util.Run (safeSpawn)
 
 -- | Window manager control button.
 -- Shows the system control dialog.
-wmCtrlBtn :: (MonadIO m, MonadXHand m) => m Gtk.Widget
-wmCtrlBtn = do
+wmCtrlBtn :: (MonadIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
+wmCtrlBtn parent = do
   watch <- runXHand wmCtrlListen
   icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "document-properties-symbolic")
-  wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ sysCtrlWin)
+  wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ wmCtrlWin parent)
   liftIO $ do
     killWatch <- Gtk.uiTask watch (\WMCtlMsg -> Gtk.widgetActivate wid)
     on wid #destroy killWatch
@@ -78,8 +78,8 @@ ctlButton window ctl = do
   #getStyleContext btn >>= flip #addClass (styleOf ctl)
   pure btn
 
-sysCtrlWin :: IO Gtk.Window
-sysCtrlWin = do
+wmCtrlWin :: Gtk.Window -> IO Gtk.Window
+wmCtrlWin parent = do
   window <-
     new
       Gtk.Window
@@ -88,6 +88,7 @@ sysCtrlWin = do
       , #windowPosition := Gtk.WindowPositionCenter
       , #skipPagerHint := True
       , #skipTaskbarHint := True
+      , #transientFor := parent
       , #modal := True
       ]
   #setDefaultSize window 360 140
