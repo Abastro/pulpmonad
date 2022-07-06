@@ -60,8 +60,7 @@ windowGrabOnMap window = do
   -- Upgrade blocker to GTK4.
   -- Possible Workaroud:
   -- 1. Use X11
-  -- 2. Delegate to WM (Note, simple grab cannot be done on that side)
-  -- 3. Make it a popup in pulpbar (Good way, but requires significantly more work)
+  -- 2. Delegate to WM (NOTE: Simple grab should not be done, does not redirect)
   afterWidgetMapEvent window $
     Gdk.getEventAnyWindow >=> \case
       Nothing -> pure False

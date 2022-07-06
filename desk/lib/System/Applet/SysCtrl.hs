@@ -7,18 +7,19 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.GI.Base.Constructible
+import Data.GI.Base.Signals
 import Data.Text qualified as T
 import GI.Gtk.Objects.Label qualified as Gtk
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
+import Gtk.Task qualified as Gtk
 import Gtk.Window qualified as Gtk
 import Status.X11.XHandle
 import View.Boxes qualified as View
 import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
-import qualified Gtk.Task as Gtk
 
 -- | System control button with shutdown symbol icon.
 -- Shows the system control dialog.
@@ -29,14 +30,15 @@ sysCtrlBtn = do
   wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ sysCtrlWin)
   liftIO $ do
     killWatch <- Gtk.uiTask watch (\SysCtlMsg -> Gtk.widgetActivate wid)
-    Gtk.onWidgetDestroy wid killWatch
+    on wid #destroy killWatch
   pure wid
 
-data SysCtl = Build | Refresh | Logout | Reboot | Poweroff
+data SysCtl = Cancel | Build | Refresh | Logout | Reboot | Poweroff
   deriving (Enum, Bounded, Show)
 
 nameOf :: SysCtl -> T.Text
 nameOf = \case
+  Cancel -> T.pack "Cancel"
   Build -> T.pack "Build"
   Refresh -> T.pack "Refresh"
   Logout -> T.pack "Log out"
@@ -45,6 +47,7 @@ nameOf = \case
 
 iconOf :: SysCtl -> T.Text
 iconOf = \case
+  Cancel -> T.pack "window-close-symbolic"
   Build -> T.pack "document-save-symbolic"
   Refresh -> T.pack "view-refresh-symbolic"
   Logout -> T.pack "system-log-out-symbolic"
@@ -53,6 +56,7 @@ iconOf = \case
 
 styleOf :: SysCtl -> T.Text
 styleOf = \case
+  Cancel -> T.pack "btn-sys"
   Build -> T.pack "btn-sys"
   Refresh -> T.pack "btn-sys"
   Logout -> T.pack "btn-logout"
@@ -61,6 +65,7 @@ styleOf = \case
 
 actOf :: Gtk.Window -> SysCtl -> IO ()
 actOf window = \case
+  Cancel -> #close window
   Build -> do
     safeSpawn "gnome-terminal" ["--class=term-float", "--", "xmonad-manage", "build", "pulpmonad"]
     #close window -- For now, close the window..
@@ -91,16 +96,16 @@ sysCtrlWin = do
     new
       Gtk.Window
       [ #title := T.pack "Pulp System Control"
-      , #typeHint := Gtk.WindowTypeHintSplashscreen
+      , #type := Gtk.WindowTypePopup
       , #windowPosition := Gtk.WindowPositionCenter
       , #skipPagerHint := True
       , #skipTaskbarHint := True
       , #modal := True
       ]
-  #setDefaultSize window 560 140
+  #setDefaultSize window 680 140
   #setKeepAbove window True
 
-  Gtk.onWidgetKeyPressEvent window $
+  on window #keyPressEvent $
     flip get #keyval >=> \case
       Gtk.KEY_Escape -> True <$ #close window
       _ -> pure False
