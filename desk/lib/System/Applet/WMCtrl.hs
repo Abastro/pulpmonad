@@ -26,7 +26,7 @@ import XMonad.Util.Run (safeSpawn)
 wmCtrlBtn :: (MonadIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
 wmCtrlBtn parent = do
   watch <- runXHand wmCtrlListen
-  icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "document-properties-symbolic")
+  icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-settings-symbolic")
   wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ wmCtrlWin parent)
   liftIO $ do
     killWatch <- Gtk.uiTask watch (\WMCtlMsg -> Gtk.widgetActivate wid)
@@ -84,15 +84,14 @@ wmCtrlWin parent = do
     new
       Gtk.Window
       [ #title := T.pack "Pulp Manager Control"
-      , #type := Gtk.WindowTypePopup
+      , #typeHint := Gtk.WindowTypeHintDialog
       , #windowPosition := Gtk.WindowPositionCenter
-      , #skipPagerHint := True
-      , #skipTaskbarHint := True
       , #transientFor := parent
       , #modal := True
       ]
   #setDefaultSize window 360 140
   #setKeepAbove window True
+  #setIconName window (Just $ T.pack "system-settings")
 
   on window #keyPressEvent $
     flip get #keyval >=> \case
@@ -100,8 +99,6 @@ wmCtrlWin parent = do
       _ -> pure False
 
   Gtk.windowSetTransparent window
-  -- TODO Should this grab pointer?
-  Gtk.windowGrabOnMap window
 
   #add window =<< btns window
   #showAll window
