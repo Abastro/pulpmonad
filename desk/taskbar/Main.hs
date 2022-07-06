@@ -26,6 +26,7 @@ import System.Applet.Layout qualified as App
 import System.Applet.SysCtrl qualified as App
 import System.Applet.SysTray qualified as App
 import System.Applet.SystemDisplay qualified as App
+import System.Applet.WMCtrl qualified as App
 import System.Environment
 import System.Exit
 import System.Log.LogPrint (LogLevel (..), defLogFormat)
@@ -97,13 +98,6 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
       #loadFromPath css $ T.pack (dataDir </> "styles" </> "pulp-taskbar.css")
       pure css
 
-    cssProvSC :: IO Gtk.CssProvider
-    cssProvSC = do
-      css <- new Gtk.CssProvider []
-      dataDir <- liftIO $ getEnv dataDirToUse
-      #loadFromPath css $ T.pack (dataDir </> "styles" </> "pulp-sysctl.css")
-      pure css
-
     iconThemeSetup :: IO ()
     iconThemeSetup = do
       dataDir <- getEnv dataDirToUse
@@ -113,7 +107,6 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     activating :: Gtk.Application -> PulpIO ()
     activating app = withRunInIO $ \unlift -> do
       cssProvMain >>= flip Gtk.defScreenAddStyleContext Gtk.STYLE_PROVIDER_PRIORITY_USER
-      cssProvSC >>= flip Gtk.defScreenAddStyleContext Gtk.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
       left <- unlift $ taskbarWindow app leftArgs =<< leftBox
@@ -130,10 +123,10 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
         }
     leftBox :: PulpIO Gtk.Widget
     leftBox = do
-      box <- Gtk.boxNew Gtk.OrientationHorizontal 0
+      box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       #setName box (T.pack "pulp-statusbar")
       traverse_ (addToBegin box)
-        =<< sequenceA [App.sysCtrlBtn]
+        =<< sequenceA [App.sysCtrlBtn, App.wmCtrlBtn]
       traverse_ (addToEnd box)
         =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
       Gtk.toWidget box

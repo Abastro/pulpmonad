@@ -125,6 +125,7 @@ library
     System.Applet.SystemDisplay
     System.Applet.Layout
     System.Applet.SysCtrl
+    System.Applet.WMCtrl
 
     System.Applet.DesktopVisual.View
     System.Applet.DesktopVisual.Handle

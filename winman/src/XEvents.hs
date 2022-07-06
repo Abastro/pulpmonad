@@ -6,7 +6,7 @@ import Graphics.X11.Xlib.Event
 import Graphics.X11.Xlib.Extras
 import XMonad.Core
 
-data XCtrlSend = XSysCtl
+data XCtrlSend = XSysCtl | XWMCtl
 
 -- | Sends custom global control message over X11.
 xCtrlMsg :: XCtrlSend -> X ()
@@ -22,3 +22,4 @@ xCtrlMsg send = do
   where
     sendTyp = \case
       XSysCtl -> "_XMONAD_CTRL_SYS"
+      XWMCtl -> "_XMONAD_CTRL_WM"

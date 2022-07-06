@@ -85,6 +85,7 @@ main = do
       , ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "+5%"])
       , ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "-5%"])
       , ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
+      , ("M-x", xCtrlMsg XWMCtl)
       , ("M-S-x", xCtrlMsg XSysCtl)
       , ("M-s", goToSelected gotoCfg)
       ]

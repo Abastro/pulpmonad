@@ -116,21 +116,27 @@ image-bar#cpu>image {
 	color: rgb(216, 216, 216);
 	-gtk-icon-shadow: none;
 }
+
 image-bar#cpu.temp-20>image {
 	color: rgb(216, 210, 210);
 }
+
 image-bar#cpu.temp-40>image {
 	color: rgb(255, 200, 170);
 }
+
 image-bar#cpu.temp-60>image {
 	color: rgb(255, 190, 120);
 }
+
 image-bar#cpu.temp-80>image {
 	color: rgb(255, 150, 80);
 }
+
 image-bar#cpu.temp-100>image {
 	color: rgb(255, 100, 40);
 }
+
 image-bar#cpu.temp-120>image {
 	color: rgb(255, 60, 0);
 }
@@ -156,4 +162,65 @@ image-bar#cpu {
 #window-layout label {
 	font-family: "Font Awesome 6 Free Solid", sans-serif;
 	font-size: 10pt;
+}
+
+/* System Ctrl */
+#pulp-sysctl {
+  padding: 10px 15px;
+  border: 10px inset rgba(40, 16, 56, 0.7);
+  border-radius: 20px;
+  background-color: rgba(84, 56, 108, 0.7);
+}
+
+#pulp-sysctl button {
+  background-image: none;
+  border-width: 3px;
+  border-radius: 30px;
+}
+
+#pulp-sysctl button:focus {
+  box-shadow: inset 0 -6px rgba(200, 200, 200, 0.5);
+}
+
+#pulp-sysctl .btn-sys {
+  border-color: rgb(100, 80, 120);
+  background-color: rgb(120, 100, 140);
+}
+
+#pulp-sysctl .btn-logout {
+  border-color: rgb(140, 120, 60);
+  background-color: rgb(160, 140, 90);
+}
+
+#pulp-sysctl .btn-reboot {
+  border-color: rgb(80, 105, 80);
+  background-color: rgb(100, 125, 100);
+}
+
+#pulp-sysctl .btn-poweroff {
+  border-color: rgb(120, 60, 60);
+  background-color: rgb(160, 80, 80);
+}
+
+/* WM Ctrl */
+#pulp-wmctl {
+	padding: 10px 15px;
+	border: 10px inset rgba(40, 16, 56, 0.7);
+	border-radius: 20px;
+	background-color: rgba(84, 56, 108, 0.7);
+}
+
+#pulp-wmctl button {
+	background-image: none;
+	border-width: 3px;
+	border-radius: 30px;
+}
+
+#pulp-wmctl button:focus {
+	box-shadow: inset 0 -6px rgba(200, 200, 200, 0.5);
+}
+
+#pulp-wmctl .btn-ctl {
+	border-color: rgb(100, 80, 120);
+	background-color: rgb(120, 100, 140);
 }

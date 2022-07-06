@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedLabels #-}
 
-module System.Applet.SysCtrl (sysCtrlBtn) where
+module System.Applet.WMCtrl (wmCtrlBtn) where
 
 import Control.Concurrent.Task
 import Control.Monad
@@ -21,48 +21,48 @@ import View.Boxes qualified as View
 import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
 
--- | System control button with shutdown symbol icon.
+-- | Window manager control button.
 -- Shows the system control dialog.
-sysCtrlBtn :: (MonadIO m, MonadXHand m) => m Gtk.Widget
-sysCtrlBtn = do
-  watch <- runXHand sysCtrlListen
-  icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-shutdown-symbolic")
+wmCtrlBtn :: (MonadIO m, MonadXHand m) => m Gtk.Widget
+wmCtrlBtn = do
+  watch <- runXHand wmCtrlListen
+  icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "document-properties-symbolic")
   wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ sysCtrlWin)
   liftIO $ do
-    killWatch <- Gtk.uiTask watch (\SysCtlMsg -> Gtk.widgetActivate wid)
+    killWatch <- Gtk.uiTask watch (\WMCtlMsg -> Gtk.widgetActivate wid)
     on wid #destroy killWatch
   pure wid
 
-data SysCtl = Cancel | Logout | Reboot | Poweroff
+data SysCtl = Cancel | Build | Refresh
   deriving (Enum, Bounded, Show)
 
 nameOf :: SysCtl -> T.Text
 nameOf = \case
   Cancel -> T.pack "Cancel"
-  Logout -> T.pack "Log out"
-  Reboot -> T.pack "Reboot"
-  Poweroff -> T.pack "Power off"
+  Build -> T.pack "Build"
+  Refresh -> T.pack "Refresh"
 
 iconOf :: SysCtl -> T.Text
 iconOf = \case
   Cancel -> T.pack "window-close-symbolic"
-  Logout -> T.pack "system-log-out-symbolic"
-  Reboot -> T.pack "system-reboot-symbolic"
-  Poweroff -> T.pack "system-shutdown-symbolic"
+  Build -> T.pack "document-save-symbolic"
+  Refresh -> T.pack "view-refresh-symbolic"
 
 styleOf :: SysCtl -> T.Text
 styleOf = \case
-  Cancel -> T.pack "btn-sys"
-  Logout -> T.pack "btn-logout"
-  Reboot -> T.pack "btn-reboot"
-  Poweroff -> T.pack "btn-poweroff"
+  Cancel -> T.pack "btn-ctl"
+  Build -> T.pack "btn-ctl"
+  Refresh -> T.pack "btn-ctl"
 
 actOf :: Gtk.Window -> SysCtl -> IO ()
 actOf window = \case
   Cancel -> #close window
-  Logout -> safeSpawn "killall" ["xmonad-manage"] -- A roundabout
-  Reboot -> safeSpawn "systemctl" ["reboot"]
-  Poweroff -> safeSpawn "systemctl" ["poweroff"]
+  Build -> do
+    safeSpawn "gnome-terminal" ["--class=term-float", "--", "xmonad-manage", "build", "pulpmonad"]
+    #close window -- For now, close the window..
+  Refresh -> do
+    safeSpawn "xmonad" ["--restart"]
+    #close window
 
 ctlButton :: Gtk.Window -> SysCtl -> IO Gtk.Widget
 ctlButton window ctl = do
@@ -83,14 +83,14 @@ sysCtrlWin = do
   window <-
     new
       Gtk.Window
-      [ #title := T.pack "Pulp System Control"
+      [ #title := T.pack "Pulp Manager Control"
       , #type := Gtk.WindowTypePopup
       , #windowPosition := Gtk.WindowPositionCenter
       , #skipPagerHint := True
       , #skipTaskbarHint := True
       , #modal := True
       ]
-  #setDefaultSize window 460 140
+  #setDefaultSize window 360 140
   #setKeepAbove window True
 
   on window #keyPressEvent $
@@ -99,6 +99,7 @@ sysCtrlWin = do
       _ -> pure False
 
   Gtk.windowSetTransparent window
+  -- TODO Should this grab pointer?
   Gtk.windowGrabOnMap window
 
   #add window =<< btns window
@@ -111,7 +112,7 @@ sysCtrlWin = do
       box <-
         View.boxStaticNew (View.defBoxArg Gtk.OrientationHorizontal){View.boxSpacing = 10, View.boxHomogeneous = True}
           =<< traverse (ctlButton window) [minBound .. maxBound]
-      #setName box (T.pack "pulp-sysctl")
+      #setName box (T.pack "pulp-wmctl")
       #getStyleContext box >>= flip #addClass (T.pack "btn-area")
       #setHalign box Gtk.AlignFill
       pure box
@@ -120,16 +121,16 @@ sysCtrlWin = do
                           Communication
 --------------------------------------------------------------------}
 
-data SysCtlMsg = SysCtlMsg
+data WMCtlMsg = WMCtlMsg
 
-sysCtrlListen :: XIO () (Task SysCtlMsg)
-sysCtrlListen = do
+wmCtrlListen :: XIO () (Task WMCtlMsg)
+wmCtrlListen = do
   rootWin <- xWindow
   ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"
-  ctrlSys <- xAtom "_XMONAD_CTRL_SYS"
+  ctrlSys <- xAtom "_XMONAD_CTRL_WM"
   xListenTo structureNotifyMask rootWin Nothing $ \case
     ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
       | msgTyp == ctrlTyp
         , fromIntegral subTyp == ctrlSys -> do
-        pure (Just SysCtlMsg)
+        pure (Just WMCtlMsg)
     _ -> pure Nothing
