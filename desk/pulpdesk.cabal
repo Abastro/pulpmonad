@@ -68,6 +68,7 @@ common pulp-gtk
     , X11
     , unix
     , time
+    , process
     , generic-data ==0.9.*
     , stm ==2.5.*
     , parser-combinators ==1.3.*

@@ -6,6 +6,7 @@ import Control.Concurrent.Task
 import Control.Monad.IO.Class
 import Data.Foldable
 import Data.GI.Base.Constructible
+import Data.GI.Base.Signals
 import Data.Int
 import Data.Ratio ((%))
 import Data.Text qualified as T
@@ -74,8 +75,9 @@ mainboardDisplay iconSize mainWidth = do
   traverse_ (flip #setHalign Gtk.AlignEnd) widCPU
   traverse_ (flip #setValign Gtk.AlignCenter) widCPU
 
+  -- Exists simply because Gtk's space allocation is tarded
   bg <- do
-    img <- new Gtk.Image [] -- Tried to set the image, but gtk does not accept rectangular icons.
+    img <- new Gtk.Image [] -- Tried to set an icon, but gtk does not accept rectangular icons.
     #setSizeRequest img mainWidth (-1)
     Gtk.toWidget img
 
@@ -92,7 +94,7 @@ mainboardDisplay iconSize mainWidth = do
         Gtk.imageBarPos mem Gtk.OrientationVertical barRect
         Gtk.imageBarSetIcon mem (T.pack "ram-symbolic") iconSize
         kill <- Gtk.uiTask task $ Gtk.imageBarSetFill mem . memUsed . memRatios
-        Gtk.onWidgetDestroy mem kill
+        on mem #destroy kill
       Gtk.toWidget mem
 
     cpuIcon (taskUse, taskTemp) = do
@@ -104,7 +106,7 @@ mainboardDisplay iconSize mainWidth = do
         Gtk.imageBarSetIcon cpu (T.pack "cpu-symbolic") iconSize
         killUse <- Gtk.uiTask taskUse $ Gtk.imageBarSetFill cpu . cpuUsed . cpuRatios
         killTm <- Gtk.uiTask taskTemp $ updateTemp cpu . tempVal
-        Gtk.onWidgetDestroy cpu (killUse >> killTm)
+        on cpu #destroy (killUse >> killTm)
       Gtk.toWidget cpu
 
     updateTemp fg tempV = #getStyleContext fg >>= Gtk.updateCssClass tempClass [tempV]
