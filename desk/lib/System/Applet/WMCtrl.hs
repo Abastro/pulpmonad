@@ -116,6 +116,8 @@ wmCtrlListen = do
                               View
 --------------------------------------------------------------------}
 
+-- MAYBE replace entire "View" thing with GtkBuilder
+
 data CtlWinView = CtlWinView
   { ctlWin :: !Gtk.Window
   , ctlStack :: !Gtk.Stack

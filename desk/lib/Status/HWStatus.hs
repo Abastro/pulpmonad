@@ -88,7 +88,12 @@ cpuDelta delay = do
   pure (liftA2 (-) post pre)
 
 -- | Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
---  Pulls from </sys/class/hwmon/hwmon?/temp2_input>.
+-- Pulls from </sys/class/hwmon/hwmon?/temp1_input>.
+--
+-- Changed to use "Tctl" instead of "Tdie" as the latter is often not available.
+--
+-- (Some CPUs adds offset to attain Tctl,
+-- and frankly the adjusted temp is likely appropriate for display)
 cpuTemp :: IO Double
 cpuTemp = do
   dirs <- map (baseDir </>) <$> listDirectory baseDir
@@ -97,7 +102,7 @@ cpuTemp = do
     baseDir = "/" </> "sys" </> "class" </> "hwmon"
     withName dir =
       getFileLine (dir </> "name") >>= \case
-        "k10temp" -> parseFile decimalH (dir </> "temp2_input")
+        "k10temp" -> parseFile decimalH (dir </> "temp1_input")
         name -> fail $ "Not relevant device: " <> show name
 
 -- | Memory statistics. Usual unit is kB.
@@ -119,9 +124,8 @@ memRatios mem@MemStat{memTotal} = ratioTo memTotal mem
 memUsed :: Num a => MemStat a -> a
 memUsed MemStat{..} = memTotal - memFree - memBuffers - memCached
 
--- |
---  Gets Memory statistics.
---  Pulls from </proc/meminfo>.
+-- | Gets Memory statistics.
+-- Pulls from </proc/meminfo>.
 memStat :: IO (MemStat Int)
 memStat = parseFile memory ("/" </> "proc" </> "meminfo")
   where
@@ -170,9 +174,8 @@ data BatStat = BatStat
   }
   deriving (Show)
 
--- |
---  Gets Battery statistics.
---  Pulls from </sys/class/power_supply/BAT?/uevent>.
+-- | Gets Battery statistics.
+-- Pulls from </sys/class/power_supply/BAT?/uevent>.
 batStat :: IO BatStat
 batStat = do
   let path = "/" </> "sys" </> "class" </> "power_supply"
