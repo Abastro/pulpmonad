@@ -78,7 +78,7 @@ showCtlWin parent = do
     runBuild :: CtlWinView -> IO ()
     runBuild view = do
       Gtk.uiSingleRun (ctlWinBuildmode view True)
-      -- Problem: stdout from the process is captured last, what is happening?
+      -- FIXME: this causes error in waitForProcess, child process does not exist.
       forkIO . withCreateProcess (proc "xmonad-manage" ["build", "pulpmonad"]){std_out = CreatePipe} $
         \_ (Just outp) _ _ -> do
           actOnLine outp $ \txt -> Gtk.uiSingleRun (ctlWinBuildAddLine view txt)
