@@ -89,9 +89,7 @@ showCtlWin parent = do
           hIsEOF outp >>= \case
             True -> pure ()
             False -> do
-              line <- T.hGetLine outp
-              T.putStrLn (T.pack "::" <> line)
-              act line
+              T.hGetLine outp >>= act
               actOnLine outp act
 
 {-------------------------------------------------------------------
