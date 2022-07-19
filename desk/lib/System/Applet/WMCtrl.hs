@@ -24,15 +24,16 @@ import Gtk.Window qualified as Gtk
 import Status.X11.XHandle
 import System.IO
 import System.Process
+import System.Pulp.PulpEnv
 import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
 
 -- | Window manager control button.
 -- Shows the system control dialog.
-wmCtrlBtn :: (MonadIO m, MonadXHand m) => (FilePath -> FilePath) -> Gtk.Window -> m Gtk.Widget
-wmCtrlBtn uiPath parent = do
+wmCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
+wmCtrlBtn parent = do
   watch <- runXHand wmCtrlListen
-  ctrlWin <- liftIO $ ctrlNew uiPath parent
+  ctrlWin <- ctrlNew parent
 
   icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-settings-symbolic")
   wid <- Gtk.buttonNewWith (Just icon) (#showAll ctrlWin)
@@ -41,17 +42,18 @@ wmCtrlBtn uiPath parent = do
     on wid #destroy killWatch
   pure wid
 
-ctrlNew :: (FilePath -> FilePath) -> Gtk.Window -> IO Gtk.Window
-ctrlNew uiPath parent = do
-  CtrlWinView{..} <- ctrlWinNew uiPath parent
-  setupAct $ \case
-     Close -> #close ctrlWin
-     Build -> runBuild setBuildmode addBuildLine
-     Refresh -> do
+ctrlNew :: (MonadIO m, MonadPulpPath m) => Gtk.Window -> m Gtk.Window
+ctrlNew parent = do
+  uiFile <- pulpFile PulpUI "wmctl.glade"
+  CtrlWinView{..} <- liftIO $ ctrlWinNew (T.pack uiFile) parent
+  liftIO . setupAct $ \case
+    Close -> #close ctrlWin
+    Build -> runBuild setBuildmode addBuildLine
+    Refresh -> do
       safeSpawn "xmonad" ["--restart"]
       #close ctrlWin
 
-  setBuildmode False
+  liftIO $ setBuildmode False
   pure ctrlWin
   where
     runBuild setMode addLine = do
@@ -101,7 +103,6 @@ ctrlSignal = \case
   Build -> T.pack "wmctl-build"
   Refresh -> T.pack "wmctl-refresh"
 
-
 -- TODO "setupAct" is ad-hoc. Better way?
 data CtrlWinView = CtrlWinView
   { ctrlWin :: !Gtk.Window
@@ -110,9 +111,9 @@ data CtrlWinView = CtrlWinView
   , addBuildLine :: T.Text -> IO ()
   }
 
-ctrlWinNew :: (FilePath -> FilePath) -> Gtk.Window -> IO CtrlWinView
-ctrlWinNew uiPath parent = do
-  builder <- Gtk.builderNewFromFile (T.pack $ uiPath "wmctl.glade")
+ctrlWinNew :: T.Text -> Gtk.Window -> IO CtrlWinView
+ctrlWinNew uiFile parent = do
+  builder <- Gtk.builderNewFromFile uiFile
 
   Just window <- Gtk.elementAs builder (T.pack "wmctl") Gtk.Window
   Just stack <- Gtk.elementAs builder (T.pack "wmctl-stack") Gtk.Stack

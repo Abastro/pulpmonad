@@ -236,16 +236,3 @@ image-bar#cpu {
 	color: gray;
 	background-color: rgb(66, 36, 84)
 }
-
-
-frame#pulp-wmctl border {
-	border: 5px inset rgb(40, 40, 40);
-	border-radius: 10px;
-}
-
-frame#pulp-wmctl label {
-	border-radius: 5px;
-	padding: 10px;
-	color: gray;
-	background-color: rgb(66, 36, 84)
-}

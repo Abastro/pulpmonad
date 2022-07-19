@@ -19,13 +19,15 @@ import Status.X11.XHandle
 import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
 import qualified GI.Gtk.Objects.Builder as Gtk
+import System.Pulp.PulpEnv
 
 -- | System control button with shutdown symbol icon.
 -- Shows the system control dialog.
-sysCtrlBtn :: (MonadIO m, MonadXHand m) => (FilePath -> FilePath) -> Gtk.Window -> m Gtk.Widget
-sysCtrlBtn uiPath parent = do
+sysCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
+sysCtrlBtn parent = do
   watch <- runXHand sysCtrlListen
-  ctlWin <- liftIO $ sysCtrlWinNew uiPath parent
+  uiFile <- pulpFile PulpUI "sysctl.glade"
+  ctlWin <- liftIO $ sysCtrlWinNew (T.pack uiFile) parent
 
   icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-shutdown-symbolic")
   wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ #showAll ctlWin)
@@ -34,9 +36,9 @@ sysCtrlBtn uiPath parent = do
     on wid #destroy killWatch
   pure wid
 
-sysCtrlWinNew :: (FilePath -> FilePath) -> Gtk.Window -> IO Gtk.Window
-sysCtrlWinNew uiPath parent = do
-  builder <- Gtk.builderNewFromFile (T.pack $ uiPath "sysctl.glade")
+sysCtrlWinNew :: T.Text -> Gtk.Window -> IO Gtk.Window
+sysCtrlWinNew uiFile parent = do
+  builder <- Gtk.builderNewFromFile uiFile
 
   Just window <- Gtk.elementAs builder (T.pack "sysctl") Gtk.Window
 

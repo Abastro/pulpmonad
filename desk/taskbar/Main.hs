@@ -79,8 +79,13 @@ main = do
   runWithArg isTest
 
 runWithArg :: Bool -> IO ()
-runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosity = verbosity} $
-  withRunInIO $ \unlift -> do
+runWithArg isTest = runPulpIO
+  PulpArg
+    { loggerFormat = defLogFormat
+    , loggerVerbosity = verbosity
+    , dataDirEnv = dataDirToUse
+    }
+  $ withRunInIO $ \unlift -> do
     Just app <- Gtk.applicationNew (Just $ T.pack "pulp.ui.taskbar") [Gio.ApplicationFlagsNonUnique]
     Gtk.onApplicationActivate app (unlift $ activating app)
     Glib.unixSignalAdd Glib.PRIORITY_DEFAULT (fromIntegral sigINT) $ True <$ Gtk.applicationQuit app
@@ -89,30 +94,29 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
   where
     verbosity = if isTest then LevelDebug else LevelInfo
     dockPos = if isTest then Gtk.DockBottom else Gtk.DockTop
-
     dataDirToUse = if isTest then "XMONAD_CONFIG_DIR" else "XMONAD_DATA_DIR"
 
-    cssProvMain :: IO Gtk.CssProvider
+    cssProvMain :: PulpIO Gtk.CssProvider
     cssProvMain = do
       css <- new Gtk.CssProvider []
-      dataDir <- getEnv dataDirToUse
-      #loadFromPath css $ T.pack (dataDir </> "styles" </> "pulp-taskbar.css")
+      cssFile <- pulpFile PulpStyle "pulp-taskbar.css"
+      #loadFromPath css (T.pack cssFile)
       pure css
 
-    iconThemeSetup :: IO ()
+    iconThemeSetup :: PulpIO ()
     iconThemeSetup = do
-      dataDir <- getEnv dataDirToUse
       defaultTheme <- Gtk.iconThemeGetDefault
-      #appendSearchPath defaultTheme (dataDir </> "asset" </> "icons")
+      iconDir <- pulpFile PulpAsset "icons"
+      #appendSearchPath defaultTheme iconDir
 
     activating :: Gtk.Application -> PulpIO ()
-    activating app = withRunInIO $ \unlift -> do
+    activating app = do
       cssProvMain >>= flip Gtk.defScreenAddStyleContext Gtk.STYLE_PROVIDER_PRIORITY_USER
       iconThemeSetup
 
-      left <- unlift $ taskbarWindow app leftArgs leftBox
-      center <- unlift $ taskbarWindow app centerArgs centerBox
-      right <- unlift $ taskbarWindow app rightArgs rightBox
+      left <- taskbarWindow app leftArgs leftBox
+      center <- taskbarWindow app centerArgs centerBox
+      right <- taskbarWindow app rightArgs rightBox
       traverse_ #showAll [left, center, right]
 
     leftArgs =
@@ -125,13 +129,10 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     leftBox :: Gtk.Window -> PulpIO Gtk.Widget
     leftBox win = do
       -- MAYBE UI should not be in data directory
-      dataDir <- liftIO $ getEnv dataDirToUse
-      let uiPath = ((dataDir </> "ui") </>)
-
       box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       #setName box (T.pack "pulp-statusbar")
       traverse_ (addToBegin box)
-        =<< sequenceA [App.sysCtrlBtn uiPath win, App.wmCtrlBtn uiPath win]
+        =<< sequenceA [App.sysCtrlBtn win, App.wmCtrlBtn win]
       traverse_ (addToEnd box)
         =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
       Gtk.toWidget box
