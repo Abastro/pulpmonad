@@ -225,6 +225,19 @@ image-bar#cpu {
 	background-color: rgb(120, 100, 140);
 }
 
+#pulp-wmctl scrolledwindow {
+	border: 5px inset rgb(40, 40, 40);
+	border-radius: 10px;
+}
+
+#pulp-wmctl scrolledwindow label {
+	border-radius: 5px;
+	padding: 10px;
+	color: gray;
+	background-color: rgb(66, 36, 84)
+}
+
+
 frame#pulp-wmctl border {
 	border: 5px inset rgb(40, 40, 40);
 	border-radius: 10px;

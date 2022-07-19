@@ -95,7 +95,7 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
     cssProvMain :: IO Gtk.CssProvider
     cssProvMain = do
       css <- new Gtk.CssProvider []
-      dataDir <- liftIO $ getEnv dataDirToUse
+      dataDir <- getEnv dataDirToUse
       #loadFromPath css $ T.pack (dataDir </> "styles" </> "pulp-taskbar.css")
       pure css
 
@@ -124,10 +124,14 @@ runWithArg isTest = runPulpIO PulpArg{loggerFormat = defLogFormat, loggerVerbosi
         }
     leftBox :: Gtk.Window -> PulpIO Gtk.Widget
     leftBox win = do
+      -- MAYBE UI should not be in data directory
+      dataDir <- liftIO $ getEnv dataDirToUse
+      let uiPath = ((dataDir </> "ui") </>)
+
       box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       #setName box (T.pack "pulp-statusbar")
       traverse_ (addToBegin box)
-        =<< sequenceA [App.sysCtrlBtn win, App.wmCtrlBtn win]
+        =<< sequenceA [App.sysCtrlBtn uiPath win, App.wmCtrlBtn uiPath win]
       traverse_ (addToEnd box)
         =<< sequenceA [App.textClock "%b %_d (%a)\n%H:%M %p"]
       Gtk.toWidget box

@@ -7,13 +7,11 @@ import Control.Concurrent.Task
 import Control.Monad.IO.Class
 import Data.Foldable
 import Data.GI.Base.Attributes
-import Data.GI.Base.Constructible
 import Data.GI.Base.Signals
-import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
-import GI.Gtk.Objects.Button qualified as Gtk
-import GI.Gtk.Objects.Frame qualified as Gtk
+import Foreign.Ptr (nullPtr)
+import GI.Gtk.Objects.Builder qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import GI.Gtk.Objects.ScrolledWindow qualified as Gtk
 import GI.Gtk.Objects.Stack qualified as Gtk
@@ -26,63 +24,43 @@ import Gtk.Window qualified as Gtk
 import Status.X11.XHandle
 import System.IO
 import System.Process
-import View.Boxes qualified as View
 import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
 
 -- | Window manager control button.
 -- Shows the system control dialog.
-wmCtrlBtn :: (MonadIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
-wmCtrlBtn parent = do
+wmCtrlBtn :: (MonadIO m, MonadXHand m) => (FilePath -> FilePath) -> Gtk.Window -> m Gtk.Widget
+wmCtrlBtn uiPath parent = do
   watch <- runXHand wmCtrlListen
+  ctrlWin <- liftIO $ ctrlNew uiPath parent
+
   icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-settings-symbolic")
-  wid <- Gtk.buttonNewWith (Just icon) (liftIO $ showCtlWin parent)
+  wid <- Gtk.buttonNewWith (Just icon) (#showAll ctrlWin)
   liftIO $ do
     killWatch <- Gtk.uiTask watch (\WMCtlMsg -> Gtk.widgetActivate wid)
     on wid #destroy killWatch
   pure wid
 
-data SysCtl = Cancel | Build | Refresh
-  deriving (Eq, Ord, Enum, Bounded, Show)
-
-nameOf :: SysCtl -> T.Text
-nameOf = \case
-  Cancel -> T.pack "Cancel"
-  Build -> T.pack "Build"
-  Refresh -> T.pack "Refresh"
-
-iconOf :: SysCtl -> T.Text
-iconOf = \case
-  Cancel -> T.pack "window-close-symbolic"
-  Build -> T.pack "document-save-symbolic"
-  Refresh -> T.pack "view-refresh-symbolic"
-
-styleOf :: SysCtl -> T.Text
-styleOf = \case
-  Cancel -> T.pack "btn-ctl"
-  Build -> T.pack "btn-ctl"
-  Refresh -> T.pack "btn-ctl"
-
-showCtlWin :: Gtk.Window -> IO ()
-showCtlWin parent = do
-  view@CtlWinView{ctlWin} <- ctlWinNew parent
-  ctlWinBuildmode view False
-
-  ctlWinSetAct view $ \case
-    Cancel -> #close ctlWin
-    Build -> runBuild view
-    Refresh -> do
+ctrlNew :: (FilePath -> FilePath) -> Gtk.Window -> IO Gtk.Window
+ctrlNew uiPath parent = do
+  CtrlWinView{..} <- ctrlWinNew uiPath parent
+  setupAct $ \case
+     Close -> #close ctrlWin
+     Build -> runBuild setBuildmode addBuildLine
+     Refresh -> do
       safeSpawn "xmonad" ["--restart"]
-      #close ctlWin
+      #close ctrlWin
+
+  setBuildmode False
+  pure ctrlWin
   where
-    runBuild :: CtlWinView -> IO ()
-    runBuild view = do
-      Gtk.uiSingleRun (ctlWinBuildmode view True)
+    runBuild setMode addLine = do
+      Gtk.uiSingleRun (setMode True)
       -- FIXME: this causes error in waitForProcess, child process does not exist.
       forkIO . withCreateProcess (proc "xmonad-manage" ["build", "pulpmonad"]){std_out = CreatePipe} $
         \_ (Just outp) _ _ -> do
-          actOnLine outp $ \txt -> Gtk.uiSingleRun (ctlWinBuildAddLine view txt)
-          Gtk.uiSingleRun (ctlWinBuildmode view False)
+          actOnLine outp $ \txt -> Gtk.uiSingleRun (addLine txt)
+          Gtk.uiSingleRun (setMode False)
       pure ()
       where
         actOnLine outp act =
@@ -114,136 +92,50 @@ wmCtrlListen = do
                               View
 --------------------------------------------------------------------}
 
--- MAYBE replace entire "View" thing with GtkBuilder
+data WinCtrl = Close | Build | Refresh
+  deriving (Eq, Ord, Enum, Bounded, Show)
 
-data CtlWinView = CtlWinView
-  { ctlWin :: !Gtk.Window
-  , ctlStack :: !Gtk.Stack
-  , ctlMain :: !CtlMainView
-  , ctlBuild :: !CtlBuildView
+ctrlSignal :: WinCtrl -> T.Text
+ctrlSignal = \case
+  Close -> T.pack "wmctl-close"
+  Build -> T.pack "wmctl-build"
+  Refresh -> T.pack "wmctl-refresh"
+
+
+-- TODO "setupAct" is ad-hoc. Better way?
+data CtrlWinView = CtrlWinView
+  { ctrlWin :: !Gtk.Window
+  , setupAct :: (WinCtrl -> IO ()) -> IO ()
+  , setBuildmode :: Bool -> IO ()
+  , addBuildLine :: T.Text -> IO ()
   }
 
-ctlWinNew :: Gtk.Window -> IO CtlWinView
-ctlWinNew parent = do
-  ctlWin <-
-    new
-      Gtk.Window
-      [ #title := T.pack "Pulp Manager Control"
-      , #typeHint := Gtk.WindowTypeHintDialog
-      , #windowPosition := Gtk.WindowPositionCenter
-      , #transientFor := parent
-      ]
-  #setDefaultSize ctlWin 360 140
-  #setIconName ctlWin (Just $ T.pack "system-settings")
-  Gtk.windowSetTransparent ctlWin
+ctrlWinNew :: (FilePath -> FilePath) -> Gtk.Window -> IO CtrlWinView
+ctrlWinNew uiPath parent = do
+  builder <- Gtk.builderNewFromFile (T.pack $ uiPath "wmctl.glade")
 
-  ctlMain <- ctlMainNew
-  ctlBuild <- ctlBuildNew
+  Just window <- Gtk.elementAs builder (T.pack "wmctl") Gtk.Window
+  Just stack <- Gtk.elementAs builder (T.pack "wmctl-stack") Gtk.Stack
+  Just buildScr <- Gtk.elementAs builder (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow
+  Just buildLab <- Gtk.elementAs builder (T.pack "wmctl-build-label") Gtk.Label
 
-  ctlStack <- new Gtk.Stack [#homogeneous := True]
-  #setName (ctlMainWid ctlMain) (T.pack "pulp-wmctl")
-  #setName (ctlBuildWid ctlBuild) (T.pack "pulp-wmctl")
-  #addNamed ctlStack (ctlMainWid ctlMain) (T.pack "main")
-  #addNamed ctlStack (ctlBuildWid ctlBuild) (T.pack "build")
+  set window [#transientFor := parent]
+  Gtk.windowSetTransparent window
+  on window #deleteEvent $ \_ -> #hideOnDelete window
 
-  #add ctlWin ctlStack
-  #showAll ctlWin
-
-  pure CtlWinView{..}
-
-ctlWinBuildmode :: CtlWinView -> Bool -> IO ()
-ctlWinBuildmode CtlWinView{..} = \case
-  False -> do
-    ctlBuildClear ctlBuild -- Clears the build log
-    set ctlStack [#visibleChildName := T.pack "main"]
-  True -> set ctlStack [#visibleChildName := T.pack "build"]
-
-ctlWinSetAct :: CtlWinView -> (SysCtl -> IO ()) -> IO ()
-ctlWinSetAct CtlWinView{ctlMain} = ctlMainSetAct ctlMain
-
-ctlWinBuildAddLine :: CtlWinView -> T.Text -> IO ()
-ctlWinBuildAddLine CtlWinView{ctlBuild} = ctlBuildAddLine ctlBuild
-
-data CtlMainView = CtlMainView
-  { ctlMainWid :: !Gtk.Widget
-  , ctlMainBtns :: !(M.Map SysCtl Gtk.Button)
-  }
-
-ctlMainNew :: IO CtlMainView
-ctlMainNew = do
-  let keys = [minBound .. maxBound]
-  btns <- traverse btnFor keys
-  let ctlMainBtns = M.fromAscList (zip keys btns)
-
-  box <-
-    View.boxStaticNew
-      (View.defBoxArg Gtk.OrientationHorizontal)
-        { View.boxSpacing = 10
-        , View.boxHomogeneous = True
-        }
-      =<< traverse Gtk.toWidget btns
-  #getStyleContext box >>= flip #addClass (T.pack "btn-area")
-
-  ctlMainWid <- Gtk.toWidget box
-  #setHalign ctlMainWid Gtk.AlignFill
-  #showAll ctlMainWid
-  pure CtlMainView{..}
-  where
-    btnFor ctl = do
-      box <-
-        View.boxStaticNew (View.defBoxArg Gtk.OrientationVertical){View.boxSpacing = 5}
-          =<< sequenceA
-            [ View.imageStaticNew Gtk.IconSizeDialog True (View.ImgSName $ iconOf ctl)
-            , Gtk.toWidget =<< new Gtk.Label [#label := nameOf ctl]
-            ]
-      #setValign box Gtk.AlignCenter
-
-      btn <- new Gtk.Button []
-      #add btn box
-      #getStyleContext btn >>= flip #addClass (styleOf ctl)
-      pure btn
-
-ctlMainSetAct :: CtlMainView -> (SysCtl -> IO ()) -> IO ()
-ctlMainSetAct CtlMainView{ctlMainBtns} act =
-  for_ (M.toList ctlMainBtns) $ \(ctl, btn) -> on btn #clicked (act ctl)
-
-data CtlBuildView = CtlBuildView
-  { ctlBuildWid :: !Gtk.Widget
-  , ctlBuildLab :: !Gtk.Label
-  , ctlBuildScroll :: !Gtk.ScrolledWindow
-  }
-
-ctlBuildNew :: IO CtlBuildView
-ctlBuildNew = do
-  ctlBuildLab <-
-    new
-      Gtk.Label
-      [ #xalign := 0
-      , #maxWidthChars := 50
-      , #ellipsize := toEnum 3 -- ellipsize at end
-      , #label := T.empty
-      ]
-
-  ctlBuildScroll <-
-    new
-      Gtk.ScrolledWindow
-      [ #hscrollbarPolicy := Gtk.PolicyTypeNever
-      , #vscrollbarPolicy := Gtk.PolicyTypeAlways
-      ]
-  #add ctlBuildScroll ctlBuildLab
-
-  frame <- new Gtk.Frame []
-  #add frame ctlBuildScroll
-  ctlBuildWid <- Gtk.toWidget frame
-
-  #showAll ctlBuildWid
-  pure CtlBuildView{..}
-
-ctlBuildAddLine :: CtlBuildView -> T.Text -> IO ()
-ctlBuildAddLine CtlBuildView{..} lbl = do
-  set ctlBuildLab [#label :~ (<> lbl <> T.pack "\n")]
-  adj <- get ctlBuildScroll #vadjustment
-  set adj [#value :=> get adj #upper]
-
-ctlBuildClear :: CtlBuildView -> IO ()
-ctlBuildClear CtlBuildView{ctlBuildLab} = set ctlBuildLab [#label := T.empty]
+  pure
+    CtrlWinView
+      { ctrlWin = window
+      , setupAct = \acts -> do
+          for_ [minBound .. maxBound] $ \ctrl -> #addCallbackSymbol builder (ctrlSignal ctrl) (acts ctrl)
+          #connectSignals builder nullPtr
+      , setBuildmode = \case
+          False -> do
+            set buildLab [#label := T.empty]
+            set stack [#visibleChildName := T.pack "main"]
+          True -> set stack [#visibleChildName := T.pack "build"]
+      , addBuildLine = \line -> do
+          set buildLab [#label :~ (<> line <> T.pack "\n")]
+          adj <- get buildScr #vadjustment
+          set adj [#value :=> get adj #upper]
+      }
