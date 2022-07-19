@@ -73,6 +73,9 @@ taskbarWindow app BarWinArgs{..} mkContent = do
   #addWindow app window
   pure window
 
+-- MAYBE Overhaul the widgets to improve UX
+-- MAYBE Completely separate signals - have backend-esque facility
+
 main :: IO ()
 main = do
   isTest <- ("test" `elem`) <$> getArgs

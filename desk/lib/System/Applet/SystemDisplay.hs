@@ -59,7 +59,8 @@ batDisplay iconSize = do
       Charging -> T.pack $ printf "battery-level-%d-charging-symbolic" level
       _ -> T.pack $ printf "battery-level-%d-symbolic" level
 
--- MAYBE Image itself providing location of bar?
+-- MAYBE Roll down "menu" showing status & settings
+-- MAYBE Migrate to GtkBuilder - IF custom widget works
 
 -- | Mainboard status display with given icon size & width.
 mainboardDisplay :: MonadIO m => Gtk.IconSize -> Int32 -> m Gtk.Widget
