@@ -42,10 +42,7 @@ import Gtk.Pixbufs qualified as Gtk
 import View.Boxes qualified as View
 import View.Imagery qualified as View
 
-data SysTray = SysTray
-  { sysTrayBox :: !View.BoxUniDyn
-  , sysTrayAlignBegin :: !Bool
-  }
+newtype SysTray = SysTray {sysTrayBox :: View.BoxUniDyn}
 
 data SysTrayOp = TrayAddItem !TrayItem | TrayRemoveItem !TrayItem
 
