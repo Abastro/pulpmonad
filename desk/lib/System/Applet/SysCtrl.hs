@@ -27,7 +27,7 @@ sysCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.
 sysCtrlBtn parent = do
   watch <- runXHand sysCtrlListen
   uiFile <- pulpFile PulpUI "sysctl.glade"
-  ctlWin <- liftIO $ sysCtrlWinNew (T.pack uiFile) parent
+  ctlWin <- liftIO $ ctrlWinNew (T.pack uiFile) parent
 
   icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-shutdown-symbolic")
   wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ #showAll ctlWin)
@@ -36,8 +36,8 @@ sysCtrlBtn parent = do
     on wid #destroy killWatch
   pure wid
 
-sysCtrlWinNew :: T.Text -> Gtk.Window -> IO Gtk.Window
-sysCtrlWinNew uiFile parent = do
+ctrlWinNew :: T.Text -> Gtk.Window -> IO Gtk.Window
+ctrlWinNew uiFile parent = do
   builder <- Gtk.builderNewFromFile uiFile
 
   Just window <- Gtk.elementAs builder (T.pack "sysctl") Gtk.Window

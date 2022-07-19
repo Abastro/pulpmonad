@@ -146,7 +146,7 @@ image-bar#cpu {
 }
 
 /* Text clock */
-#clock_text label {
+#clock-text label {
 	font-family: "Ubuntu", sans-serif;
 	font-size: 7pt;
 	margin-left: 3px;

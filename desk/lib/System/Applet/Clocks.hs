@@ -23,7 +23,7 @@ textClock format = do
   -- Wraps in event box so that it could be empty :P
   ev <- new Gtk.EventBox []
   traverse_ (#add ev) lbl
-  #setName ev (T.pack "clock_text")
+  #setName ev (T.pack "clock-text")
   Gtk.toWidget ev <* #showAll ev
   where
     clockTxt task = do

@@ -33,7 +33,7 @@ import XMonad.Util.Run (safeSpawn)
 wmCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
 wmCtrlBtn parent = do
   watch <- runXHand wmCtrlListen
-  ctrlWin <- ctrlNew parent
+  ctrlWin <- ctrlWinNew parent
 
   icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-settings-symbolic")
   wid <- Gtk.buttonNewWith (Just icon) (#showAll ctrlWin)
@@ -42,10 +42,10 @@ wmCtrlBtn parent = do
     on wid #destroy killWatch
   pure wid
 
-ctrlNew :: (MonadIO m, MonadPulpPath m) => Gtk.Window -> m Gtk.Window
-ctrlNew parent = do
+ctrlWinNew :: (MonadIO m, MonadPulpPath m) => Gtk.Window -> m Gtk.Window
+ctrlWinNew parent = do
   uiFile <- pulpFile PulpUI "wmctl.glade"
-  CtrlWinView{..} <- liftIO $ ctrlWinNew (T.pack uiFile) parent
+  CtrlWinView{..} <- liftIO $ ctrlViewNew (T.pack uiFile) parent
   liftIO . setupAct $ \case
     Close -> #close ctrlWin
     Build -> runBuild setBuildmode addBuildLine
@@ -111,8 +111,8 @@ data CtrlWinView = CtrlWinView
   , addBuildLine :: T.Text -> IO ()
   }
 
-ctrlWinNew :: T.Text -> Gtk.Window -> IO CtrlWinView
-ctrlWinNew uiFile parent = do
+ctrlViewNew :: T.Text -> Gtk.Window -> IO CtrlWinView
+ctrlViewNew uiFile parent = do
   builder <- Gtk.builderNewFromFile uiFile
 
   Just window <- Gtk.elementAs builder (T.pack "wmctl") Gtk.Window
