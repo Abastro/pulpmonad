@@ -103,45 +103,45 @@ button:hover {
 	color: rgb(216, 216, 216);
 }
 
-image-bar#mem>image {
+imagebar#mem>image {
 	color: rgb(216, 216, 216);
 	-gtk-icon-shadow: none;
 }
 
-image-bar#mem {
+imagebar#mem {
 	color: rgb(24, 160, 240);
 }
 
-image-bar#cpu>image {
+imagebar#cpu>image {
 	color: rgb(216, 216, 216);
 	-gtk-icon-shadow: none;
 }
 
-image-bar#cpu.temp-20>image {
+imagebar#cpu.temp-20>image {
 	color: rgb(216, 210, 210);
 }
 
-image-bar#cpu.temp-40>image {
+imagebar#cpu.temp-40>image {
 	color: rgb(255, 200, 170);
 }
 
-image-bar#cpu.temp-60>image {
+imagebar#cpu.temp-60>image {
 	color: rgb(255, 190, 120);
 }
 
-image-bar#cpu.temp-80>image {
+imagebar#cpu.temp-80>image {
 	color: rgb(255, 150, 80);
 }
 
-image-bar#cpu.temp-100>image {
+imagebar#cpu.temp-100>image {
 	color: rgb(255, 100, 40);
 }
 
-image-bar#cpu.temp-120>image {
+imagebar#cpu.temp-120>image {
 	color: rgb(255, 60, 0);
 }
 
-image-bar#cpu {
+imagebar#cpu {
 	color: rgb(240, 160, 24);
 }
 

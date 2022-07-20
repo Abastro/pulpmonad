@@ -54,7 +54,7 @@ data ImageBarPrivate = ImageBarPrivate
 instance DerivedGObject ImageBar where
   type GObjectParentType ImageBar = Bin
   type GObjectPrivateData ImageBar = ImageBarPrivate
-  objectTypeName = T.pack "image-bar"
+  objectTypeName = T.pack "ImageBar"
   objectClassInit = imageBarClassInit
   objectInstanceInit = imageBarInstanceInit
 
@@ -115,7 +115,7 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
     , #sizeAllocate :&= sizeAllocate oldAllocate
     ]
 
-  #setCssName widgetClass (T.pack "image-bar")
+  #setCssName widgetClass (T.pack "imagebar")
   where
     destroy oldDestroy widget = do
       Just mine <- castTo ImageBar widget
