@@ -31,6 +31,7 @@ import Graphics.X11.Xlib.Types (Rectangle (..))
 import Gtk.Commons
 
 -- TODO Figure out how to attach label for attributes
+-- TODO Can this really be used for GtkBuilder?
 
 newtype ImageBar = ImageBar (ManagedPtr ImageBar)
 
@@ -85,8 +86,8 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
       , nick = T.pack "Orientation"
       , blurb = T.pack "Orientation of the bar"
       , defaultValue = 0
-      , setter = \widget v -> do
-          gobjectModifyPrivateData widget $ \dat -> dat{barOrientation = (toEnum . fromIntegral) v}
+      , setter = \widget v -> gobjectModifyPrivateData widget $
+          \dat -> dat{barOrientation = (toEnum . fromIntegral) v}
       , getter = \widget -> do
           (fromIntegral . fromEnum) . barOrientation <$> gobjectGetPrivateData widget
       , flags = Nothing
@@ -109,7 +110,9 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
     , #sizeAllocate :&= sizeAllocate oldAllocate
     ]
 
+  -- Widget For CSS
   #setCssName widgetClass (T.pack "imagebar")
+  -- Somehow, style properties does not work...
   where
     destroy oldDestroy widget = do
       Just mine <- castTo ImageBar widget
