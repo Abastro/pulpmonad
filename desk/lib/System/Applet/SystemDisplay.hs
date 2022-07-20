@@ -8,7 +8,6 @@ import Data.Foldable
 import Data.GI.Base.Constructible
 import Data.GI.Base.Signals
 import Data.Int
-import Data.Ratio ((%))
 import Data.Text qualified as T
 import GI.Gtk.Objects.Image qualified as Gtk
 import Gtk.Commons qualified as Gtk
@@ -19,8 +18,8 @@ import Gtk.Task qualified as Gtk
 import Status.HWStatus
 import Text.Printf
 import View.Imagery qualified as View
-import XMonad.StackSet (RationalRect (..))
 import XMonad.Util.Run (safeSpawn)
+import Graphics.X11.Xlib.Types (Rectangle(..))
 
 data Temperature = T20 | T40 | T60 | T80 | T100 | T120
   deriving (Eq, Ord, Enum, Bounded)
@@ -89,10 +88,9 @@ mainboardDisplay iconSize mainWidth = do
   where
     testIcon task = do
       mem <- new Gtk.ImageBar []
-      let barRect = RationalRect (14 % 32) (8 % 32) (4 % 32) (16 % 32)
       #setName mem (T.pack "mem")
       liftIO $ do
-        Gtk.imageBarPos mem Gtk.OrientationVertical barRect
+        Gtk.imageBarPos mem Gtk.OrientationVertical 32 (Rectangle 14 8 4 16)
         Gtk.imageBarSetIcon mem (T.pack "ram-symbolic") iconSize
         kill <- Gtk.uiTask task $ Gtk.imageBarSetFill mem . memUsed . memRatios
         on mem #destroy kill
@@ -100,10 +98,9 @@ mainboardDisplay iconSize mainWidth = do
 
     cpuIcon (taskUse, taskTemp) = do
       cpu <- new Gtk.ImageBar []
-      let barRect = RationalRect (28 % 64) (25 % 64) (8 % 64) (14 % 64)
       #setName cpu (T.pack "cpu")
       liftIO $ do
-        Gtk.imageBarPos cpu Gtk.OrientationVertical barRect
+        Gtk.imageBarPos cpu Gtk.OrientationVertical 64 (Rectangle 28 25 8 14)
         Gtk.imageBarSetIcon cpu (T.pack "cpu-symbolic") iconSize
         killUse <- Gtk.uiTask taskUse $ Gtk.imageBarSetFill cpu . cpuUsed . cpuRatios
         killTm <- Gtk.uiTask taskTemp $ updateTemp cpu . tempVal

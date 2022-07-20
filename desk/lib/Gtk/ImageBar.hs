@@ -27,8 +27,8 @@ import GI.Gtk.Functions (renderBackground, renderFrame)
 import GI.Gtk.Objects.Bin
 import GI.Gtk.Objects.Image
 import GI.Gtk.Structs.WidgetClass
+import Graphics.X11.Xlib.Types (Rectangle (..))
 import Gtk.Commons
-import XMonad.StackSet (RationalRect (..))
 
 -- TODO Figure out how to attach label for attributes
 
@@ -44,8 +44,10 @@ instance HasParentTypes ImageBar
 
 data ImageBarPrivate = ImageBarPrivate
   { barOrientation :: !Orientation
+  , -- | Scale for the portion.
+    barScale :: !Word
   , -- | Portion where bar is displayed. left - top - width - height.
-    barPortion :: !RationalRect
+    barPortion :: !Rectangle
   , barFill :: !(IORef Double)
   }
 
@@ -75,29 +77,21 @@ withWidgetClass gclass act = withTransient (coerce gclass) $ act . WidgetClass
 imageBarClassInit :: GObjectClass -> IO ()
 imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
   -- As GObject
-  gobjectInstallProperty @ImageBar
+  gobjectInstallCIntProperty @ImageBar
     gClass
-    PropertyInfo
-      { name = T.pack "orient"
+    CIntPropertyInfo
+      { -- Poor man's Orientable
+        name = T.pack "orient"
       , nick = T.pack "Orientation"
       , blurb = T.pack "Orientation of the bar"
-      , setter = \widget orient -> do
-          gobjectModifyPrivateData widget $ \dat -> dat{barOrientation = orient}
+      , defaultValue = 0
+      , setter = \widget v -> do
+          gobjectModifyPrivateData widget $ \dat -> dat{barOrientation = (toEnum . fromIntegral) v}
       , getter = \widget -> do
-          barOrientation <$> gobjectGetPrivateData widget
+          (fromIntegral . fromEnum) . barOrientation <$> gobjectGetPrivateData widget
       , flags = Nothing
-      }
-  gobjectInstallProperty @ImageBar
-    gClass
-    PropertyInfo
-      { name = T.pack "portion"
-      , nick = T.pack "Portion"
-      , blurb = T.pack "Portion of the bar"
-      , setter = \widget portion -> do
-          gobjectModifyPrivateData widget $ \dat -> dat{barPortion = portion}
-      , getter = \widget -> do
-          barPortion <$> gobjectGetPrivateData widget
-      , flags = Nothing
+      , minValue = Just 0
+      , maxValue = Just 1
       }
 
   -- As Widget
@@ -153,7 +147,8 @@ imageBarInstanceInit _gclass widget = do
   #add widget image
 
   let barOrientation = OrientationHorizontal
-  let barPortion = RationalRect 0 0 1 1
+  let barScale = 1
+  let barPortion = Rectangle 0 0 1 1
   barFill <- newIORef 0
 
   pure ImageBarPrivate{..}
@@ -187,11 +182,12 @@ imageBarDraw widget ctxt = do
           OrientationHorizontal -> (fill, 1.0)
           OrientationVertical -> (1.0, fill)
           _ -> (1.0, 1.0)
-    let RationalRect rx ry rw rh = barPortion
-        ax = realToFrac rx * realToFrac width
-        ay = realToFrac ry * realToFrac height
-        aw = realToFrac rw * realToFrac width
-        ah = realToFrac rh * realToFrac height
+    let Rectangle rx ry rw rh = barPortion
+        rs = barScale
+        ax = realToFrac rx * width / realToFrac rs
+        ay = realToFrac ry * height / realToFrac rs
+        aw = realToFrac rw * width / realToFrac rs
+        ah = realToFrac rh * height / realToFrac rs
     C.rectangle ax (ay + ah) (aw * fillX) (-ah * fillY)
     C.fill
 
@@ -202,9 +198,14 @@ imageBarDraw widget ctxt = do
 
 -- | Set Image bar position.
 -- The portion is x, y, width, height.
-imageBarPos :: ImageBar -> Orientation -> RationalRect -> IO ()
-imageBarPos widget orient portion = do
-  gobjectModifyPrivateData widget $ \dat -> dat{barOrientation = orient, barPortion = portion}
+imageBarPos :: ImageBar -> Orientation -> Word -> Rectangle -> IO ()
+imageBarPos widget orient scale portion = do
+  gobjectModifyPrivateData widget $ \dat ->
+    dat
+      { barOrientation = orient
+      , barScale = scale
+      , barPortion = portion
+      }
 
 imageBarSetFill :: ImageBar -> Double -> IO ()
 imageBarSetFill widget fill = do
