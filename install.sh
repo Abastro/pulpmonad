@@ -1,7 +1,7 @@
 #!/bin/sh
 cfg="$XMONAD_CONFIG_DIR"
 
-sudo apt install light pasystray network-manager-gnome blueman synapse ssh-askpass-gnome
+sudo apt install light pasystray network-manager-gnome blueman synapse ssh-askpass-gnome parcellite
 
 if ! command -v status-notifier-watcher; then
   cabal install status-notifier-item

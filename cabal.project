@@ -3,7 +3,7 @@ packages:
   desk/pulpdesk.cabal
   winman/pulpmonad.cabal
 
-with-compiler: ghc-9.0.2
+with-compiler: ghc-9.2.4
 
 package *
   ghc-options: -haddock

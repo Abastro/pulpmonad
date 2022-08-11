@@ -58,8 +58,9 @@ batDisplay iconSize = do
       Charging -> T.pack $ printf "battery-level-%d-charging-symbolic" level
       _ -> T.pack $ printf "battery-level-%d-symbolic" level
 
--- MAYBE Roll down "menu" showing status & settings
 -- MAYBE Migrate to GtkBuilder - IF custom widget works
+-- MAYBE Alternative: Cook up my own YAML format for this
+-- MAYBE Roll down "menu" showing status & settings, on hold until above are resolved
 
 -- | Mainboard status display with given icon size & width.
 mainboardDisplay :: MonadIO m => Gtk.IconSize -> Int32 -> m Gtk.Widget
