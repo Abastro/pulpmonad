@@ -11,47 +11,8 @@ copyright:          2022 Abastro
 library
   hs-source-dirs:       src
   default-extensions:
-    BangPatterns
-    BinaryLiterals
-    ConstrainedClassMethods
-    ConstraintKinds
-    DeriveDataTypeable
-    DeriveFoldable
-    DeriveFunctor
-    DeriveGeneric
-    DeriveLift
-    DeriveTraversable
-    EmptyCase
-    EmptyDataDecls
-    EmptyDataDeriving
-    ExistentialQuantification
-    ExplicitForAll
-    FlexibleContexts
-    FlexibleInstances
-    ForeignFunctionInterface
-    GADTSyntax
-    GeneralisedNewtypeDeriving
-    HexFloatLiterals
-    ImportQualifiedPost
-    InstanceSigs
-    KindSignatures
-    MultiParamTypeClasses
-    NamedFieldPuns
-    NamedWildCards
-    NumericUnderscores
-    PolyKinds
-    PostfixOperators
-    RankNTypes
-    ScopedTypeVariables
-    StandaloneDeriving
-    StandaloneKindSignatures
-    TupleSections
-    TypeApplications
-    TypeOperators
-    TypeSynonymInstances
-
     LambdaCase
-  default-language:     Haskell2010
+  default-language:     GHC2021
   ghc-options:          -W
   build-depends:
       base >=4.14 && <5
