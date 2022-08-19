@@ -130,7 +130,8 @@ staticManage =
     , className =? "Gimp" --> doF (shift pics)
     , role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink
     , className =? "Inkscape" --> doF (shift pics)
-    , className =? "zoom" <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE
+    -- zoom be zoom with "zoom "
+    , (className =? "zoom" <||> className =? "zoom ") <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE
     , className =? "Soffice" <&&> isFullscreen --> doFullFloat
     , className =? "Gnome-calculator" --> doCenterFloat
     , className =? "Gnome-system-monitor" --> doCenterFloat
