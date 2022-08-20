@@ -169,11 +169,8 @@ imgNameSet size mayTheme name = do
       fileIcon <- Gio.fileIconNew fpath
       View.ImgSGIcon <$> Gio.toIcon fileIcon
 
-    -- TODO iconThemeLoadIcon might be able to throw exceptions.
-    -- Might need to safeguard around it.
-    -- MAYBE Just throw NULL with description instead of MaybeT?
     setPixbuf theme = do
-      pixbuf <- MaybeT $ Gtk.iconThemeLoadIcon theme panelName (Gtk.iconSizePx size) loadFlags
+      pixbuf <- MaybeT $ Gtk.themeLoadIcon theme panelName (Gtk.iconSizePx size) loadFlags
       pure (View.ImgSPixbuf pixbuf)
 
 -- NB: Why does `id` work? SNI is ARGB, GTK is RGBA.
