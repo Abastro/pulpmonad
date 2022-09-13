@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedLabels #-}
 
-module System.Applet.SystemDisplay where
+module System.Applet.SystemDisplay (
+  batDisplay
+  , mainboardDisplay
+) where
 
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
@@ -10,6 +13,7 @@ import Data.GI.Base.Signals
 import Data.Int
 import Data.Text qualified as T
 import GI.Gtk.Objects.Image qualified as Gtk
+import Graphics.X11.Xlib.Types (Rectangle (..))
 import Gtk.Commons qualified as Gtk
 import Gtk.Containers qualified as Gtk
 import Gtk.ImageBar qualified as Gtk
@@ -19,7 +23,6 @@ import Status.HWStatus
 import Text.Printf
 import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
-import Graphics.X11.Xlib.Types (Rectangle(..))
 
 data Temperature = T20 | T40 | T60 | T80 | T100 | T120
   deriving (Eq, Ord, Enum, Bounded)
@@ -58,9 +61,11 @@ batDisplay iconSize = do
       Charging -> T.pack $ printf "battery-level-%d-charging-symbolic" level
       _ -> T.pack $ printf "battery-level-%d-symbolic" level
 
--- MAYBE Migrate to GtkBuilder - IF custom widget works
--- MAYBE Alternative: Cook up my own YAML format for this
--- MAYBE Roll down "menu" showing status & settings, on hold until above are resolved
+-- MAYBE Migrate to GtkBuilder.
+-- `g_type_ensure` would likely ensure it is loaded.
+-- Calling `glibType` could be enough instead.
+
+-- MAYBE Roll down "menu" showing status & settings, on hold until above is resolved
 
 -- | Mainboard status display with given icon size & width.
 mainboardDisplay :: MonadIO m => Gtk.IconSize -> Int32 -> m Gtk.Widget
@@ -76,7 +81,7 @@ mainboardDisplay iconSize mainWidth = do
   traverse_ (flip #setHalign Gtk.AlignEnd) widCPU
   traverse_ (flip #setValign Gtk.AlignCenter) widCPU
 
-  -- Exists simply because Gtk's space allocation is tarded
+  -- Coping with Gtk space allocation
   bg <- do
     img <- new Gtk.Image [] -- Tried to set an icon, but gtk does not accept rectangular icons.
     #setSizeRequest img mainWidth (-1)

@@ -30,8 +30,8 @@ import GI.Gtk.Structs.WidgetClass
 import Graphics.X11.Xlib.Types (Rectangle (..))
 import Gtk.Commons
 
--- TODO Figure out how to attach label for attributes
--- TODO Can this really be used for GtkBuilder?
+-- MAYBE Figure out how to attach label for attributes. This is not crucial, though.
+-- TODO Expose properties
 
 newtype ImageBar = ImageBar (ManagedPtr ImageBar)
 
@@ -139,7 +139,6 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
       image <- imageBarGetImage mine
       -- Allocate entire rectangle to the foreground image
       #sizeAllocate image rect
-
       oldAllocate widget rect
 
 imageBarInstanceInit :: GObjectClass -> ImageBar -> IO ImageBarPrivate

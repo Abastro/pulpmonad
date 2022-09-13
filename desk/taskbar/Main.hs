@@ -72,7 +72,6 @@ app isTest = do
         }
     leftBox :: Gtk.Window -> PulpIO Gtk.Widget
     leftBox win = do
-      -- MAYBE UI should not be in data directory
       box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       #setName box (T.pack "pulp-statusbar")
       traverse_ (addToBegin box)
@@ -91,7 +90,7 @@ app isTest = do
         }
     centerBox :: Gtk.Window -> PulpIO Gtk.Widget
     centerBox _win = do
-      box <- Gtk.boxNew Gtk.OrientationHorizontal 2
+      box <- Gtk.boxNew Gtk.OrientationHorizontal 0
       #setName box (T.pack "pulp-taskbar")
       #setCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
       traverse_ (addToBegin box)
