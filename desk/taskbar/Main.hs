@@ -36,28 +36,29 @@ workspaceMaps =
     , (game, "\xf43c")
     ]
 
--- MAYBE Overhaul the widgets to improve UX
 -- MAYBE Have backend-esque facility
 
 main :: IO ()
 main = do
   isTest <- ("test" `elem`) <$> getArgs
-  startPulpApp (app isTest)
+  app isTest >>= startPulpApp
 
-app :: Bool -> PulpApp
-app isTest =
-  MkPulpApp
-    { pulpArgs =
-        PulpArg
-          { loggerFormat = defLogFormat
-          , loggerVerbosity = if isTest then LevelDebug else LevelInfo
-          , dataDirEnv = if isTest then "XMONAD_CONFIG_DIR" else "XMONAD_DATA_DIR"
-          }
-    , pulpAppId = T.pack "pulp.ui.taskbar"
-    , pulpBars = [leftBar, centerBar, rightBar]
-    , pulpIconDir = "asset" </> "icons"
-    , pulpCSSPath = Just ("styles" </> "pulp-taskbar.css")
-    }
+app :: Bool -> IO PulpApp
+app isTest = do
+  dataDir <- getEnv $ if isTest then "XMONAD_CONFIG_DIR" else "XMONAD_DATA_DIR"
+  pure
+    MkPulpApp
+      { pulpArgs =
+          MkPulpArg
+            { loggerFormat = defLogFormat
+            , loggerVerbosity = if isTest then LevelDebug else LevelInfo
+            , argDataDir = dataDir
+            }
+      , pulpAppId = T.pack "pulp.ui.taskbar"
+      , pulpBars = [leftBar, centerBar, rightBar]
+      , pulpIconDir = "asset" </> "icons"
+      , pulpCSSPath = Just ("styles" </> "pulp-taskbar.css")
+      }
   where
     dockPos = if isTest then Gtk.DockBottom else Gtk.DockTop
 

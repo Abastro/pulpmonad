@@ -27,6 +27,7 @@ import System.Process
 import System.Pulp.PulpEnv
 import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
+import System.FilePath
 
 -- | Window manager control button.
 -- Shows the system control dialog.
@@ -44,7 +45,7 @@ wmCtrlBtn parent = do
 
 ctrlWinNew :: (MonadIO m, MonadPulpPath m) => Gtk.Window -> m Gtk.Window
 ctrlWinNew parent = do
-  uiFile <- pulpFile PulpUI "wmctl.glade"
+  uiFile <- pulpDataPath ("ui" </> "wmctl.glade")
   CtrlWinView{..} <- liftIO $ ctrlViewNew (T.pack uiFile) parent
   liftIO . setupAct $ \case
     Close -> #close ctrlWin

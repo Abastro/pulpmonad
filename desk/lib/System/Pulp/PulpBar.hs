@@ -22,7 +22,6 @@ import Gtk.Commons qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import Gtk.Window qualified as Gtk
 import System.Exit (ExitCode (..), exitWith)
-import System.FilePath
 import System.Posix.Signals qualified as Sig
 import System.Pulp.PulpEnv
 
@@ -56,15 +55,15 @@ startPulpApp MkPulpApp{..} = runPulpIO pulpArgs $ withRunInIO $ \unlift -> do
     loadCSS :: FilePath -> PulpIO ()
     loadCSS cssPath = do
       css <- new Gtk.CssProvider []
-      dataDir <- pDataDir
-      #loadFromPath css (T.pack $ dataDir </> cssPath)
+      dataDir <- pulpDataPath cssPath
+      #loadFromPath css (T.pack dataDir)
       Gtk.defScreenAddStyleContext css Gtk.STYLE_PROVIDER_PRIORITY_USER
 
     appendIconTheme :: FilePath -> PulpIO ()
     appendIconTheme iconDir = do
       defaultTheme <- Gtk.iconThemeGetDefault
-      dataDir <- pDataDir
-      #appendSearchPath defaultTheme (dataDir </> iconDir)
+      iconDirAt <- pulpDataPath iconDir
+      #appendSearchPath defaultTheme iconDirAt
 
 -- | For each bar window.
 data PulpBar = MkPulpBar
