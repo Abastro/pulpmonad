@@ -5,6 +5,7 @@ module System.Pulp.PulpEnv (
   runPulpIO,
   PulpDir (..),
   MonadPulpPath (..),
+  pDataDir,
 ) where
 
 import Control.Monad.IO.Unlift
@@ -50,6 +51,9 @@ instance MonadPulpPath PulpIO where
       PulpUI -> pulpDataDir </> "ui" </> path
       PulpAsset -> pulpDataDir </> "asset" </> path
       PulpStyle -> pulpDataDir </> "styles" </> path
+
+pDataDir :: PulpIO FilePath
+pDataDir = PulpIO $ asks (\PulpEnv{pulpDataDir} -> pulpDataDir)
 
 -- | Run an PulpIO action. Recommended to call only once.
 runPulpIO :: PulpArg -> PulpIO a -> IO a
