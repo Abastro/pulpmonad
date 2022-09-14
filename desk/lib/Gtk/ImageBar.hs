@@ -4,6 +4,8 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | Bar with image in the background.
+-- Exists since Gtk does not allow scaling by proportion,
+-- which is required to place bar at specific part of the icon.
 module Gtk.ImageBar (
   ImageBar (..)
   , imageBarPos
