@@ -10,8 +10,6 @@ import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
-import Foreign.Ptr (nullPtr)
-import GI.Gtk.Objects.Builder qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import GI.Gtk.Objects.ScrolledWindow qualified as Gtk
 import GI.Gtk.Objects.Stack qualified as Gtk
@@ -111,13 +109,11 @@ data CtrlWinView = CtrlWinView
   }
 
 ctrlViewNew :: T.Text -> (CtrlWinView -> WinCtrl -> IO ()) -> Gtk.Window -> IO CtrlWinView
-ctrlViewNew uiFile onAct parent = do
-  builder <- Gtk.builderNewFromFile uiFile
-
-  Just window <- Gtk.elementAs builder (T.pack "wmctl") Gtk.Window
-  Just stack <- Gtk.elementAs builder (T.pack "wmctl-stack") Gtk.Stack
-  Just buildScr <- Gtk.elementAs builder (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow
-  Just buildLab <- Gtk.elementAs builder (T.pack "wmctl-build-label") Gtk.Label
+ctrlViewNew uiFile onAct parent = Gtk.buildFromFile uiFile $ do
+  Just window <- Gtk.getElement (T.pack "wmctl") Gtk.Window
+  Just stack <- Gtk.getElement (T.pack "wmctl-stack") Gtk.Stack
+  Just buildScr <- Gtk.getElement (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow
+  Just buildLab <- Gtk.getElement (T.pack "wmctl-build-label") Gtk.Label
 
   set window [#transientFor := parent]
   Gtk.windowSetTransparent window
@@ -134,9 +130,6 @@ ctrlViewNew uiFile onAct parent = do
         set adj [#value :=> get adj #upper]
 
   let view = CtrlWinView{ctrlWin = window, ..}
-
-  for_ [minBound .. maxBound] $ \ctrl ->
-    #addCallbackSymbol builder (ctrlSignal ctrl) (onAct view ctrl)
-  #connectSignals builder nullPtr
+  for_ [minBound .. maxBound] $ \ctrl -> Gtk.addCallback (ctrlSignal ctrl) (onAct view ctrl)
 
   pure view

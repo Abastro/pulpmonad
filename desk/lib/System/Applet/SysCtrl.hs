@@ -8,8 +8,6 @@ import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
 import Data.Text qualified as T
-import Foreign.Ptr (nullPtr)
-import GI.Gtk.Objects.Builder qualified as Gtk
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Gtk.Commons qualified as Gtk
@@ -38,10 +36,8 @@ sysCtrlBtn parent = do
   pure wid
 
 ctrlWinNew :: T.Text -> Gtk.Window -> IO Gtk.Window
-ctrlWinNew uiFile parent = do
-  builder <- Gtk.builderNewFromFile uiFile
-
-  Just window <- Gtk.elementAs builder (T.pack "sysctl") Gtk.Window
+ctrlWinNew uiFile parent = Gtk.buildFromFile uiFile $ do
+  Just window <- Gtk.getElement (T.pack "sysctl") Gtk.Window
 
   set window [#transientFor := parent]
   #setKeepAbove window True
@@ -53,11 +49,10 @@ ctrlWinNew uiFile parent = do
       _ -> pure False
   on window #deleteEvent $ \_ -> #hideOnDelete window
 
-  #addCallbackSymbol builder (T.pack "sysctl-close") $ do #close window
-  #addCallbackSymbol builder (T.pack "sysctl-logout") $ do safeSpawn "killall" ["xmonad-manage"]
-  #addCallbackSymbol builder (T.pack "sysctl-reboot") $ do safeSpawn "systemctl" ["reboot"]
-  #addCallbackSymbol builder (T.pack "sysctl-poweroff") $ do safeSpawn "systemctl" ["poweroff"]
-  #connectSignals builder nullPtr
+  Gtk.addCallback (T.pack "sysctl-close") $ do #close window
+  Gtk.addCallback (T.pack "sysctl-logout") $ do safeSpawn "killall" ["xmonad-manage"]
+  Gtk.addCallback (T.pack "sysctl-reboot") $ do safeSpawn "systemctl" ["reboot"]
+  Gtk.addCallback (T.pack "sysctl-poweroff") $ do safeSpawn "systemctl" ["poweroff"]
 
   pure window
 

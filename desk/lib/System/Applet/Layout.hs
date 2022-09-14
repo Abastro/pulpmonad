@@ -7,10 +7,8 @@ import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
 import Data.Text qualified as T
-import Foreign.Ptr (nullPtr)
 import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gtk.Functions qualified as Gtk
-import GI.Gtk.Objects.Builder qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Task qualified as Gtk
@@ -74,17 +72,12 @@ data LayoutView = LayoutView
 data Click = LeftClick | RightClick
 
 layoutViewNew :: T.Text -> (Click -> IO ()) -> IO LayoutView
-layoutViewNew uiFile acts = do
-  builder <- Gtk.builderNewFromFile uiFile
+layoutViewNew uiFile acts = Gtk.buildFromFile uiFile $ do
+  Just layoutWid <- Gtk.getElement (T.pack "layout") Gtk.Widget
+  Just layoutLbl <- Gtk.getElement (T.pack "layout-current") Gtk.Label
 
-  Just layoutWid <- Gtk.elementAs builder (T.pack "layout") Gtk.Widget
-  Just layoutLbl <- Gtk.elementAs builder (T.pack "layout-current") Gtk.Label
-
-  #addCallbackSymbol builder (T.pack "layout-action") onAct
-  #connectSignals builder nullPtr
-
+  Gtk.addCallback (T.pack "layout-action") onAct
   let setLabel lbl = set layoutLbl [#label := lbl]
-
   pure LayoutView{..}
   where
     onAct =
