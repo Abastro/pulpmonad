@@ -5,10 +5,10 @@
 
 -- | Bar with image in the background.
 module Gtk.ImageBar (
-  ImageBar (..),
-  imageBarPos,
-  imageBarSetFill,
-  imageBarSetIcon,
+  ImageBar (..)
+  , imageBarPos
+  , imageBarSetFill
+  , imageBarSetIcon
 ) where
 
 import Data.Coerce
@@ -45,10 +45,10 @@ instance HasParentTypes ImageBar
 
 data ImageBarPrivate = ImageBarPrivate
   { barOrientation :: !Orientation
-  , -- | Scale for the portion.
-    barScale :: !Word
-  , -- | Portion where bar is displayed. left - top - width - height.
-    barPortion :: !Rectangle
+  , barScale :: !Word
+  -- ^ Scale for the portion.
+  , barPortion :: !Rectangle
+  -- ^ Portion where bar is displayed. left - top - width - height.
   , barFill :: !(IORef Double)
   }
 
@@ -95,6 +95,86 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
       , maxValue = Just 1
       }
 
+  gobjectInstallCIntProperty @ImageBar
+    gClass
+    CIntPropertyInfo
+      { name = T.pack "bar_scale"
+      , nick = T.pack "Bar Scale"
+      , blurb = T.pack "Scale for the portion specification"
+      , defaultValue = 1
+      , setter = \widget v -> gobjectModifyPrivateData widget $
+          \dat -> dat{barScale = fromIntegral v}
+      , getter = \widget -> do
+          fromIntegral . barScale <$> gobjectGetPrivateData widget
+      , flags = Nothing
+      , minValue = Just 1
+      , maxValue = Just 256
+      }
+
+  gobjectInstallCIntProperty @ImageBar
+    gClass
+    CIntPropertyInfo
+      { name = T.pack "bar_portion_left"
+      , nick = T.pack "Portion Left"
+      , blurb = T.pack "Left spacing of the portion"
+      , defaultValue = 0
+      , setter = \widget v -> gobjectModifyPrivateData widget $
+          \dat -> dat{barPortion = (barPortion dat){rect_x = fromIntegral v}}
+      , getter = \widget -> do
+          fromIntegral . rect_x . barPortion <$> gobjectGetPrivateData widget
+      , flags = Nothing
+      , minValue = Just 0
+      , maxValue = Just 256
+      }
+
+  gobjectInstallCIntProperty @ImageBar
+    gClass
+    CIntPropertyInfo
+      { name = T.pack "bar_portion_top"
+      , nick = T.pack "Portion Top"
+      , blurb = T.pack "Top spacing of the portion"
+      , defaultValue = 0
+      , setter = \widget v -> gobjectModifyPrivateData widget $
+          \dat -> dat{barPortion = (barPortion dat){rect_y = fromIntegral v}}
+      , getter = \widget -> do
+          fromIntegral . rect_y . barPortion <$> gobjectGetPrivateData widget
+      , flags = Nothing
+      , minValue = Just 0
+      , maxValue = Just 256
+      }
+
+  gobjectInstallCIntProperty @ImageBar
+    gClass
+    CIntPropertyInfo
+      { name = T.pack "bar_portion_width"
+      , nick = T.pack "Portion Width"
+      , blurb = T.pack "Width of the portion"
+      , defaultValue = 0
+      , setter = \widget v -> gobjectModifyPrivateData widget $
+          \dat -> dat{barPortion = (barPortion dat){rect_width = fromIntegral v}}
+      , getter = \widget -> do
+          fromIntegral . rect_width . barPortion <$> gobjectGetPrivateData widget
+      , flags = Nothing
+      , minValue = Just 0
+      , maxValue = Just 256
+      }
+
+  gobjectInstallCIntProperty @ImageBar
+    gClass
+    CIntPropertyInfo
+      { name = T.pack "bar_portion_height"
+      , nick = T.pack "Portion Height"
+      , blurb = T.pack "Height of the portion"
+      , defaultValue = 0
+      , setter = \widget v -> gobjectModifyPrivateData widget $
+          \dat -> dat{barPortion = (barPortion dat){rect_height = fromIntegral v}}
+      , getter = \widget -> do
+          fromIntegral . rect_height . barPortion <$> gobjectGetPrivateData widget
+      , flags = Nothing
+      , minValue = Just 0
+      , maxValue = Just 256
+      }
+
   -- As Widget
   Just oldDestroy <- get widgetClass #destroy
   Just oldAllocate <- get widgetClass #sizeAllocate
@@ -112,8 +192,9 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
 
   -- Widget For CSS
   #setCssName widgetClass (T.pack "imagebar")
-  -- Somehow, style properties does not work...
   where
+    -- Somehow, style properties does not work...
+
     destroy oldDestroy widget = do
       Just mine <- castTo ImageBar widget
       image <- imageBarGetImage mine
