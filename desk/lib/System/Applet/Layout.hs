@@ -29,6 +29,7 @@ layout arg = do
   uiFile <- pulpDataPath ("ui" </> "layout.ui")
 
   view <- liftIO $ layoutViewNew (T.pack uiFile)
+
   LayoutHandle <- layoutMake arg rcvs view
   pure $ layoutWid view
 

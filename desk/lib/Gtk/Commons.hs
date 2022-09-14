@@ -11,6 +11,7 @@ module Gtk.Commons (
 ) where
 
 import Control.Monad.IO.Class
+import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 import Data.GI.Base.BasicTypes
 import Data.GI.Base.ManagedPtr
@@ -23,6 +24,10 @@ import GI.Gtk.Enums
 import GI.Gtk.Flags
 import GI.Gtk.Objects.Builder
 import GI.Gtk.Objects.Widget
+
+type BuilderIO = ReaderT Builder IO
+
+
 
 -- | Get an element in a GtkBuilder as a type.
 elementAs :: (MonadIO m, GObject o) => Builder -> T.Text -> (ManagedPtr o -> o) -> m (Maybe o)

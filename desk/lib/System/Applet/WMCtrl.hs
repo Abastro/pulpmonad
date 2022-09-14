@@ -22,12 +22,12 @@ import Gtk.Containers qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Gtk.Window qualified as Gtk
 import Status.X11.XHandle
+import System.FilePath
 import System.IO
 import System.Process
 import System.Pulp.PulpEnv
 import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
-import System.FilePath
 
 -- | Window manager control button.
 -- Shows the system control dialog.
@@ -46,17 +46,17 @@ wmCtrlBtn parent = do
 ctrlWinNew :: (MonadIO m, MonadPulpPath m) => Gtk.Window -> m Gtk.Window
 ctrlWinNew parent = do
   uiFile <- pulpDataPath ("ui" </> "wmctl.ui")
-  CtrlWinView{..} <- liftIO $ ctrlViewNew (T.pack uiFile) parent
-  liftIO . setupAct $ \case
-    Close -> #close ctrlWin
-    Build -> runBuild setBuildmode addBuildLine
-    Refresh -> do
-      safeSpawn "xmonad" ["--restart"]
-      #close ctrlWin
-
+  CtrlWinView{..} <- liftIO $ ctrlViewNew (T.pack uiFile) onAct parent
   liftIO $ setBuildmode False
   pure ctrlWin
   where
+    onAct CtrlWinView{..} = \case
+      Close -> #close ctrlWin
+      Build -> runBuild setBuildmode addBuildLine
+      Refresh -> do
+        safeSpawn "xmonad" ["--restart"]
+        #close ctrlWin
+
     runBuild setMode addLine = do
       Gtk.uiSingleRun (setMode True)
       -- FIXME: this causes error in waitForProcess, child process does not exist.
@@ -87,8 +87,8 @@ wmCtrlListen = do
   xListenTo structureNotifyMask rootWin Nothing $ \case
     ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
       | msgTyp == ctrlTyp
-        , fromIntegral subTyp == ctrlSys -> do
-        pure (Just WMCtlMsg)
+      , fromIntegral subTyp == ctrlSys -> do
+          pure (Just WMCtlMsg)
     _ -> pure Nothing
 
 {-------------------------------------------------------------------
@@ -104,16 +104,14 @@ ctrlSignal = \case
   Build -> T.pack "wmctl-build"
   Refresh -> T.pack "wmctl-refresh"
 
--- TODO "setupAct" is ad-hoc. Better way?
 data CtrlWinView = CtrlWinView
   { ctrlWin :: !Gtk.Window
-  , setupAct :: (WinCtrl -> IO ()) -> IO ()
   , setBuildmode :: Bool -> IO ()
   , addBuildLine :: T.Text -> IO ()
   }
 
-ctrlViewNew :: T.Text -> Gtk.Window -> IO CtrlWinView
-ctrlViewNew uiFile parent = do
+ctrlViewNew :: T.Text -> (CtrlWinView -> WinCtrl -> IO ()) -> Gtk.Window -> IO CtrlWinView
+ctrlViewNew uiFile onAct parent = do
   builder <- Gtk.builderNewFromFile uiFile
 
   Just window <- Gtk.elementAs builder (T.pack "wmctl") Gtk.Window
@@ -125,19 +123,20 @@ ctrlViewNew uiFile parent = do
   Gtk.windowSetTransparent window
   on window #deleteEvent $ \_ -> #hideOnDelete window
 
-  pure
-    CtrlWinView
-      { ctrlWin = window
-      , setupAct = \acts -> do
-          for_ [minBound .. maxBound] $ \ctrl -> #addCallbackSymbol builder (ctrlSignal ctrl) (acts ctrl)
-          #connectSignals builder nullPtr
-      , setBuildmode = \case
-          False -> do
-            set buildLab [#label := T.empty]
-            set stack [#visibleChildName := T.pack "main"]
-          True -> set stack [#visibleChildName := T.pack "build"]
-      , addBuildLine = \line -> do
-          set buildLab [#label :~ (<> line <> T.pack "\n")]
-          adj <- get buildScr #vadjustment
-          set adj [#value :=> get adj #upper]
-      }
+  let setBuildmode = \case
+        False -> do
+          set buildLab [#label := T.empty]
+          set stack [#visibleChildName := T.pack "main"]
+        True -> set stack [#visibleChildName := T.pack "build"]
+      addBuildLine line = do
+        set buildLab [#label :~ (<> line <> T.pack "\n")]
+        adj <- get buildScr #vadjustment
+        set adj [#value :=> get adj #upper]
+
+  let view = CtrlWinView{ctrlWin = window, ..}
+
+  for_ [minBound .. maxBound] $ \ctrl ->
+    #addCallbackSymbol builder (ctrlSignal ctrl) (onAct view ctrl)
+  #connectSignals builder nullPtr
+
+  pure view
