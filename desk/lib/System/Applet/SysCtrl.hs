@@ -27,7 +27,7 @@ import XMonad.Util.Run (safeSpawn)
 sysCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
 sysCtrlBtn parent = do
   watch <- runXHand sysCtrlListen
-  uiFile <- pulpDataPath ("ui" </> "sysctl.glade")
+  uiFile <- pulpDataPath ("ui" </> "sysctl.ui")
   ctlWin <- liftIO $ ctrlWinNew (T.pack uiFile) parent
 
   icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-shutdown-symbolic")

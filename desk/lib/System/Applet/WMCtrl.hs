@@ -45,7 +45,7 @@ wmCtrlBtn parent = do
 
 ctrlWinNew :: (MonadIO m, MonadPulpPath m) => Gtk.Window -> m Gtk.Window
 ctrlWinNew parent = do
-  uiFile <- pulpDataPath ("ui" </> "wmctl.glade")
+  uiFile <- pulpDataPath ("ui" </> "wmctl.ui")
   CtrlWinView{..} <- liftIO $ ctrlViewNew (T.pack uiFile) parent
   liftIO . setupAct $ \case
     Close -> #close ctrlWin

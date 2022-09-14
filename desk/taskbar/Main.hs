@@ -95,7 +95,7 @@ app isTest = do
       #setCenterWidget box . Just =<< App.deskVisualizer deskVisDeskSetup deskVisWinSetup
       traverse_ (addToBegin box)
         =<< sequenceA
-          [ App.layout App.LayoutArg{layoutPrettyName = (T.pack "\xf0ce " <>)}
+          [ App.layout App.LayoutArg{layoutPrettyName = id}
           ]
       traverse_ (addToEnd box)
         =<< sequenceA

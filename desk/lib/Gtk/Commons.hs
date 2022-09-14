@@ -1,12 +1,13 @@
 module Gtk.Commons (
-  module GI.Gtk.Enums,
-  module GI.Gdk.Enums,
-  module GI.Gtk.Flags,
-  module GI.Gdk.Flags,
-  module GI.Gtk.Constants,
-  module GI.Gdk.Constants,
-  module GI.Gtk.Objects.Widget,
-  elementAs,
+  module GI.Gtk.Enums
+  , module GI.Gdk.Enums
+  , module GI.Gtk.Flags
+  , module GI.Gdk.Flags
+  , module GI.Gtk.Constants
+  , module GI.Gdk.Constants
+  , module GI.Gtk.Objects.Widget
+  , module GI.Gtk.Objects.Builder
+  , elementAs
 ) where
 
 import Control.Monad.IO.Class

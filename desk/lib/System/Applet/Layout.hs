@@ -5,24 +5,30 @@ module System.Applet.Layout (LayoutArg (..), layout) where
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
-import Data.GI.Base.Constructible
 import Data.Text qualified as T
+import Foreign.Ptr (nullPtr)
+import GI.Gdk.Unions.Event qualified as Gdk
+import GI.Gtk.Functions qualified as Gtk
+import GI.Gtk.Objects.Builder qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import Gtk.Commons qualified as Gtk
-import Gtk.Containers qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Status.X11.WMStatus
 import Status.X11.XHandle
+import System.FilePath
+import System.Pulp.PulpEnv (MonadPulpPath (..))
 
 newtype LayoutArg = LayoutArg
   { layoutPrettyName :: T.Text -> T.Text
   }
 
 -- | Applet showing current window layout.
-layout :: (MonadXHand m) => LayoutArg -> m Gtk.Widget
+layout :: (MonadXHand m, MonadPulpPath m) => LayoutArg -> m Gtk.Widget
 layout arg = do
   rcvs <- runXHand layoutInitiate
-  view <- layoutViewNew
+  uiFile <- pulpDataPath ("ui" </> "layout.ui")
+
+  view <- liftIO $ layoutViewNew (T.pack uiFile)
   LayoutHandle <- layoutMake arg rcvs view
   pure $ layoutWid view
 
@@ -35,16 +41,16 @@ layout arg = do
 data LayoutHandle = LayoutHandle
 
 layoutMake :: MonadIO m => LayoutArg -> LayoutRcvs -> LayoutView -> m LayoutHandle
-layoutMake LayoutArg{..} LayoutRcvs{..} view = liftIO registers
+layoutMake LayoutArg{..} LayoutRcvs{..} LayoutView{..} = liftIO registers
   where
     registers = do
-      layoutSetAction view (reqToLayout NextLayout) (reqToLayout ResetLayout)
+      setupAct (reqToLayout NextLayout) (reqToLayout ResetLayout)
       killLayout <- Gtk.uiTask curLayout updateLayout
-      _ <- Gtk.onWidgetDestroy (layoutWid view) killLayout
+      _ <- Gtk.onWidgetDestroy layoutWid killLayout
       pure LayoutHandle
-      where
-        updateLayout layout = do
-          layoutSetLabel view (layoutPrettyName layout)
+
+    updateLayout layout = do
+      setLabel (layoutPrettyName layout)
 
 {-------------------------------------------------------------------
                           Communication
@@ -74,28 +80,30 @@ layoutInitiate = do
 
 data LayoutView = LayoutView
   { layoutWid :: !Gtk.Widget
-  , layoutLbl :: !Gtk.Label
+  , setLabel :: T.Text -> IO ()
+  , setupAct :: IO () -> IO () -> IO ()
   }
 
-layoutViewNew :: MonadIO m => m LayoutView
-layoutViewNew = do
-  layoutLbl <- new Gtk.Label []
-  layLblWid <- Gtk.toWidget layoutLbl
-  -- Button to show the decoration
-  btn <- Gtk.buttonNewWith (Just layLblWid) $ pure ()
+layoutViewNew :: T.Text -> IO LayoutView
+layoutViewNew uiFile = do
+  builder <- Gtk.builderNewFromFile uiFile
 
-  layoutWid <- Gtk.toWidget btn
-  Gtk.widgetSetName layoutWid (T.pack "window-layout")
+  Just layoutWid <- Gtk.elementAs builder (T.pack "layout") Gtk.Widget
+  Just layoutLbl <- Gtk.elementAs builder (T.pack "layout-current") Gtk.Label
+
+  let setLabel lbl = set layoutLbl [#label := lbl]
+      setupAct leftClick rightClick = do
+        #addCallbackSymbol builder (T.pack "layout-action") (onAct leftClick rightClick)
+        #connectSignals builder nullPtr
+
   pure LayoutView{..}
-
-layoutSetAction :: MonadIO m => LayoutView -> IO () -> IO () -> m ()
-layoutSetAction LayoutView{layoutWid} leftClick rightClick = do
-  Gtk.onWidgetButtonReleaseEvent layoutWid $ \event -> do
-    get event #button >>= \case
-      1 -> True <$ leftClick
-      3 -> True <$ rightClick
-      _ -> pure False
-  pure ()
-
-layoutSetLabel :: MonadIO m => LayoutView -> T.Text -> m ()
-layoutSetLabel LayoutView{layoutLbl} lbl = set layoutLbl [#label := lbl]
+  where
+    onAct leftClick rightClick =
+      Gtk.getCurrentEvent >>= \case
+        Nothing -> pure ()
+        Just event -> do
+          evBtn <- Gdk.getEventButton event
+          get evBtn #button >>= \case
+            1 -> leftClick
+            3 -> rightClick
+            _ -> pure ()
