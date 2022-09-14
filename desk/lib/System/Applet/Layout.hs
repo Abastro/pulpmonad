@@ -5,6 +5,7 @@ module System.Applet.Layout (LayoutArg (..), layout) where
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
+import Data.GI.Base.Signals
 import Data.Text qualified as T
 import Foreign.Ptr (nullPtr)
 import GI.Gdk.Unions.Event qualified as Gdk
@@ -24,34 +25,20 @@ newtype LayoutArg = LayoutArg
 
 -- | Applet showing current window layout.
 layout :: (MonadXHand m, MonadPulpPath m) => LayoutArg -> m Gtk.Widget
-layout arg = do
-  rcvs <- runXHand layoutInitiate
+layout LayoutArg{..} = do
+  LayoutRcvs{..} <- runXHand layoutInitiate
   uiFile <- pulpDataPath ("ui" </> "layout.ui")
+        
+  LayoutView{..} <- liftIO $ layoutViewNew (T.pack uiFile) (onClick reqToLayout)
+  liftIO $ do
+    killLayout <- Gtk.uiTask curLayout $ \layout -> setLabel (layoutPrettyName layout)
+    on layoutWid #destroy killLayout
 
-  view <- liftIO $ layoutViewNew (T.pack uiFile)
-
-  LayoutHandle <- layoutMake arg rcvs view
-  pure $ layoutWid view
-
--- Dividing into multiple files would be unnecessary hassle.
-
-{-------------------------------------------------------------------
-                              Handle
---------------------------------------------------------------------}
-
-data LayoutHandle = LayoutHandle
-
-layoutMake :: MonadIO m => LayoutArg -> LayoutRcvs -> LayoutView -> m LayoutHandle
-layoutMake LayoutArg{..} LayoutRcvs{..} LayoutView{..} = liftIO registers
+  pure layoutWid
   where
-    registers = do
-      setupAct (reqToLayout NextLayout) (reqToLayout ResetLayout)
-      killLayout <- Gtk.uiTask curLayout updateLayout
-      _ <- Gtk.onWidgetDestroy layoutWid killLayout
-      pure LayoutHandle
-
-    updateLayout layout = do
-      setLabel (layoutPrettyName layout)
+    onClick req = \case
+      LeftClick -> req NextLayout
+      RightClick -> req ResetLayout
 
 {-------------------------------------------------------------------
                           Communication
@@ -82,29 +69,30 @@ layoutInitiate = do
 data LayoutView = LayoutView
   { layoutWid :: !Gtk.Widget
   , setLabel :: T.Text -> IO ()
-  , setupAct :: IO () -> IO () -> IO ()
   }
 
-layoutViewNew :: T.Text -> IO LayoutView
-layoutViewNew uiFile = do
+data Click = LeftClick | RightClick
+
+layoutViewNew :: T.Text -> (Click -> IO ()) -> IO LayoutView
+layoutViewNew uiFile acts = do
   builder <- Gtk.builderNewFromFile uiFile
 
   Just layoutWid <- Gtk.elementAs builder (T.pack "layout") Gtk.Widget
   Just layoutLbl <- Gtk.elementAs builder (T.pack "layout-current") Gtk.Label
 
+  #addCallbackSymbol builder (T.pack "layout-action") onAct
+  #connectSignals builder nullPtr
+
   let setLabel lbl = set layoutLbl [#label := lbl]
-      setupAct leftClick rightClick = do
-        #addCallbackSymbol builder (T.pack "layout-action") (onAct leftClick rightClick)
-        #connectSignals builder nullPtr
 
   pure LayoutView{..}
   where
-    onAct leftClick rightClick =
+    onAct =
       Gtk.getCurrentEvent >>= \case
         Nothing -> pure ()
         Just event -> do
           evBtn <- Gdk.getEventButton event
           get evBtn #button >>= \case
-            1 -> leftClick
-            3 -> rightClick
+            1 -> acts LeftClick
+            3 -> acts RightClick
             _ -> pure ()
