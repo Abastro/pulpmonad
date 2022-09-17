@@ -127,6 +127,7 @@ staticManage =
     [ isDialog --> doCenterFloat
     , isSplash --> doIgnore
     , isTooltip --> doIgnore
+    , role =? "popup" <||> role =? "pop-up" --> doCenterFloat
     , className =? "Gimp" --> doF (shift pics)
     , role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink
     , className =? "Inkscape" --> doF (shift pics)
