@@ -4,8 +4,10 @@ module System.Applet.WMCtrl (wmCtrlBtn) where
 
 import Control.Concurrent
 import Control.Concurrent.Task
+import Control.Exception
 import Control.Monad.IO.Class
 import Data.Foldable
+import Data.Function hiding (on)
 import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
 import Data.Text qualified as T
@@ -56,20 +58,26 @@ ctrlWinNew parent = do
         #close ctrlWin
 
     runBuild setMode addLine = do
-      Gtk.uiSingleRun (setMode True)
-      -- FIXME: this causes error in waitForProcess, child process does not exist.
-      forkIO . withCreateProcess (proc "xmonad-manage" ["build", "pulpmonad"]){std_out = CreatePipe} $
-        \_ (Just outp) _ _ -> do
-          actOnLine outp $ \txt -> Gtk.uiSingleRun (addLine txt)
-          Gtk.uiSingleRun (setMode False)
+      -- TODO: need fix "waitForProcess, child process does not exist".
+      forkIO . bracket_ begin end . handle @IOException onError $ do
+        -- Creates pipe for merging streams
+        (reads, writes) <- createPipe
+        withCreateProcess (proc "xmonad-manage" ["build", "pulpmonad"]){std_out = UseHandle writes, std_err = UseHandle writes} $
+          \_ _ _ _ -> do
+            actOnLine reads $ \txt -> Gtk.uiSingleRun (addLine txt)
       pure ()
       where
-        actOnLine outp act =
+        begin = Gtk.uiSingleRun (setMode True)
+        end = threadDelay 3000000 >> Gtk.uiSingleRun (setMode False)
+
+        actOnLine outp act = fix $ \recurse ->
           hIsEOF outp >>= \case
             True -> pure ()
-            False -> do
-              T.hGetLine outp >>= act
-              actOnLine outp act
+            False -> (T.hGetLine outp >>= act) >> recurse
+
+        onError err = do
+          Gtk.uiSingleRun (addLine . T.pack $ show err)
+          throwIO err
 
 {-------------------------------------------------------------------
                           Communication
