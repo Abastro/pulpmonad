@@ -39,6 +39,7 @@ common pulp-gtk
     , data-default-class ^>=0.1.2
     , xmonad >=0.13
     , xmonad-contrib >=0.14
+    , alsa-core ^>= 0.5.0.1
     , alsa-mixer ^>= 0.3.0
     , haskell-gi-base ==0.26.*
     , gi-glib ==2.0.*
@@ -70,6 +71,7 @@ library
     Status.X11.XHandle
     Status.X11.WMStatus
     Status.AppInfos
+    Status.AudioStatus
 
     Gtk.Commons
     Gtk.Task
@@ -89,6 +91,7 @@ library
     System.Applet.Layout
     System.Applet.SysCtrl
     System.Applet.WMCtrl
+    System.Applet.Volume
 
     System.Applet.DesktopVisual.View
     System.Applet.DesktopVisual.Handle
@@ -108,8 +111,8 @@ test-suite test-pulpdesk
   hs-source-dirs:     test
   build-depends:
       pulpdesk
-    , QuickCheck ==2.14.*
-    , hspec ==2.9.*
+    , QuickCheck >=2.14
+    , hspec ^>=2.10
 
 executable pulp-taskbar
   import:             pulp-gtk

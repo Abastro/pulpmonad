@@ -17,12 +17,14 @@ import System.Applet.Layout qualified as App
 import System.Applet.SysCtrl qualified as App
 import System.Applet.SysTray qualified as App
 import System.Applet.SystemDisplay qualified as App
+import System.Applet.Volume qualified as App
 import System.Applet.WMCtrl qualified as App
 import System.Environment
 import System.Log.LogPrint (LogLevel (..), defLogFormat)
 import System.Pulp.PulpBar
 import System.Pulp.PulpEnv
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
+import qualified GI.Gtk.Objects.Separator as Gtk
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -99,7 +101,9 @@ app isTest = do
           ]
       traverse_ (addToEnd box)
         =<< sequenceA
-          [ App.mainboardDisplay Gtk.IconSizeLargeToolbar 42
+          [ App.volumeDisplay Gtk.IconSizeLargeToolbar
+          , Gtk.toWidget =<< Gtk.separatorNew Gtk.OrientationHorizontal
+          , App.mainboardDisplay Gtk.IconSizeLargeToolbar 42
           , App.batDisplay Gtk.IconSizeLargeToolbar
           ]
       Gtk.toWidget box

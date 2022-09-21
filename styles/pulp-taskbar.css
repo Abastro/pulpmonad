@@ -48,6 +48,11 @@ button:hover {
 	box-shadow: inset 0 -2px #503060;
 }
 
+separator {
+	background-color: rgba(80, 80, 80, 0.5);
+	margin: 5px 2px;
+}
+
 /* Desktop Visualizer Widget */
 
 .desk-visual {
@@ -97,7 +102,7 @@ button:hover {
 	opacity: .3;
 }
 
-/* Mainboard styling */
+/* Status display styling */
 
 #bat {
 	color: rgb(216, 216, 216);
@@ -143,6 +148,10 @@ imagebar#cpu.temp-120>image {
 
 imagebar#cpu {
 	color: rgb(240, 160, 24);
+}
+
+#vol>image {
+	color: rgb(180, 180, 180);
 }
 
 /* Text clock */
