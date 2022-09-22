@@ -27,3 +27,17 @@ library
     , stm == 2.5.*
   exposed-modules:
     Defines
+
+test-suite test-pulp-commons
+  type:               exitcode-stdio-1.0
+  main-is:            Spec.hs
+  hs-source-dirs:     test
+  default-extensions:
+    LambdaCase
+  default-language:     GHC2021
+  build-depends:
+      base
+    , pulp-commons
+    -- , process >= 1.6.14
+    , QuickCheck >=2.14
+    , hspec ^>=2.10

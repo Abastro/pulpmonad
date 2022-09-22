@@ -29,7 +29,7 @@ common pulp-gtk
     , X11
     , unix
     , time
-    , process ^>= 1.6.14
+    , process
     , generic-data ==0.9.*
     , stm ==2.5.*
     , parser-combinators ==1.3.*
