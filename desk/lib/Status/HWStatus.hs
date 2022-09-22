@@ -272,3 +272,5 @@ diskDelta delay = do
   pure diff
 
 -- Brightness: "/sys/class/backlight/?"
+-- Network Load: "/sys/class/net/{device}" , "/proc/net/dev"
+-- For detailed info, interfacing with NetworkManager should be better

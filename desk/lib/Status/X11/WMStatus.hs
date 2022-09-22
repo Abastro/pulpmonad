@@ -249,6 +249,8 @@ reqActiveWindow flag = do
 data WMStateEx = WinHidden | WinDemandAttention
   deriving (Eq, Ord, Enum, Bounded)
 
+-- TODO WM_CLASS must be [instance name, class name]
+
 -- | Information on the specific window.
 data WindowInfo = WindowInfo
   { windowTitle :: !T.Text
