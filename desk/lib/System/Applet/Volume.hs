@@ -7,12 +7,14 @@ import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.GI.Base.Constructible
 import Data.GI.Base.Signals
+import Data.Ord
 import Data.Text qualified as T
+import GI.Gdk.Structs.EventScroll qualified as Gdk
 import GI.Gtk.Objects.Image qualified as Gtk
 import Gtk.Commons qualified as Gtk
+import Gtk.Containers qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Status.AudioStatus
-import qualified Gtk.Containers as Gtk
 import XMonad.Util.Run
 
 data VolumeLevel = Muted | VolLow | VolMid | VolHigh
@@ -32,17 +34,21 @@ volIconName = \case
   VolMid -> T.pack "audio-volume-medium-symbolic"
   VolHigh -> T.pack "audio-volume-high-symbolic"
 
--- TODO Add actions to change mute/volume
+-- TODO Add actions to change mute state
 
--- | Volume display. Currently only looks into "default:Master".
-volumeDisplay :: MonadIO m => Gtk.IconSize -> m Gtk.Widget
-volumeDisplay iconSize = do
-  widIcon <- startRegular 100 volTask >>= traverse volIcon
+-- | Volume display. First argument is mixer name, second is control name.
+volumeDisplay :: MonadIO m => String -> String -> Gtk.IconSize -> m Gtk.Widget
+volumeDisplay mixerName controlName iconSize = do
+  widIcon <- startRegular 100 getVolume >>= traverse volIcon
   btn <- Gtk.buttonNewWith widIcon $ safeSpawn "pavucontrol" []
   #setName btn (T.pack "vol")
+  #addEvents btn [Gtk.EventMaskScrollMask]
+  on btn #scrollEvent onScroll
   btn <$ #showAll btn
   where
-    volTask = curVolStat "default" "Master" >>= maybe (fail "cannot find") pure
+    getVolume = curVolStat mixerName controlName >>= maybe (fail "cannot find") pure
+
+    chVolume adj = updateRelVolume mixerName controlName (\vol -> clamp (0, 1) $ vol + adj)
 
     volIcon :: MonadIO m => Task VolStat -> m Gtk.Widget
     volIcon task = do
@@ -52,3 +58,10 @@ volumeDisplay iconSize = do
           set vol [#iconName := volIconName (volLevel stat)]
         on vol #destroy kill
       Gtk.toWidget vol
+
+    onScroll :: Gdk.EventScroll -> IO Bool
+    onScroll event = do
+      get event #direction >>= \case
+        Gtk.ScrollDirectionUp -> True <$ chVolume (1 / 100)
+        Gtk.ScrollDirectionDown -> True <$ chVolume (-1 / 100)
+        _ -> pure False

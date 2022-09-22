@@ -25,7 +25,6 @@ import GI.Cairo.Render qualified as C
 import GI.Cairo.Render.Connector qualified as C
 import GI.Cairo.Structs.Context qualified as C
 import GI.Gdk.Functions qualified as Gdk
-import GI.Gtk.Functions (renderBackground, renderFrame)
 import GI.Gtk.Objects.Bin
 import GI.Gtk.Objects.Image
 import GI.Gtk.Structs.WidgetClass

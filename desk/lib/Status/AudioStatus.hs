@@ -2,13 +2,14 @@
 module Status.AudioStatus (
   VolStat (..),
   curVolStat,
-  setRelVolume,
-  setUnmuted,
+  updateRelVolume,
+  updateUnmuted,
 ) where
 
 import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
+import Data.Foldable
 import Data.Maybe
 import Sound.ALSA.Exception qualified as Alsa
 import Sound.ALSA.Mixer
@@ -27,8 +28,10 @@ playCapa caps = playback caps <|> common caps
 toRatio lo hi cur = fromIntegral (cur - lo) / fromIntegral (hi - lo)
 fromRatio lo hi per = lo + floor (fromIntegral (hi - lo) * per)
 
+setAllChannel perCh raw = traverse_ (\ch -> setChannel ch perCh raw) (channels perCh)
+
 data VolStat = VolStat
-  { curVolume :: !Double
+  { curVolume :: !Rational
   -- ^ Current volume in ratio
   , isUnmuted :: !Bool
   -- ^ Whether the flag is unmuted or muted, False = muted
@@ -62,19 +65,25 @@ curVolStat mixerName controlName =
     -- We assume FrontLeft would be enough.
     defChannelV perCh = MaybeT $ catchWithDef Nothing (getChannel FrontLeft perCh)
 
--- | Sets playback volume in percentage.
-setRelVolume :: String -> String -> Double -> IO ()
-setRelVolume mixerName controlName newVol = do
+-- | Updates playback volume in percentage.
+updateRelVolume :: String -> String -> (Rational -> Rational) -> IO ()
+updateRelVolume mixerName controlName volUpd = do
   catchWithDef Nothing . withMixerCtrl mixerName controlName $ \control -> do
     volCapa <- MaybeT . pure $ playCapa (volume control)
     (lo, hi) <- liftIO $ getRange volCapa
-    liftIO . catchWithDef () $ setChannel FrontLeft (value volCapa) (fromRatio lo hi newVol)
+    let vol = value volCapa
+    curRaw <- MaybeT $ catchWithDef Nothing $ getChannel FrontLeft vol
+    let newRaw = updated lo hi curRaw
+    liftIO . catchWithDef () $ setAllChannel vol newRaw
   pure ()
+  where
+    updated lo hi = fromRatio lo hi . volUpd . toRatio lo hi
 
--- | Sets unmuted flag (False = muted).
-setUnmuted :: String -> String -> Bool -> IO ()
-setUnmuted mixerName controlName newSwit = do
+-- | Updates unmuted flag (False = muted).
+updateUnmuted :: String -> String -> (Bool -> Bool) -> IO ()
+updateUnmuted mixerName controlName switUpd = do
   catchWithDef Nothing . withMixerCtrl mixerName controlName $ \control -> do
     switCapa <- MaybeT . pure $ playCapa (switch control)
-    liftIO . catchWithDef () $ setChannel FrontLeft switCapa newSwit
+    curSwit <- MaybeT $ catchWithDef Nothing $ getChannel FrontLeft switCapa
+    liftIO . catchWithDef () $ setAllChannel switCapa (switUpd curSwit)
   pure ()
