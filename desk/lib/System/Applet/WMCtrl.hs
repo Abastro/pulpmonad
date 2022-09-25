@@ -65,7 +65,6 @@ ctrlWinNew parent = do
         bracket createPipe (\(r, w) -> hClose r >> hClose w) $ \(reads, writes) -> do
           withCreateProcess prog{std_out = UseHandle writes, std_err = UseHandle writes} $
             \_ _ _ _ -> do
-              hClose writes
               actOnLine reads $ \txt -> Gtk.uiSingleRun (addLine txt)
       pure ()
       where
