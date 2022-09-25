@@ -60,11 +60,13 @@ ctrlWinNew parent = do
     runBuild setMode addLine = do
       -- TODO: need fix "waitForProcess, child process does not exist".
       forkIO . bracket_ begin end . handle @IOException onError $ do
+        let prog = proc "xmonad-manage" ["build", "pulpmonad"]
         -- Creates pipe for merging streams
-        (reads, writes) <- createPipe
-        withCreateProcess (proc "xmonad-manage" ["build", "pulpmonad"]){std_out = UseHandle writes, std_err = UseHandle writes} $
-          \_ _ _ _ -> do
-            actOnLine reads $ \txt -> Gtk.uiSingleRun (addLine txt)
+        bracket createPipe (\(r, w) -> hClose r >> hClose w) $ \(reads, writes) -> do
+          withCreateProcess prog{std_out = UseHandle writes, std_err = UseHandle writes} $
+            \_ _ _ _ -> do
+              hClose writes
+              actOnLine reads $ \txt -> Gtk.uiSingleRun (addLine txt)
       pure ()
       where
         begin = Gtk.uiSingleRun (setMode True)
