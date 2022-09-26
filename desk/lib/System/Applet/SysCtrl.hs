@@ -8,6 +8,7 @@ import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
 import Data.Text qualified as T
+import GI.Gdk.Unions.Event qualified as Gtk
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Gtk.Commons qualified as Gtk
@@ -43,18 +44,21 @@ ctrlWinNew uiFile parent = Gtk.buildFromFile uiFile $ do
   #setKeepAbove window True
   Gtk.windowSetTransparent window
   Gtk.windowGrabOnMap window
-  on window #keyPressEvent $
-    flip get #keyval >=> \case
-      Gtk.KEY_Escape -> True <$ #close window
-      _ -> pure False
   on window #deleteEvent $ \_ -> #hideOnDelete window
 
+  Gtk.addCallbackWithEvent (T.pack "sysctl-keypress") $ do onKeyPress window
   Gtk.addCallback (T.pack "sysctl-close") $ do #close window
   Gtk.addCallback (T.pack "sysctl-logout") $ do safeSpawn "killall" ["xmonad-manage"]
   Gtk.addCallback (T.pack "sysctl-reboot") $ do safeSpawn "systemctl" ["reboot"]
   Gtk.addCallback (T.pack "sysctl-poweroff") $ do safeSpawn "systemctl" ["poweroff"]
 
   pure window
+  where
+    onKeyPress window evt = do
+      keyEvt <- Gtk.getEventKey evt
+      get keyEvt #keyval >>= \case
+        Gtk.KEY_Escape -> #close window
+        _ -> pure ()
 
 {-------------------------------------------------------------------
                           Communication

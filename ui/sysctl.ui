@@ -35,6 +35,7 @@
     <property name="default_height">140</property>
     <property name="skip_taskbar_hint">True</property>
     <property name="skip_pager_hint">True</property>
+    <signal name="key-press-event" handler="sysctl-keypress" swapped="no"/>
     <child type="titlebar">
       <placeholder/>
     </child>

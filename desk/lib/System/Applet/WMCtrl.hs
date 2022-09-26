@@ -134,6 +134,7 @@ ctrlViewNew uiFile onAct parent = Gtk.buildFromFile uiFile $ do
           set buildLab [#label := T.empty]
           set stack [#visibleChildName := T.pack "main"]
         True -> set stack [#visibleChildName := T.pack "build"]
+
       addBuildLine line = do
         set buildLab [#label :~ (<> line <> T.pack "\n")]
         adj <- get buildScr #vadjustment
