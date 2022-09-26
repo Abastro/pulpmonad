@@ -59,6 +59,7 @@ ctrlWinNew parent = do
 
     runBuild setMode addLine = do
       -- TODO: need fix "waitForProcess, child process does not exist".
+      -- Perhaps refactor this into Task, so that it uses TQueue internally
       forkIO . bracket_ begin end . handle @IOException onError $ do
         let prog = proc "xmonad-manage" ["build", "pulpmonad"]
         -- Creates pipe for merging streams

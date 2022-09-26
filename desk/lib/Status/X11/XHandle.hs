@@ -32,7 +32,6 @@ import Data.Set qualified as S
 import Data.Unique
 import Graphics.X11.Xlib
 import Graphics.X11.Xlib.Extras
-import XMonad.Core (installSignalHandlers, uninstallSignalHandlers)
 
 data X11Env r = X11Env
   { theDisplay :: !Display
@@ -166,8 +165,8 @@ class MonadIO m => MonadXHand m where
 startXIO :: IO (XHandling ())
 startXIO = do
   theHandling <- newEmptyMVar
-  _ <- forkOS . bracket (openDisplay "") closeDisplay $ \xhDisplay ->
-    bracket_ installSignalHandlers uninstallSignalHandlers $ do
+  -- FIXME This call is likely causing issues on WMCtrl's build screen
+  _ <- forkOS . bracket (openDisplay "") closeDisplay $ \xhDisplay -> do
       let xhScreen = defaultScreen xhDisplay
       xhWindow <- rootWindow xhDisplay xhScreen
       xhActQueue <- newTQueueIO
