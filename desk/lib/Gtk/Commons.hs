@@ -7,7 +7,7 @@ module Gtk.Commons (
   module GI.Gtk.Constants,
   module GI.Gdk.Constants,
   module GI.Gtk.Objects.Widget,
-  BuilderIO,
+  BuilderM,
   buildFromFile,
   addCallback,
   addCallbackWithEvent,
@@ -33,9 +33,10 @@ import GI.Gtk.Functions
 import GI.Gtk.Objects.Builder
 import GI.Gtk.Objects.Widget
 
-type BuilderIO = ReaderT Builder IO
+-- | Monad with builder attached
+type BuilderM m = ReaderT Builder m
 
-buildFromFile :: T.Text -> BuilderIO a -> IO a
+buildFromFile :: MonadIO m => T.Text -> BuilderM m a -> m a
 buildFromFile uiFile act = do
   builder <- builderNewFromFile uiFile
   built <- runReaderT act builder
@@ -44,17 +45,17 @@ buildFromFile uiFile act = do
   pure built
 
 -- | Adds callback to a signal.
-addCallback :: T.Text -> IO () -> BuilderIO ()
+addCallback :: MonadIO m => T.Text -> IO () -> BuilderM m ()
 addCallback name act = ReaderT $ \builder -> do
   builderAddCallbackSymbol builder name act
 
 -- | Adds callback with event.
-addCallbackWithEvent :: T.Text -> (Event -> IO ()) -> BuilderIO ()
+addCallbackWithEvent :: MonadIO m => T.Text -> (Event -> IO ()) -> BuilderM m ()
 addCallbackWithEvent name act = addCallback name $ do
   getCurrentEvent >>= traverse_ act
 
 -- | Gets an element in GtkBuilder.
-getElement :: GObject o => T.Text -> (ManagedPtr o -> o) -> BuilderIO (Maybe o)
+getElement :: (GObject o, MonadIO m) => T.Text -> (ManagedPtr o -> o) -> BuilderM m (Maybe o)
 getElement name constr = ReaderT $ \builder -> runMaybeT $ do
   obj <- MaybeT $ builderGetObject builder name
   MaybeT . liftIO $ castTo constr obj

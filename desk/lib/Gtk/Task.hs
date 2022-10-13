@@ -11,6 +11,9 @@ import GI.Gdk.Functions qualified as Gdk
 uiSingleRun :: IO a -> IO ()
 uiSingleRun task = void $ Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE (False <$ task)
 
+-- NOTE: Currently, `uiTask` is the sole consumer of Task.
+-- Likely could be replaced with something else.
+
 -- | Adds UI Task, returns the kill action. Each UI task is checked every 10ms.
 -- WARNING: a task should not be given to 2 UI tasks.
 uiTask :: Task a -> (a -> IO b) -> IO (IO ())

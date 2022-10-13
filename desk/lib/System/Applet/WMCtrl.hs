@@ -4,6 +4,7 @@ module System.Applet.WMCtrl (wmCtrlBtn) where
 
 import Control.Concurrent
 import Control.Concurrent.Task
+import Control.Event.Entry
 import Control.Exception
 import Control.Monad.IO.Class
 import Data.Foldable
@@ -18,7 +19,6 @@ import GI.Gtk.Objects.Stack qualified as Gtk
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Gtk.Commons qualified as Gtk
-import Gtk.Containers qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Gtk.Window qualified as Gtk
 import Status.X11.XHandle
@@ -26,7 +26,6 @@ import System.FilePath
 import System.IO
 import System.Process
 import System.Pulp.PulpEnv
-import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
 
 -- | Window manager control button.
@@ -34,52 +33,70 @@ import XMonad.Util.Run (safeSpawn)
 wmCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
 wmCtrlBtn parent = do
   watch <- runXHand wmCtrlListen
-  ctrlWin <- ctrlWinNew parent
-
-  icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-settings-symbolic")
-  wid <- Gtk.buttonNewWith (Just icon) (#showAll ctrlWin)
-  liftIO $ do
-    killWatch <- Gtk.uiTask watch (\WMCtlMsg -> Gtk.widgetActivate wid)
-    on wid #destroy killWatch
-  pure wid
-
-ctrlWinNew :: (MonadIO m, MonadPulpPath m) => Gtk.Window -> m Gtk.Window
-ctrlWinNew parent = do
   uiFile <- pulpDataPath ("ui" </> "wmctl.ui")
   CtrlWinView{..} <- liftIO $ ctrlViewNew (T.pack uiFile) onAct parent
-  liftIO $ setBuildmode False
-  pure ctrlWin
+
+  liftIO $ do
+    killWatch <- Gtk.uiTask watch (\WMCtlMsg -> Gtk.widgetActivate ctrlBtn)
+    on ctrlBtn #destroy killWatch
+  pure ctrlBtn
   where
     onAct CtrlWinView{..} = \case
+      Open -> #showAll ctrlWin
       Close -> #close ctrlWin
       Build -> runBuild setBuildmode addBuildLine
       Refresh -> do
         safeSpawn "xmonad" ["--restart"]
         #close ctrlWin
 
-    runBuild setMode addLine = do
-      -- TODO: need fix "waitForProcess, child process does not exist".
-      -- Perhaps refactor this into Task, so that it uses TQueue internally
+runBuild :: Sink Bool -> Sink T.Text -> IO ()
+runBuild setMode addLine = do
+  forkIO . bracket_ begin end . handle @IOException onError $ do
+    let prog = proc "xmonad-manage" ["build", "pulpmonad"]
+    -- Creates pipe for merging streams
+    bracket createPipe (\(r, w) -> hClose r >> hClose w) $ \(reads, writes) -> do
+      withCreateProcess prog{std_out = UseHandle writes, std_err = UseHandle writes} $
+        \_ _ _ _ -> do
+          actOnLine reads $ \txt -> Gtk.uiSingleRun (addLine txt)
+  pure ()
+  where
+    begin = Gtk.uiSingleRun (setMode True)
+    end = threadDelay 3000000 >> Gtk.uiSingleRun (setMode False)
+
+    actOnLine outp act = fix $ \recurse ->
+      hIsEOF outp >>= \case
+        True -> pure ()
+        False -> (T.hGetLine outp >>= act) >> recurse
+
+    onError err = do
+      Gtk.uiSingleRun (addLine . T.pack $ show err)
+      throwIO err
+
+runBuildAlt :: IO (Source Bool, Source T.Text)
+runBuildAlt = do
+  (modeSrc, setMode) <- sourceSink
+  (lineSrc, addLine) <- sourceSink
+  (modeSrc, lineSrc) <$ go setMode addLine
+  where
+    go setMode addLine = do
       forkIO . bracket_ begin end . handle @IOException onError $ do
         let prog = proc "xmonad-manage" ["build", "pulpmonad"]
         -- Creates pipe for merging streams
         bracket createPipe (\(r, w) -> hClose r >> hClose w) $ \(reads, writes) -> do
           withCreateProcess prog{std_out = UseHandle writes, std_err = UseHandle writes} $
             \_ _ _ _ -> do
-              actOnLine reads $ \txt -> Gtk.uiSingleRun (addLine txt)
-      pure ()
+              actOnLine reads addLine
       where
-        begin = Gtk.uiSingleRun (setMode True)
-        end = threadDelay 3000000 >> Gtk.uiSingleRun (setMode False)
+        begin = setMode True
+        end = threadDelay 3000000 >> setMode False
+        onError err = do
+          addLine (T.pack $ show err)
+          throwIO err
 
         actOnLine outp act = fix $ \recurse ->
           hIsEOF outp >>= \case
             True -> pure ()
             False -> (T.hGetLine outp >>= act) >> recurse
-
-        onError err = do
-          Gtk.uiSingleRun (addLine . T.pack $ show err)
-          throwIO err
 
 {-------------------------------------------------------------------
                           Communication
@@ -103,23 +120,27 @@ wmCtrlListen = do
                               View
 --------------------------------------------------------------------}
 
-data WinCtrl = Close | Build | Refresh
+data WinCtrl = Open | Close | Build | Refresh
   deriving (Eq, Ord, Enum, Bounded, Show)
 
 ctrlSignal :: WinCtrl -> T.Text
 ctrlSignal = \case
+  Open -> T.pack "wmctl-open"
   Close -> T.pack "wmctl-close"
   Build -> T.pack "wmctl-build"
   Refresh -> T.pack "wmctl-refresh"
 
 data CtrlWinView = CtrlWinView
-  { ctrlWin :: !Gtk.Window
-  , setBuildmode :: Bool -> IO ()
-  , addBuildLine :: T.Text -> IO ()
+  { ctrlBtn :: !Gtk.Widget
+  , ctrlWin :: !Gtk.Window
+  , setBuildmode :: Sink Bool
+  , addBuildLine :: Sink T.Text
   }
 
 ctrlViewNew :: T.Text -> (CtrlWinView -> WinCtrl -> IO ()) -> Gtk.Window -> IO CtrlWinView
 ctrlViewNew uiFile onAct parent = Gtk.buildFromFile uiFile $ do
+  Just ctrlBtn <- Gtk.getElement (T.pack "btn-wmctl") Gtk.Widget
+
   Just window <- Gtk.getElement (T.pack "wmctl") Gtk.Window
   Just stack <- Gtk.getElement (T.pack "wmctl-stack") Gtk.Stack
   Just buildScr <- Gtk.getElement (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow

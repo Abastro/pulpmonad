@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.22.2 -->
 <interface>
   <requires lib="gtk+" version="3.20"/>
   <object class="GtkImage" id="image-build">
@@ -19,6 +18,20 @@
     <property name="can_focus">False</property>
     <property name="icon_name">view-refresh-symbolic</property>
     <property name="icon_size">6</property>
+  </object>
+  <object class="GtkButton" id="btn-wmctl">
+    <property name="visible">True</property>
+    <property name="can_focus">True</property>
+    <property name="receives_default">True</property>
+    <signal name="clicked" handler="wmctl-open" swapped="no"/>
+    <child>
+      <object class="GtkImage" id="image-wmctl">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="icon_name">system-settings-symbolic</property>
+        <property name="icon_size">3</property>
+      </object>
+    </child>
   </object>
   <object class="GtkWindow" id="wmctl">
     <property name="can_focus">False</property>
