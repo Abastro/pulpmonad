@@ -5,9 +5,12 @@ module Control.Event.Entry (
   sourceSimple,
   sourceWithUnreg,
   sourceSink,
+  syncBehavior,
 ) where
 
 import Control.Event.Handler
+import Reactive.Banana.Combinators
+import Reactive.Banana.Frameworks
 
 -- | Source receives a callback, and send the data to callback when signal occurs.
 type Source a = AddHandler a
@@ -23,6 +26,12 @@ sourceWithUnreg = AddHandler
 sourceSimple :: (Handler a -> IO ()) -> Source a
 sourceSimple src = sourceWithUnreg $ \handler -> pure () <$ src handler
 
--- | Source paired with sink to call
+-- | Source paired with sink to call.
 sourceSink :: IO (Source a, Sink a)
 sourceSink = newAddHandler
+
+-- | Sync with behavior changes using given sink.
+syncBehavior :: Behavior a -> Sink a -> MomentIO ()
+syncBehavior behav sink = do
+  chEvent <- changes behav
+  reactimate' (fmap sink <$> chEvent)

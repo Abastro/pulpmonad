@@ -17,6 +17,9 @@ activateUI outp desc = do
   liftIO . forkIO $ actuate network
   pure outp
 
+liftMomentIO :: MomentIO a -> BuilderM MomentIO a
+liftMomentIO = lift
+
 gtkEvent :: T.Text -> BuilderM MomentIO (Event Gdk.Event)
 gtkEvent name = ReaderT $ \builder -> do
   let source handler = runReaderT (addCallbackWithEvent name handler) builder

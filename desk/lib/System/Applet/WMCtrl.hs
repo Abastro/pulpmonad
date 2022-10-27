@@ -19,8 +19,11 @@ import GI.Gtk.Objects.Stack qualified as Gtk
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Gtk.Commons qualified as Gtk
+import Gtk.Reactive
 import Gtk.Task qualified as Gtk
 import Gtk.Window qualified as Gtk
+import Reactive.Banana.Combinators
+import Reactive.Banana.Frameworks
 import Status.X11.XHandle
 import System.FilePath
 import System.IO
@@ -72,31 +75,91 @@ runBuild setMode addLine = do
       Gtk.uiSingleRun (addLine . T.pack $ show err)
       throwIO err
 
-runBuildAlt :: IO (Source Bool, Source T.Text)
+runBuildAlt :: IO (Source (), Source T.Text)
 runBuildAlt = do
-  (modeSrc, setMode) <- sourceSink
-  (lineSrc, addLine) <- sourceSink
-  (modeSrc, lineSrc) <$ go setMode addLine
+  (srcFin, finish) <- sourceSink
+  (srcLine, rcvLine) <- sourceSink
+  (srcFin, srcLine) <$ go finish rcvLine
   where
-    go setMode addLine = do
-      forkIO . bracket_ begin end . handle @IOException onError $ do
+    go finish rcvLine = do
+      forkIO . finally onEnd . handle @IOException onError $ do
         let prog = proc "xmonad-manage" ["build", "pulpmonad"]
         -- Creates pipe for merging streams
         bracket createPipe (\(r, w) -> hClose r >> hClose w) $ \(reads, writes) -> do
           withCreateProcess prog{std_out = UseHandle writes, std_err = UseHandle writes} $
             \_ _ _ _ -> do
-              actOnLine reads addLine
+              actOnLine reads rcvLine
       where
-        begin = setMode True
-        end = threadDelay 3000000 >> setMode False
+        onEnd = threadDelay 3000000 >> finish ()
         onError err = do
-          addLine (T.pack $ show err)
+          rcvLine (T.pack $ show err)
           throwIO err
 
         actOnLine outp act = fix $ \recurse ->
           hIsEOF outp >>= \case
             True -> pure ()
             False -> (T.hGetLine outp >>= act) >> recurse
+
+data WCTab = Main | Building
+tabName :: WCTab -> T.Text
+tabName = \case
+  Main -> T.pack "main"
+  Building -> T.pack "build"
+
+wmCtrlButton :: T.Text -> Gtk.Window -> IO Gtk.Widget
+wmCtrlButton uiFile parent = Gtk.buildFromFile uiFile $ do
+  Just ctrlBtn <- Gtk.getElement (T.pack "btn-wmctl") Gtk.Widget
+
+  Just window <- Gtk.getElement (T.pack "wmctl") Gtk.Window
+  Just stack <- Gtk.getElement (T.pack "wmctl-stack") Gtk.Stack
+  Just buildScr <- Gtk.getElement (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow
+  Just buildLab <- Gtk.getElement (T.pack "wmctl-build-label") Gtk.Label
+  buildAdj <- get buildScr #vadjustment
+
+  set window [#transientFor := parent]
+  Gtk.windowSetTransparent window
+  on window #deleteEvent $ \_ -> #hideOnDelete window
+
+  -- Only the button is exposed
+  activateUI ctrlBtn $ do
+    toOpen <- gtkEvent (T.pack "wmctl-open")
+    toClose <- gtkEvent (T.pack "wmctl-close")
+    toBuild <- gtkEvent (T.pack "wmctl-build")
+    toRefresh <- gtkEvent (T.pack "wmctl-refresh")
+
+    let onBuild = do
+          (srcFin, srcLine) <- liftIO runBuildAlt
+          (,) <$> fromAddHandler srcFin <*> fromAddHandler srcLine
+        onRefresh window = do
+          safeSpawn "xmonad" ["--restart"]
+          #close window
+
+        setTab tab = set stack [#visibleChildName := tabName tab]
+
+        setBuildText text = do
+          set buildLab [#label := text]
+          set buildAdj [#value :=> get buildAdj #upper]
+
+        appendLine line = (<> line <> T.pack "\n")
+        buildProcs (finished, gotLine) = do
+          tab <- stepper Building (Main <$ finished)
+          -- For now, do not update back to mempty when finished
+          buildTxt <- accumB mempty (appendLine <$> gotLine)
+          pure (tab, buildTxt)
+
+    liftMomentIO $ do
+      reactimate (#showAll window <$ toOpen)
+      reactimate (#close window <$ toClose)
+      builds <- execute ((onBuild >>= buildProcs) <$ toBuild)
+      reactimate (onRefresh window <$ toRefresh)
+
+      tab <- switchB (pure Main) $ fst <$> builds
+      buildTxt <- switchB mempty $ snd <$> builds
+
+      syncBehavior tab setTab
+      syncBehavior buildTxt setBuildText
+      pure ()
+
 
 {-------------------------------------------------------------------
                           Communication
