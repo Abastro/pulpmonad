@@ -82,7 +82,7 @@ runBuildAlt = do
   (srcFin, srcLine) <$ go finish rcvLine
   where
     go finish rcvLine = do
-      forkIO . finally onEnd . handle @IOException onError $ do
+      forkIO . (`finally` onEnd) . handle @IOException onError $ do
         let prog = proc "xmonad-manage" ["build", "pulpmonad"]
         -- Creates pipe for merging streams
         bracket createPipe (\(r, w) -> hClose r >> hClose w) $ \(reads, writes) -> do
