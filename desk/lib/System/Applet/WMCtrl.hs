@@ -7,7 +7,6 @@ import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Exception
 import Control.Monad.IO.Class
-import Data.Foldable
 import Data.Function hiding (on)
 import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
@@ -19,7 +18,6 @@ import GI.Gtk.Objects.Stack qualified as Gtk
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Gtk.Commons qualified as Gtk
-import Gtk.Reactive
 import Gtk.Task qualified as Gtk
 import Gtk.Window qualified as Gtk
 import Reactive.Banana.Combinators
@@ -37,50 +35,49 @@ wmCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.W
 wmCtrlBtn parent = do
   watch <- runXHand wmCtrlListen
   uiFile <- pulpDataPath ("ui" </> "wmctl.ui")
-  CtrlWinView{..} <- liftIO $ ctrlViewNew (T.pack uiFile) onAct parent
+  View{..} <- liftIO $ view (T.pack uiFile) parent
+
+  network <- liftIO . compile $ do
+    buildEvent <- srcEvent toBuild
+    refreshEvent <- srcEvent toRefresh
+
+    reactimate (onRefresh <$ refreshEvent)
+    builds <- execute (onBuild <$ buildEvent)
+    tab <- switchB (pure Main) $ fst <$> builds
+    buildTxt <- switchB mempty $ snd <$> builds
+    -- TODO Type-annotate the need of synchronization for GTK actions
+    syncBehavior tab $ Gtk.uiSingleRun . setTab
+    syncBehavior buildTxt $ Gtk.uiSingleRun . setBuildText
+    pure ()
+
+  liftIO . forkIO $ actuate network
 
   liftIO $ do
-    killWatch <- Gtk.uiTask watch (\WMCtlMsg -> Gtk.widgetActivate ctrlBtn)
-    on ctrlBtn #destroy killWatch
-  pure ctrlBtn
+    -- TODO Move watch to reactive
+    killWatch <- Gtk.uiTask watch (\WMCtlMsg -> Gtk.widgetActivate ctrlButton)
+    on ctrlButton #destroy killWatch
+  pure ctrlButton
   where
-    onAct CtrlWinView{..} = \case
-      Open -> #showAll ctrlWin
-      Close -> #close ctrlWin
-      Build -> runBuild setBuildmode addBuildLine
-      Refresh -> do
-        safeSpawn "xmonad" ["--restart"]
-        #close ctrlWin
+    onBuild = do
+      (srcFin, srcLine) <- liftIO runBuild
+      finished <- fromAddHandler srcFin
+      gotLine <- fromAddHandler srcLine
+      tab <- stepper Building (Main <$ finished)
+      -- For now, do not update back to mempty right after finished
+      buildTxt <- accumB mempty (appendLine <$> gotLine)
+      pure (tab, buildTxt)
 
-runBuild :: Sink Bool -> Sink T.Text -> IO ()
-runBuild setMode addLine = do
-  forkIO . bracket_ begin end . handle @IOException onError $ do
-    let prog = proc "xmonad-manage" ["build", "pulpmonad"]
-    -- Creates pipe for merging streams
-    bracket createPipe (\(r, w) -> hClose r >> hClose w) $ \(reads, writes) -> do
-      withCreateProcess prog{std_out = UseHandle writes, std_err = UseHandle writes} $
-        \_ _ _ _ -> do
-          actOnLine reads $ \txt -> Gtk.uiSingleRun (addLine txt)
-  pure ()
-  where
-    begin = Gtk.uiSingleRun (setMode True)
-    end = threadDelay 3000000 >> Gtk.uiSingleRun (setMode False)
+    onRefresh = safeSpawn "xmonad" ["--restart"]
 
-    actOnLine outp act = fix $ \recurse ->
-      hIsEOF outp >>= \case
-        True -> pure ()
-        False -> (T.hGetLine outp >>= act) >> recurse
+    appendLine line = (<> line <> T.pack "\n")
 
-    onError err = do
-      Gtk.uiSingleRun (addLine . T.pack $ show err)
-      throwIO err
-
-runBuildAlt :: IO (Source (), Source T.Text)
-runBuildAlt = do
+runBuild :: IO (Source (), Source T.Text)
+runBuild = do
   (srcFin, finish) <- sourceSink
   (srcLine, rcvLine) <- sourceSink
   (srcFin, srcLine) <$ go finish rcvLine
   where
+    -- MAYBE maybe simplify this?
     go finish rcvLine = do
       forkIO . (`finally` onEnd) . handle @IOException onError $ do
         let prog = proc "xmonad-manage" ["build", "pulpmonad"]
@@ -100,66 +97,53 @@ runBuildAlt = do
             True -> pure ()
             False -> (T.hGetLine outp >>= act) >> recurse
 
-data WCTab = Main | Building
-tabName :: WCTab -> T.Text
-tabName = \case
-  Main -> T.pack "main"
-  Building -> T.pack "build"
+{-------------------------------------------------------------------
+                              View
+--------------------------------------------------------------------}
 
-wmCtrlButton :: T.Text -> Gtk.Window -> IO Gtk.Widget
-wmCtrlButton uiFile parent = Gtk.buildFromFile uiFile $ do
-  Just ctrlBtn <- Gtk.getElement (T.pack "btn-wmctl") Gtk.Widget
+data WCTab = Main | Building
+
+data View = View
+  { ctrlButton :: !Gtk.Widget
+  , window :: !Gtk.Window
+  , setTab :: Sink WCTab
+  , setBuildText :: Sink T.Text
+  , toBuild :: Source ()
+  , toRefresh :: Source ()
+  }
+
+view :: T.Text -> Gtk.Window -> IO View
+view uiFile parent = Gtk.buildFromFile uiFile $ do
+  Just ctrlButton <- Gtk.getElement (T.pack "btn-wmctl") Gtk.Widget
 
   Just window <- Gtk.getElement (T.pack "wmctl") Gtk.Window
   Just stack <- Gtk.getElement (T.pack "wmctl-stack") Gtk.Stack
-  Just buildScr <- Gtk.getElement (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow
   Just buildLab <- Gtk.getElement (T.pack "wmctl-build-label") Gtk.Label
+  Just buildScr <- Gtk.getElement (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow
   buildAdj <- get buildScr #vadjustment
 
   set window [#transientFor := parent]
   Gtk.windowSetTransparent window
   on window #deleteEvent $ \_ -> #hideOnDelete window
 
-  -- Only the button is exposed
-  activateUI ctrlBtn $ do
-    toOpen <- gtkEvent (T.pack "wmctl-open")
-    toClose <- gtkEvent (T.pack "wmctl-close")
-    toBuild <- gtkEvent (T.pack "wmctl-build")
-    toRefresh <- gtkEvent (T.pack "wmctl-refresh")
+  let setTab = \case
+        Main -> do
+          set buildLab [#label := T.empty]
+          set stack [#visibleChildName := T.pack "main"]
+        Building -> set stack [#visibleChildName := T.pack "build"]
 
-    let onBuild = do
-          (srcFin, srcLine) <- liftIO runBuildAlt
-          (,) <$> fromAddHandler srcFin <*> fromAddHandler srcLine
-        onRefresh window = do
-          safeSpawn "xmonad" ["--restart"]
-          #close window
+      setBuildText txt = do
+        set buildLab [#label := txt]
+        set buildAdj [#value :=> get buildAdj #upper]
 
-        setTab tab = set stack [#visibleChildName := tabName tab]
+  (toBuild, build) <- liftIO sourceSink
+  (toRefresh, refresh) <- liftIO sourceSink
+  Gtk.addCallback (T.pack "wmctl-open") $ #showAll window
+  Gtk.addCallback (T.pack "wmctl-close") $ #close window
+  Gtk.addCallback (T.pack "wmctl-build") $ build ()
+  Gtk.addCallback (T.pack "wmctl-refresh") $ refresh () *> #close window
 
-        setBuildText text = do
-          set buildLab [#label := text]
-          set buildAdj [#value :=> get buildAdj #upper]
-
-        appendLine line = (<> line <> T.pack "\n")
-        buildProcs (finished, gotLine) = do
-          tab <- stepper Building (Main <$ finished)
-          -- For now, do not update back to mempty when finished
-          buildTxt <- accumB mempty (appendLine <$> gotLine)
-          pure (tab, buildTxt)
-
-    liftMomentIO $ do
-      reactimate (#showAll window <$ toOpen)
-      reactimate (#close window <$ toClose)
-      builds <- execute ((onBuild >>= buildProcs) <$ toBuild)
-      reactimate (onRefresh window <$ toRefresh)
-
-      tab <- switchB (pure Main) $ fst <$> builds
-      buildTxt <- switchB mempty $ snd <$> builds
-
-      syncBehavior tab setTab
-      syncBehavior buildTxt setBuildText
-      pure ()
-
+  pure View{..}
 
 {-------------------------------------------------------------------
                           Communication
@@ -178,53 +162,3 @@ wmCtrlListen = do
       , fromIntegral subTyp == ctrlSys -> do
           pure (Just WMCtlMsg)
     _ -> pure Nothing
-
-{-------------------------------------------------------------------
-                              View
---------------------------------------------------------------------}
-
-data WinCtrl = Open | Close | Build | Refresh
-  deriving (Eq, Ord, Enum, Bounded, Show)
-
-ctrlSignal :: WinCtrl -> T.Text
-ctrlSignal = \case
-  Open -> T.pack "wmctl-open"
-  Close -> T.pack "wmctl-close"
-  Build -> T.pack "wmctl-build"
-  Refresh -> T.pack "wmctl-refresh"
-
-data CtrlWinView = CtrlWinView
-  { ctrlBtn :: !Gtk.Widget
-  , ctrlWin :: !Gtk.Window
-  , setBuildmode :: Sink Bool
-  , addBuildLine :: Sink T.Text
-  }
-
-ctrlViewNew :: T.Text -> (CtrlWinView -> WinCtrl -> IO ()) -> Gtk.Window -> IO CtrlWinView
-ctrlViewNew uiFile onAct parent = Gtk.buildFromFile uiFile $ do
-  Just ctrlBtn <- Gtk.getElement (T.pack "btn-wmctl") Gtk.Widget
-
-  Just window <- Gtk.getElement (T.pack "wmctl") Gtk.Window
-  Just stack <- Gtk.getElement (T.pack "wmctl-stack") Gtk.Stack
-  Just buildScr <- Gtk.getElement (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow
-  Just buildLab <- Gtk.getElement (T.pack "wmctl-build-label") Gtk.Label
-
-  set window [#transientFor := parent]
-  Gtk.windowSetTransparent window
-  on window #deleteEvent $ \_ -> #hideOnDelete window
-
-  let setBuildmode = \case
-        False -> do
-          set buildLab [#label := T.empty]
-          set stack [#visibleChildName := T.pack "main"]
-        True -> set stack [#visibleChildName := T.pack "build"]
-
-      addBuildLine line = do
-        set buildLab [#label :~ (<> line <> T.pack "\n")]
-        adj <- get buildScr #vadjustment
-        set adj [#value :=> get adj #upper]
-
-  let view = CtrlWinView{ctrlWin = window, ..}
-  for_ [minBound .. maxBound] $ \ctrl -> Gtk.addCallback (ctrlSignal ctrl) (onAct view ctrl)
-
-  pure view

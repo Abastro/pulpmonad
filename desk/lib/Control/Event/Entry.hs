@@ -5,6 +5,7 @@ module Control.Event.Entry (
   sourceSimple,
   sourceWithUnreg,
   sourceSink,
+  srcEvent,
   syncBehavior,
 ) where
 
@@ -29,6 +30,9 @@ sourceSimple src = sourceWithUnreg $ \handler -> pure () <$ src handler
 -- | Source paired with sink to call.
 sourceSink :: IO (Source a, Sink a)
 sourceSink = newAddHandler
+
+srcEvent :: AddHandler a -> MomentIO (Event a)
+srcEvent = fromAddHandler
 
 -- | Sync with behavior changes using given sink.
 syncBehavior :: Behavior a -> Sink a -> MomentIO ()
