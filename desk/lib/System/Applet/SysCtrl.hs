@@ -3,7 +3,7 @@
 module System.Applet.SysCtrl (sysCtrlBtn) where
 
 import Control.Concurrent.Task
-import Control.Monad
+import Control.Event.Entry
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
@@ -12,47 +12,73 @@ import GI.Gdk.Unions.Event qualified as Gtk
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Gtk.Commons qualified as Gtk
-import Gtk.Containers qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Gtk.Window qualified as Gtk
 import Status.X11.XHandle
 import System.FilePath
 import System.Pulp.PulpEnv
-import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
+import Reactive.Banana.Frameworks
 
 -- | System control button with shutdown symbol icon.
 -- Shows the system control dialog.
 sysCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
 sysCtrlBtn parent = do
   watch <- runXHand sysCtrlListen
+  callSrc <- liftIO $ taskToSource watch
   uiFile <- pulpDataPath ("ui" </> "sysctl.ui")
-  ctlWin <- liftIO $ ctrlWinNew (T.pack uiFile) parent
+  View{..} <- liftIO $ view (T.pack uiFile) parent
 
-  icon <- View.imageStaticNew Gtk.IconSizeLargeToolbar True $ View.ImgSName (T.pack "system-shutdown-symbolic")
-  wid <- Gtk.buttonNewWith (Just icon) (liftIO . void $ #showAll ctlWin)
-  liftIO $ do
-    killWatch <- Gtk.uiTask watch (\SysCtlMsg -> Gtk.widgetActivate wid)
-    on wid #destroy killWatch
-  pure wid
+  network <- liftIO . compile $ do
+    callEvent <- srcEvent callSrc
+    actEvent <- srcEvent toAct
 
-ctrlWinNew :: T.Text -> Gtk.Window -> IO Gtk.Window
-ctrlWinNew uiFile parent = Gtk.buildFromFile uiFile $ do
+    -- Calling "openWindow" somehow does not grab focus correctly.
+    reactimate (Gtk.uiSingleRun (Gtk.widgetActivate ctrlButton) <$ callEvent)
+    reactimate (actOn <$> actEvent)
+  liftIO $ actuate network
+
+  pure ctrlButton
+  where
+    actOn Logout = safeSpawn "killall" ["xmonad-manage"]
+    actOn Reboot = safeSpawn "systemctl" ["reboot"]
+    actOn Poweroff = safeSpawn "systemctl" ["poweroff"]
+
+{-------------------------------------------------------------------
+                              View
+--------------------------------------------------------------------}
+
+data Action = Logout | Reboot | Poweroff
+
+data View = View
+  { ctrlButton :: !Gtk.Widget
+  , openWindow :: IO ()
+  , toAct :: Source Action
+  }
+
+view :: T.Text -> Gtk.Window -> IO View
+view uiFile parent = Gtk.buildFromFile uiFile $ do
+  Just ctrlButton <- Gtk.getElement (T.pack "btn-sysctl") Gtk.Widget
   Just window <- Gtk.getElement (T.pack "sysctl") Gtk.Window
 
+  -- Construct window at top
   set window [#transientFor := parent]
   #setKeepAbove window True
   Gtk.windowSetTransparent window
   Gtk.windowGrabOnMap window
   on window #deleteEvent $ \_ -> #hideOnDelete window
 
-  Gtk.addCallbackWithEvent (T.pack "sysctl-keypress") $ do onKeyPress window
-  Gtk.addCallback (T.pack "sysctl-close") $ do #close window
-  Gtk.addCallback (T.pack "sysctl-logout") $ do safeSpawn "killall" ["xmonad-manage"]
-  Gtk.addCallback (T.pack "sysctl-reboot") $ do safeSpawn "systemctl" ["reboot"]
-  Gtk.addCallback (T.pack "sysctl-poweroff") $ do safeSpawn "systemctl" ["poweroff"]
+  let openWindow = #showAll window
 
-  pure window
+  (toAct, act) <- liftIO sourceSink
+  Gtk.addCallback (T.pack "sysctl-open") openWindow
+  Gtk.addCallbackWithEvent (T.pack "sysctl-keypress") $ onKeyPress window
+  Gtk.addCallback (T.pack "sysctl-close") $ #close window
+  Gtk.addCallback (T.pack "sysctl-logout") $ act Logout
+  Gtk.addCallback (T.pack "sysctl-reboot") $ act Reboot
+  Gtk.addCallback (T.pack "sysctl-poweroff") $ act Poweroff
+
+  pure View{..}
   where
     onKeyPress window evt = do
       keyEvt <- Gtk.getEventKey evt

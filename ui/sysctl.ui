@@ -26,6 +26,20 @@
     <property name="icon_name">system-reboot-symbolic</property>
     <property name="icon_size">6</property>
   </object>
+  <object class="GtkButton" id="btn-sysctl">
+    <property name="visible">True</property>
+    <property name="can_focus">True</property>
+    <property name="receives_default">True</property>
+    <signal name="clicked" handler="sysctl-open" swapped="no"/>
+    <child>
+      <object class="GtkImage" id="image-sysctl">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="icon_name">system-shutdown-symbolic</property>
+        <property name="icon_size">3</property>
+      </object>
+    </child>
+  </object>
   <object class="GtkWindow" id="sysctl">
     <property name="can_focus">False</property>
     <property name="type">popup</property>

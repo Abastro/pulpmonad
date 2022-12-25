@@ -34,12 +34,12 @@ import XMonad.Util.Run (safeSpawn)
 wmCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
 wmCtrlBtn parent = do
   watch <- runXHand wmCtrlListen
-  watchSrc <- liftIO $ taskToSource watch
+  callSrc <- liftIO $ taskToSource watch
   uiFile <- pulpDataPath ("ui" </> "wmctl.ui")
   View{..} <- liftIO $ view (T.pack uiFile) parent
 
   network <- liftIO . compile $ do
-    callEvent <- srcEvent watchSrc
+    callEvent <- srcEvent callSrc
     buildEvent <- srcEvent toBuild
     refreshEvent <- srcEvent toRefresh
 
@@ -52,9 +52,7 @@ wmCtrlBtn parent = do
     buildTxt <- switchB mempty $ snd <$> builds
     syncBehavior tab $ Gtk.uiSingleRun . setTab
     syncBehavior buildTxt $ Gtk.uiSingleRun . setBuildText
-    pure ()
-
-  liftIO . forkIO $ actuate network
+  liftIO $ actuate network -- Not concurrent, "actuate" call only sets a variable
 
   pure ctrlButton
   where
@@ -136,8 +134,10 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
       setBuildText txt = do
         set buildLab [#label := txt]
         -- Scroll to the end.
-        -- Scrolling is quite a bit off, likely due to text size not being directly applied.
-        -- Maybe switching to TextView would fix this
+        -- Scrolling is off, likely due to text size not being directly applied.
+        -- Maybe switching to TextView would fix this.
+        -- On the other hand, current form is not the final go-to visual.
+        -- So entire scroll could be removed.
         adj <- get buildScr #vadjustment
         upper <- get adj #upper
         pageSize <- get adj #pageSize
