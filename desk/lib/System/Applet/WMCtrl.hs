@@ -120,7 +120,6 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
   Just stack <- Gtk.getElement (T.pack "wmctl-stack") Gtk.Stack
   Just buildLab <- Gtk.getElement (T.pack "wmctl-build-label") Gtk.Label
   Just buildScr <- Gtk.getElement (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow
-  buildAdj <- get buildScr #vadjustment
 
   set window [#transientFor := parent]
   Gtk.windowSetTransparent window
@@ -136,7 +135,13 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
       setBuildText txt = do
         set buildLab [#label := txt]
-        set buildAdj [#value :=> get buildAdj #upper]
+        -- Scroll to the end.
+        -- Scrolling is quite a bit off, likely due to text size not being directly applied.
+        -- Maybe switching to TextView would fix this
+        adj <- get buildScr #vadjustment
+        upper <- get adj #upper
+        pageSize <- get adj #pageSize
+        set adj [#value := upper - pageSize]
 
   (toBuild, build) <- liftIO sourceSink
   (toRefresh, refresh) <- liftIO sourceSink

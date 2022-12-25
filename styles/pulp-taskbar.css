@@ -240,7 +240,6 @@ imagebar#cpu {
 }
 
 #pulp-wmctl scrolledwindow label {
-	border-radius: 5px;
 	padding: 10px;
 	color: gray;
 	background-color: rgb(66, 36, 84)
