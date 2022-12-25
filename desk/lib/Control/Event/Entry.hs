@@ -7,9 +7,13 @@ module Control.Event.Entry (
   sourceSink,
   srcEvent,
   syncBehavior,
+  taskToSource,
 ) where
 
+import Control.Concurrent
+import Control.Concurrent.Task
 import Control.Event.Handler
+import Control.Monad
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
 
@@ -31,7 +35,7 @@ sourceSimple src = sourceWithUnreg $ \handler -> pure () <$ src handler
 sourceSink :: IO (Source a, Sink a)
 sourceSink = newAddHandler
 
-srcEvent :: AddHandler a -> MomentIO (Event a)
+srcEvent :: Source a -> MomentIO (Event a)
 srcEvent = fromAddHandler
 
 -- | Sync with behavior changes using given sink.
@@ -39,3 +43,16 @@ syncBehavior :: Behavior a -> Sink a -> MomentIO ()
 syncBehavior behav sink = do
   chEvent <- changes behav
   reactimate' (fmap sink <$> chEvent)
+
+-- | Temporary solution before phasing out Task
+taskToSource :: Task a -> IO (Source a)
+taskToSource task = do
+  (source, sink) <- sourceSink
+  -- Forking for each task to create source is.. not ideal
+  forkIO . forever $ do
+    val <- taskNextWait task
+    sink val
+  -- Modifies Source to include the task terminator
+  pure . AddHandler $ \handler -> do
+    kill <- register source handler
+    pure (kill <* taskStop task)

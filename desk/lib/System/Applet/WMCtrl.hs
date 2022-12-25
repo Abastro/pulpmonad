@@ -34,28 +34,28 @@ import XMonad.Util.Run (safeSpawn)
 wmCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
 wmCtrlBtn parent = do
   watch <- runXHand wmCtrlListen
+  watchSrc <- liftIO $ taskToSource watch
   uiFile <- pulpDataPath ("ui" </> "wmctl.ui")
   View{..} <- liftIO $ view (T.pack uiFile) parent
 
   network <- liftIO . compile $ do
+    callEvent <- srcEvent watchSrc
     buildEvent <- srcEvent toBuild
     refreshEvent <- srcEvent toRefresh
 
+    -- TODO Type-annotate the need of synchronization for GTK actions
+    reactimate (Gtk.uiSingleRun openWindow <$ callEvent)
     reactimate (onRefresh <$ refreshEvent)
+
     builds <- execute (onBuild <$ buildEvent)
     tab <- switchB (pure Main) $ fst <$> builds
     buildTxt <- switchB mempty $ snd <$> builds
-    -- TODO Type-annotate the need of synchronization for GTK actions
     syncBehavior tab $ Gtk.uiSingleRun . setTab
     syncBehavior buildTxt $ Gtk.uiSingleRun . setBuildText
     pure ()
 
   liftIO . forkIO $ actuate network
 
-  liftIO $ do
-    -- TODO Move watch to reactive
-    killWatch <- Gtk.uiTask watch (\WMCtlMsg -> Gtk.widgetActivate ctrlButton)
-    on ctrlButton #destroy killWatch
   pure ctrlButton
   where
     onBuild = do
@@ -105,7 +105,7 @@ data WCTab = Main | Building
 
 data View = View
   { ctrlButton :: !Gtk.Widget
-  , window :: !Gtk.Window
+  , openWindow :: IO ()
   , setTab :: Sink WCTab
   , setBuildText :: Sink T.Text
   , toBuild :: Source ()
@@ -126,7 +126,9 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
   Gtk.windowSetTransparent window
   on window #deleteEvent $ \_ -> #hideOnDelete window
 
-  let setTab = \case
+  let openWindow = #showAll window
+
+      setTab = \case
         Main -> do
           set buildLab [#label := T.empty]
           set stack [#visibleChildName := T.pack "main"]
@@ -138,7 +140,7 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
   (toBuild, build) <- liftIO sourceSink
   (toRefresh, refresh) <- liftIO sourceSink
-  Gtk.addCallback (T.pack "wmctl-open") $ #showAll window
+  Gtk.addCallback (T.pack "wmctl-open") openWindow
   Gtk.addCallback (T.pack "wmctl-close") $ #close window
   Gtk.addCallback (T.pack "wmctl-build") $ build ()
   Gtk.addCallback (T.pack "wmctl-refresh") $ refresh () *> #close window
