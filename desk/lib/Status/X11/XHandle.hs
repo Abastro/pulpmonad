@@ -3,8 +3,6 @@ module Status.X11.XHandle (
   ActX11 (..),
   liftDWIO,
   XIO,
-  xGetExt,
-  xWithExt,
   xOnWindow,
   startXIO,
   XHandling,
@@ -55,6 +53,11 @@ instance (ActX11 m) => ActX11 (MaybeT m) where
   xDisplay = MaybeT $ Just <$> xDisplay
   xWindow = MaybeT $ Just <$> xWindow
   xAtom name = MaybeT $ Just <$> xAtom name
+
+instance (ActX11 m) => ActX11 (ReaderT r m) where
+  xDisplay = ReaderT $ const xDisplay
+  xWindow = ReaderT $ const xWindow
+  xAtom name = ReaderT $ const (xAtom name)
 
 instance (ActX11 m, Applicative f) => ActX11 (Compose m f) where
   xDisplay = Compose $ pure <$> xDisplay
@@ -110,54 +113,43 @@ deleteListen key XListeners{..}
                             XIO Monad
 --------------------------------------------------------------------}
 
-data XHandle r = XHandle
+data XHandle = XHandle
   { xhDisplay :: !Display
   , xhWindow :: !Window
   , xhListeners :: !(IORef XListeners)
   , xhActQueue :: TQueue (IO ())
-  , xhExtends :: !r
   }
 
-newtype XIO r a = XIO (ReaderT (XHandle r) IO a)
+newtype XIO a = XIO (ReaderT XHandle IO a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadUnliftIO)
 
-instance ActX11 (XIO r) where
+instance ActX11 XIO where
   xDisplay = XIO . asks $ \XHandle{xhDisplay} -> xhDisplay
   xWindow = XIO . asks $ \XHandle{xhWindow} -> xhWindow
   xAtom name = liftDWIO $ \d _ -> liftIO $ internAtom d name False
 
 -- Internal
-xListeners :: XIO r (IORef XListeners)
+xListeners :: XIO (IORef XListeners)
 xListeners = XIO . asks $ \XHandle{xhListeners} -> xhListeners
 
 -- Internal
-xActQueue :: XIO r (TQueue (IO ()))
+xActQueue :: XIO (TQueue (IO ()))
 xActQueue = XIO . asks $ \XHandle{xhActQueue} -> xhActQueue
 
--- | Get external.
-xGetExt :: XIO r r
-xGetExt = XIO . asks $ \XHandle{xhExtends} -> xhExtends
-
 -- | Run on certain window. It is advised not to use this function.
-xOnWindow :: Window -> XIO r a -> XIO r a
+xOnWindow :: Window -> XIO a -> XIO a
 xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
   where
     withNewWin XHandle{..} = XHandle{xhWindow = newWin, ..}
 
--- | Run with extension function.
-xWithExt :: (r' -> r) -> XIO r a -> XIO r' a
-xWithExt extF (XIO act) = XIO (withReaderT withF act)
-  where
-    withF XHandle{..} = XHandle{xhExtends = extF xhExtends, ..}
-
 -- TODO Prevent waits while running X handling?
-newtype XHandling r = XHandling (forall a. XIO r a -> IO a)
-runXHandling :: XHandling r -> XIO r a -> IO a
+newtype XHandling r = XHandling (forall a. XIO a -> IO a)
+runXHandling :: XHandling r -> XIO a -> IO a
 runXHandling (XHandling xHandle) = xHandle
 
 class MonadIO m => MonadXHand m where
   askXHand :: m (XHandling ())
-  runXHand :: XIO () a -> m a
+  runXHand :: XIO a -> m a
   runXHand act = askXHand >>= \handling -> liftIO (runXHandling handling act)
 
 -- | Starts X handler and return X handling to register listeners/senders.
@@ -170,7 +162,7 @@ startXIO = do
       xhWindow <- rootWindow xhDisplay xhScreen
       xhActQueue <- newTQueueIO
       xhListeners <- newIORef (XListeners M.empty M.empty)
-      let runX (XIO act) = runReaderT act XHandle{xhExtends = (), ..}
+      let runX (XIO act) = runReaderT act XHandle{..}
       runX $ do
         xHandling >>= liftIO . putMVar theHandling
         startingX
@@ -200,7 +192,7 @@ startXIO = do
           unliftX $ listenLeft evPtr
 
 -- | Queues a job to execute on next cycle.
-xQueueJob :: IO () -> XIO r ()
+xQueueJob :: IO () -> XIO ()
 xQueueJob job = do
   actQueue <- xActQueue
   liftIO $ atomically (writeTQueue actQueue job)
@@ -208,7 +200,7 @@ xQueueJob job = do
 -- MAYBE Use streaming library here
 
 -- | X handling to queue & listen to the jobs. Waits for the result.
-xHandling :: XIO r (XHandling r)
+xHandling :: XIO (XHandling r)
 xHandling = withRunInIO $ \unliftX -> pure $
   XHandling $ \act -> do
     actQueue <- unliftX xActQueue
@@ -220,7 +212,7 @@ xHandling = withRunInIO $ \unliftX -> pure $
 -- The query will be performed in the X thread.
 -- WARNING: the returned action can block while querying the result.
 -- The `query` should not throw.
-xQueryOnce :: (a -> XIO r b) -> XIO r (a -> IO b)
+xQueryOnce :: (a -> XIO b) -> XIO (a -> IO b)
 xQueryOnce query = do
   hand <- xHandling
   pure $ \arg -> runXHandling hand (query arg)
@@ -232,8 +224,8 @@ xListenTo ::
   EventMask ->
   Window ->
   Maybe a ->
-  (Event -> XIO r (Maybe a)) ->
-  XIO r (Task a)
+  (Event -> XIO (Maybe a)) ->
+  XIO (Task a)
 xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
   listeners <- unliftX xListeners
   key <- newUnique
@@ -264,8 +256,8 @@ xListenTo mask window initial handler = withRunInIO $ \unliftX -> do
 xSendTo ::
   EventMask ->
   Window ->
-  (XEventPtr -> a -> XIO r ()) ->
-  XIO r (a -> IO ())
+  (XEventPtr -> a -> XIO ()) ->
+  XIO (a -> IO ())
 -- MAYBE Further flesh this out when I got time
 xSendTo mask window factory = withRunInIO $ \unliftX -> do
   pure $ \arg -> unliftX . xQueueJob $ do

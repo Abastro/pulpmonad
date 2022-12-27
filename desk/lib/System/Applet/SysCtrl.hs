@@ -92,7 +92,7 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
 data SysCtrlCall = SysCtrlCall
 
-sysCtrlListen :: XIO () (Task SysCtrlCall)
+sysCtrlListen :: XIO (Task SysCtrlCall)
 sysCtrlListen = do
   rootWin <- xWindow
   ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"

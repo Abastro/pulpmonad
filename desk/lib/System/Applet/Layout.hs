@@ -89,7 +89,7 @@ data LayoutComm = LayoutComm
   , reqToLayout :: Sink LayoutCmd
   }
 
-layoutInitiate :: XIO () LayoutComm
+layoutInitiate :: XIO LayoutComm
 layoutInitiate = do
   rootWin <- xWindow
   curLayout <- errorAct $ watchXQuery rootWin getDesktopLayout pure

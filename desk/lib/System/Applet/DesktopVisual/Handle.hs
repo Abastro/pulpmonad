@@ -315,7 +315,7 @@ data PerWinRcvs = PerWinRcvs
 --
 -- The widget holds one entire X event loop,
 -- so related resources will be disposed of on kill.
-deskVisInitiate :: XIO () DeskVisRcvs
+deskVisInitiate :: XIO DeskVisRcvs
 deskVisInitiate = do
   rootWin <- xWindow
 

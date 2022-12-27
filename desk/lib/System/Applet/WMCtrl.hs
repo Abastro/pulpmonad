@@ -158,7 +158,7 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
 data WMCtrlCall = WMCtrlCall
 
-wmCtrlListen :: XIO () (Task WMCtrlCall)
+wmCtrlListen :: XIO (Task WMCtrlCall)
 wmCtrlListen = do
   rootWin <- xWindow
   ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"

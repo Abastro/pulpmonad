@@ -33,6 +33,7 @@ module Status.X11.WMStatus (
 import Control.Applicative
 import Control.Concurrent.Task
 import Control.Monad.Except
+import Control.Monad.Reader
 import Data.Bitraversable
 import Data.ByteString qualified as BS
 import Data.ByteString.Builder qualified as BS
@@ -98,8 +99,10 @@ formatXQError window errors = printf "Query error[%d]: %s" window (show errors)
 
 -- | X Property query applicative, which accumulates all the errors.
 -- Make sure that no exception leaks out.
-newtype XPQuery a = XPQuery (XIO (IORef [Atom]) (Validation [XQueryError] a))
-  deriving (Functor, Applicative, ActX11) via (Compose (XIO (IORef [Atom])) (Validation [XQueryError]))
+newtype XPQuery a = XPQuery (ReaderT (IORef [Atom]) XIO (Validation [XQueryError] a))
+  deriving
+    (Functor, Applicative, ActX11)
+    via (ReaderT (IORef [Atom]) (Compose XIO (Validation [XQueryError])))
 
 instance Alternative XPQuery where
   empty = XPQuery (pure empty)
@@ -108,7 +111,7 @@ instance Alternative XPQuery where
 -- TODO `rawGetWindowProperty` does not stream. Check: can we afford allocating whole list for this?
 queryProp :: forall a n. (XPropType n a) => String -> XPQuery a
 queryProp name = XPQuery $ do
-  tracked <- xGetExt
+  tracked <- ask
   prop <- xAtom name
   liftIO $ modifyIORef' tracked (prop :)
   let bits = bitSize $ Proxy @n
@@ -121,24 +124,24 @@ queryProp name = XPQuery $ do
 
 -- | A bit of a hack, interns some atoms for the query action.
 {-# WARNING prepareForQuery "Hack for interning more atoms. Could be removed" #-}
-prepareForQuery :: XIO () a -> (a -> XPQuery b) -> XPQuery b
+prepareForQuery :: XIO a -> (a -> XPQuery b) -> XPQuery b
 prepareForQuery prepare getQuery = XPQuery $ do
-  prepared <- xWithExt (const ()) prepare
+  prepared <- lift prepare
   let XPQuery query = getQuery prepared in query
 
 -- INTERNAL for query run
-runXInt :: XPQuery a -> XIO r (Either [XQueryError] a, S.Set Atom)
+runXInt :: XPQuery a -> XIO (Either [XQueryError] a, S.Set Atom)
 runXInt (XPQuery query) = do
   watched <- liftIO (newIORef [])
-  val <- xWithExt (const watched) query
+  val <- runReaderT query watched
   watchSet <- S.fromList <$> liftIO (readIORef watched)
   pure (validToEither val, watchSet)
 
 -- | Simply runs X query once.
-runXQuery :: XPQuery a -> XIO r (Either [XQueryError] a)
+runXQuery :: XPQuery a -> XIO (Either [XQueryError] a)
 runXQuery (XPQuery query) = do
   placeholder <- liftIO (newIORef [])
-  validToEither <$> xWithExt (const placeholder) query
+  validToEither <$> runReaderT query placeholder
 
 -- | Watch X query at the given window.
 -- Note, allows some modifier process in between.
@@ -149,8 +152,8 @@ runXQuery (XPQuery query) = do
 watchXQuery ::
   Window ->
   XPQuery a ->
-  (a -> ExceptT [XQueryError] (XIO ()) b) ->
-  XIO () (Either [XQueryError] (Task b))
+  (a -> ExceptT [XQueryError] XIO b) ->
+  XIO (Either [XQueryError] (Task b))
 watchXQuery window query modifier = do
   (inited, watchSet) <- xOnWindow window $ runXInt query
   applyModify inited >>= traverse \initial -> do
@@ -173,8 +176,8 @@ data DesktopState
 
 -- | Desktop status for each desktop.
 data DesktopStat = DesktopStat
-  { -- | Name of the desktop. May not exist.
-    desktopName :: Maybe T.Text
+  { desktopName :: Maybe T.Text
+  -- ^ Name of the desktop. May not exist.
   , desktopState :: !DesktopState
   }
 
@@ -200,7 +203,7 @@ getDesktopStat =
           _ -> DeskHidden
 
 -- | Request current desktop to change. Must be called from root window.
-reqCurrentDesktop :: XIO () (Int -> IO ())
+reqCurrentDesktop :: XIO (Int -> IO ())
 reqCurrentDesktop = do
   root <- xWindow
   typCurDesk <- xAtom "_NET_CURRENT_DESKTOP"
@@ -217,7 +220,7 @@ layoutDat = \case
   ResetLayout -> -1
 
 -- | Request setting desktop layout. Send 1 for next layout, -1 for default layout.
-reqDesktopLayout :: XIO () (LayoutCmd -> IO ())
+reqDesktopLayout :: XIO (LayoutCmd -> IO ())
 reqDesktopLayout = do
   root <- xWindow
   typLayout <- xAtom "_XMONAD_CURRENT_LAYOUT"
@@ -235,7 +238,7 @@ getActiveWindow = find (> 0) <$> queryProp @[Window] "_NET_ACTIVE_WINDOW"
 
 -- | Request active window. flag should be True if you are a pager.
 -- Must be called from root window.
-reqActiveWindow :: Bool -> XIO () (Window -> IO ())
+reqActiveWindow :: Bool -> XIO (Window -> IO ())
 reqActiveWindow flag = do
   root <- xWindow
   typActive <- xAtom "_NET_ACTIVE_WINDOW"
@@ -283,12 +286,12 @@ instance XPropType CLong [Gtk.RawIcon] where
     [] -> pure []
     width : height : xs
       | iconWidth <- fromIntegral width
-        , iconHeight <- fromIntegral height
-        , (dat, rem) <- splitAt (fromIntegral $ iconWidth * iconHeight) xs -> do
-        let iconColors = LBS.toStrict . BS.toLazyByteString $ foldMap (BS.word32BE . fromIntegral) dat
-        if BS.length iconColors /= fromIntegral (4 * iconWidth * iconHeight)
-          then throwError $ T.pack "Not enough pixels read for given width, height"
-          else (Gtk.RawIcon{..} :) <$> parseProp rem
+      , iconHeight <- fromIntegral height
+      , (dat, rem) <- splitAt (fromIntegral $ iconWidth * iconHeight) xs -> do
+          let iconColors = LBS.toStrict . BS.toLazyByteString $ foldMap (BS.word32BE . fromIntegral) dat
+          if BS.length iconColors /= fromIntegral (4 * iconWidth * iconHeight)
+            then throwError $ T.pack "Not enough pixels read for given width, height"
+            else (Gtk.RawIcon{..} :) <$> parseProp rem
     _ -> throwError $ T.pack "Cannot read width, height"
 
 -- | Get the window icon.
