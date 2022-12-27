@@ -39,9 +39,9 @@ wmCtrlBtn parent = do
   View{..} <- liftIO $ view (T.pack uiFile) parent
 
   network <- liftIO . compile $ do
-    callEvent <- srcEvent callSrc
-    buildEvent <- srcEvent toBuild
-    refreshEvent <- srcEvent toRefresh
+    callEvent <- sourceEvent callSrc
+    buildEvent <- sourceEvent toBuild
+    refreshEvent <- sourceEvent toRefresh
 
     -- TODO Type-annotate the need of synchronization for GTK actions
     reactimate (Gtk.uiSingleRun openWindow <$ callEvent)
@@ -156,9 +156,9 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
                           Communication
 --------------------------------------------------------------------}
 
-data WMCtlMsg = WMCtlMsg
+data WMCtrlCall = WMCtrlCall
 
-wmCtrlListen :: XIO () (Task WMCtlMsg)
+wmCtrlListen :: XIO () (Task WMCtrlCall)
 wmCtrlListen = do
   rootWin <- xWindow
   ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"
@@ -167,5 +167,5 @@ wmCtrlListen = do
     ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
       | msgTyp == ctrlTyp
       , fromIntegral subTyp == ctrlSys -> do
-          pure (Just WMCtlMsg)
+          pure (Just WMCtrlCall)
     _ -> pure Nothing

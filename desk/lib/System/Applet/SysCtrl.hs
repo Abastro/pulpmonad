@@ -30,10 +30,10 @@ sysCtrlBtn parent = do
   View{..} <- liftIO $ view (T.pack uiFile) parent
 
   network <- liftIO . compile $ do
-    callEvent <- srcEvent callSrc
-    actEvent <- srcEvent toAct
+    callEvent <- sourceEvent callSrc
+    actEvent <- sourceEvent toAct
 
-    -- Calling "openWindow" somehow does not grab focus correctly.
+    -- Problem: Calling "openWindow" somehow does not grab focus correctly.
     reactimate (Gtk.uiSingleRun (Gtk.widgetActivate ctrlButton) <$ callEvent)
     reactimate (actOn <$> actEvent)
   liftIO $ actuate network
@@ -90,9 +90,9 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
                           Communication
 --------------------------------------------------------------------}
 
-data SysCtlMsg = SysCtlMsg
+data SysCtrlCall = SysCtrlCall
 
-sysCtrlListen :: XIO () (Task SysCtlMsg)
+sysCtrlListen :: XIO () (Task SysCtrlCall)
 sysCtrlListen = do
   rootWin <- xWindow
   ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"
@@ -101,5 +101,5 @@ sysCtrlListen = do
     ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
       | msgTyp == ctrlTyp
       , fromIntegral subTyp == ctrlSys -> do
-          pure (Just SysCtlMsg)
+          pure (Just SysCtrlCall)
     _ -> pure Nothing
