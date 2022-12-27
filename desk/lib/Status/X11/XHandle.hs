@@ -165,7 +165,6 @@ class MonadIO m => MonadXHand m where
 startXIO :: IO (XHandling ())
 startXIO = do
   theHandling <- newEmptyMVar
-  -- FIXME This call is likely causing issues on WMCtrl's build screen
   _ <- forkOS . bracket (openDisplay "") closeDisplay $ \xhDisplay -> do
       let xhScreen = defaultScreen xhDisplay
       xhWindow <- rootWindow xhDisplay xhScreen
