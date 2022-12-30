@@ -37,6 +37,9 @@ taskNext Task{emitQueue} = atomically $ tryReadTQueue emitQueue
 taskNextWait :: Task a -> IO a
 taskNextWait Task{emitQueue} = atomically $ readTQueue emitQueue
 
+-- Checking first time and yielding None is not a solid logic.
+-- Ideally it should be safe to call the action.
+
 -- | Starts regular task with delay (ms).
 -- Runs the task once to test its validity.
 -- Note that this one only catches IO error. Any other error would be re-thrown.

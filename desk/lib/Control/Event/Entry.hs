@@ -8,6 +8,7 @@ module Control.Event.Entry (
   sourceEvent,
   syncBehavior,
   taskToSource,
+  periodicSource,
 ) where
 
 import Control.Concurrent
@@ -44,15 +45,20 @@ syncBehavior behav sink = do
   chEvent <- changes behav
   reactimate' (fmap sink <$> chEvent)
 
--- | Temporary solution before phasing out Task
-taskToSource :: Task a -> IO (Source a)
-taskToSource task = do
+-- | Looping source from performing action with cleanup.
+loopSource :: IO a -> IO () -> IO (Source a)
+loopSource act cleanup = do
   (source, sink) <- sourceSink
-  -- Forking for each task to create source is.. not ideal
-  forkIO . forever $ do
-    val <- taskNextWait task
-    sink val
-  -- Modifies Source to include the task terminator
+  tid <- forkIO . forever $ act >>= sink
+  -- Modifies source to include the cleanup.
   pure . AddHandler $ \handler -> do
     kill <- register source handler
-    pure (kill <* taskStop task)
+    pure (kill <* cleanup <* killThread tid)
+
+-- | Temporary solution before phasing out Task.
+taskToSource :: Task a -> IO (Source a)
+taskToSource task = loopSource (taskNextWait task) (taskStop task)
+
+-- | Simple periodic source with given period (in millisecond).
+periodicSource :: Int -> IO (Source ())
+periodicSource period = loopSource (threadDelay $ period * 1000) (pure ())

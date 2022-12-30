@@ -3,6 +3,7 @@
 module System.Applet.Clocks where
 
 import Control.Concurrent.Task
+import Control.Event.Entry
 import Control.Monad.IO.Class
 import Data.Foldable
 import Data.GI.Base.Attributes
@@ -34,3 +35,17 @@ textClock format = do
       Gtk.toWidget label
 
     setLabel wid lbl = set wid [#label := T.pack $ formatTime defaultTimeLocale format lbl]
+
+-- Simple view
+data View = View
+  { widget :: Gtk.Widget
+  , setClock :: Sink T.Text
+  }
+
+view :: T.Text -> IO View
+view uiFile = Gtk.buildFromFile uiFile $ do
+  Just clockLabel <- Gtk.getElement (T.pack "clock-label") Gtk.Label
+
+  let setClock txt = set clockLabel [#label := txt]
+  widget <- Gtk.toWidget clockLabel
+  pure View{..}
