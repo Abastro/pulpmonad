@@ -10,9 +10,6 @@ import Gtk.Task qualified as Gtk
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
 
--- | Wrapped UI Object which should only be updated in gtk thread
-newtype UIObj a = UIObj a
-
 -- | Intended to be used last.
 activateUI :: a -> BuilderM MomentIO () -> BuilderM IO a
 activateUI outp desc = do

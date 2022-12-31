@@ -1,51 +1,47 @@
 {-# LANGUAGE OverloadedLabels #-}
 
-module System.Applet.Clocks where
+module System.Applet.Clocks (textClock) where
 
-import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Monad.IO.Class
-import Data.Foldable
 import Data.GI.Base.Attributes
-import Data.GI.Base.Constructible
 import Data.Text qualified as T
 import Data.Time
-import GI.Gtk.Objects.EventBox qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Task qualified as Gtk
+import Reactive.Banana.Frameworks
+import System.FilePath
+import System.Pulp.PulpEnv
 
 -- | Text clock with given format. Queries time every second.
 --
 -- For format reference, look at 'Data.Time.formatTime' for details.
-textClock :: MonadIO m => String -> m Gtk.Widget
+textClock :: (MonadIO m, MonadPulpPath m) => String -> m Gtk.Widget
 textClock format = do
-  lbl <- startRegular 1000 getZonedTime >>= traverse clockTxt
-  -- Wraps in event box so that it could be empty :P
-  ev <- new Gtk.EventBox []
-  traverse_ (#add ev) lbl
-  #setName ev (T.pack "clock-text")
-  Gtk.toWidget ev <* #showAll ev
-  where
-    clockTxt task = do
-      label <- new Gtk.Label [#justify := Gtk.JustificationCenter]
-      liftIO $ do
-        kill <- Gtk.uiTask task (setLabel label)
-        Gtk.onWidgetDestroy label kill
-      Gtk.toWidget label
+  uiFile <- pulpDataPath ("ui" </> "clock.ui")
+  View{..} <- liftIO $ view (T.pack uiFile)
 
-    setLabel wid lbl = set wid [#label := T.pack $ formatTime defaultTimeLocale format lbl]
+  network <- liftIO . compile $ do
+    ticker <- liftIO (periodicSource 1000) >>= sourceEvent
+    timeEvent <- mapEventIO (\() -> getZonedTime) ticker
+    -- Not using syncBehavior - simpler this way
+    reactimate (Gtk.uiSingleRun . setClock . formatted <$> timeEvent)
+  liftIO $ actuate network
+  pure clockWidget
+  where
+    formatted zoned = T.pack $ formatTime defaultTimeLocale format zoned
 
 -- Simple view
 data View = View
-  { widget :: Gtk.Widget
+  { clockWidget :: Gtk.Widget
   , setClock :: Sink T.Text
   }
 
 view :: T.Text -> IO View
 view uiFile = Gtk.buildFromFile uiFile $ do
   Just clockLabel <- Gtk.getElement (T.pack "clock-label") Gtk.Label
+  Just clockWidget <- Gtk.getElement (T.pack "clock") Gtk.Widget
 
   let setClock txt = set clockLabel [#label := txt]
-  widget <- Gtk.toWidget clockLabel
   pure View{..}
