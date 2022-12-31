@@ -17,6 +17,8 @@ import System.Pulp.PulpEnv
 -- | Text clock with given format. Queries time every second.
 --
 -- For format reference, look at 'Data.Time.formatTime' for details.
+--
+-- Currently button functionality is not implemented
 textClock :: (MonadIO m, MonadPulpPath m) => String -> m Gtk.Widget
 textClock format = do
   uiFile <- pulpDataPath ("ui" </> "clock.ui")
