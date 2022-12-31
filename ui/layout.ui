@@ -16,7 +16,7 @@
         </child>
         <child>
           <object class="GtkLabel" id="layout-current">
-            <property name="label" translatable="yes">layout</property>
+            <property name="label" translatable="yes"></property>
           </object>
           <packing>
             <property name="position">1</property>

@@ -18,18 +18,21 @@ import System.Pulp.PulpEnv
 --
 -- For format reference, look at 'Data.Time.formatTime' for details.
 --
--- Currently button functionality is not implemented
+-- Currently button functionality is not implemented.
 textClock :: (MonadIO m, MonadPulpPath m) => String -> m Gtk.Widget
 textClock format = do
   uiFile <- pulpDataPath ("ui" </> "clock.ui")
   View{..} <- liftIO $ view (T.pack uiFile)
 
+  -- To update right away
+  (src, sink) <- liftIO sourceSink
   network <- liftIO . compile $ do
+    initial <- sourceEvent src
     ticker <- liftIO (periodicSource 1000) >>= sourceEvent
-    timeEvent <- mapEventIO (\() -> getZonedTime) ticker
+    timeEvent <- mapEventIO (\() -> getZonedTime) (initial <> ticker)
     -- Not using syncBehavior - simpler this way
     reactimate (Gtk.uiSingleRun . setClock . formatted <$> timeEvent)
-  liftIO $ actuate network
+  liftIO $ actuate network <* sink ()
   pure clockWidget
   where
     formatted zoned = T.pack $ formatTime defaultTimeLocale format zoned
