@@ -9,5 +9,6 @@
     <property name="image">image-volume</property>
     <signal name="clicked" handler="volume-open" swapped="no"/>
     <signal name="scroll-event" handler="volume-move" swapped="no"/>
+    <signal name="button-release-event" handler="volume-switch" swapped="no"/>
   </object>
 </interface>

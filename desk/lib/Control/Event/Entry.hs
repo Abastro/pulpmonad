@@ -59,6 +59,9 @@ loopSource act cleanup = do
 taskToSource :: Task a -> IO (Source a)
 taskToSource task = loopSource (taskNextWait task) (taskStop task)
 
+-- Problem: The looping source have to use time for calling callbacks.
+-- This might lead to delay issues.
+
 -- | Simple periodic source with given period (in millisecond).
 periodicSource :: Int -> IO (Source ())
 periodicSource period = loopSource (threadDelay $ period * 1000) (pure ())

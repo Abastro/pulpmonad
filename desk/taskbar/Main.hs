@@ -101,7 +101,7 @@ app isTest = do
           ]
       traverse_ (addToEnd box)
         =<< sequenceA
-          [ App.volumeDisplay "default" "Master" Gtk.IconSizeLargeToolbar
+          [ App.volumeDisplay "default" "Master"
           , Gtk.toWidget =<< Gtk.separatorNew Gtk.OrientationHorizontal
           , App.mainboardDisplay Gtk.IconSizeLargeToolbar 42
           , App.batDisplay Gtk.IconSizeLargeToolbar
