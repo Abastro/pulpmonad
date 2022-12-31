@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedLabels #-}
 
-module System.Applet.Volume where
+module System.Applet.Volume (volumeDisplay) where
 
 import Control.Concurrent.Task
 import Control.Monad.IO.Class
@@ -65,3 +65,15 @@ volumeDisplay mixerName controlName iconSize = do
         Gtk.ScrollDirectionUp -> True <$ chVolume (1 / 100)
         Gtk.ScrollDirectionDown -> True <$ chVolume (-1 / 100)
         _ -> pure False
+
+{-------------------------------------------------------------------
+                              View
+--------------------------------------------------------------------}
+
+{-
+data View = View
+  { volWidget :: Gtk.Widget
+  , clicks :: Source ()
+  , scrolls :: Source Gdk.EventScroll
+  }
+  -}

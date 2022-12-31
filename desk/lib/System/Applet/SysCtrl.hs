@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE GADTs #-}
 
 module System.Applet.SysCtrl (sysCtrlBtn) where
 
@@ -8,17 +9,17 @@ import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
 import Data.Text qualified as T
-import GI.Gdk.Unions.Event qualified as Gtk
+import GI.Gdk.Unions.Event qualified as Gdk
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
 import Gtk.Commons qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Gtk.Window qualified as Gtk
+import Reactive.Banana.Frameworks
 import Status.X11.XHandle
 import System.FilePath
 import System.Pulp.PulpEnv
 import XMonad.Util.Run (safeSpawn)
-import Reactive.Banana.Frameworks
 
 -- | System control button with shutdown symbol icon.
 -- Shows the system control dialog.
@@ -72,7 +73,7 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
   (toAct, act) <- liftIO sourceSink
   Gtk.addCallback (T.pack "sysctl-open") openWindow
-  Gtk.addCallbackWithEvent (T.pack "sysctl-keypress") $ onKeyPress window
+  Gtk.addCallbackWithEvent (T.pack "sysctl-keypress") Gdk.getEventKey $ onKeyPress window
   Gtk.addCallback (T.pack "sysctl-close") $ #close window
   Gtk.addCallback (T.pack "sysctl-logout") $ act Logout
   Gtk.addCallback (T.pack "sysctl-reboot") $ act Reboot
@@ -80,9 +81,9 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
   pure View{..}
   where
-    onKeyPress window evt = do
-      keyEvt <- Gtk.getEventKey evt
-      get keyEvt #keyval >>= \case
+    -- Apparently this requires GADTs extension
+    onKeyPress window event =
+      get event #keyval >>= \case
         Gtk.KEY_Escape -> #close window
         _ -> pure ()
 

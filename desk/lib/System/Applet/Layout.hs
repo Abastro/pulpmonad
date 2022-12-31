@@ -69,13 +69,12 @@ view uiFile = Gtk.buildFromFile uiFile $ do
   let setLabel lbl = set layoutLbl [#label := lbl]
 
   (clicks, callClick) <- liftIO sourceSink
-  Gtk.addCallbackWithEvent (T.pack "layout-action") (onAct callClick)
+  Gtk.addCallbackWithEvent (T.pack "layout-action") Gdk.getEventButton (onAct callClick)
 
   pure View{..}
   where
-    onAct call event = do
-      evBtn <- Gdk.getEventButton event
-      get evBtn #button >>= \case
+    onAct call event =
+      get event #button >>= \case
         1 -> call LeftClick
         3 -> call RightClick
         _ -> pure ()

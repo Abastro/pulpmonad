@@ -3,8 +3,6 @@ module Gtk.Reactive where
 import Control.Concurrent
 import Control.Event.Entry
 import Control.Monad.Reader
-import Data.Text qualified as T
-import GI.Gdk.Unions.Event qualified as Gdk
 import Gtk.Commons
 import Gtk.Task qualified as Gtk
 import Reactive.Banana.Combinators
@@ -21,10 +19,12 @@ activateUI outp desc = do
 liftMomentIO :: MomentIO a -> BuilderM MomentIO a
 liftMomentIO = lift
 
+{-
 gtkEvent :: T.Text -> BuilderM MomentIO (Event Gdk.Event)
 gtkEvent name = ReaderT $ \builder -> do
   let source handler = runReaderT (addCallbackWithEvent name handler) builder
   fromAddHandler $ sourceSimple source
+-}
 
 gtkReact :: Event (BuilderM IO ()) -> BuilderM MomentIO ()
 gtkReact evt = ReaderT $ \builder -> do
