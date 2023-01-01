@@ -7,12 +7,13 @@
 -- Exists since Gtk does not allow scaling by proportion,
 -- which is required to place bar at specific part of the icon.
 module Gtk.ImageBar (
-  ImageBar (..)
-  , imageBarPos
-  , imageBarSetFill
-  , imageBarSetIcon
+  ImageBar (..),
+  imageBarPos,
+  imageBarSetFill,
+  imageBarSetIcon,
 ) where
 
+import Control.Monad
 import Data.Coerce
 import Data.GI.Base
 import Data.GI.Base.GObject
@@ -176,6 +177,34 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
       , maxValue = Just 256
       }
 
+  gobjectInstallCStringProperty @ImageBar
+    gClass
+    CStringPropertyInfo
+      { name = T.pack "bar_icon_name"
+      , nick = T.pack "Bar Icon Name"
+      , blurb = T.pack "Name of the background icon"
+      , defaultValue = Nothing
+      , setter = \widget -> \case
+          Nothing -> clearImageIconName =<< imageBarGetImage widget
+          Just v -> flip setImageIconName v =<< imageBarGetImage widget
+      , getter = getImageIconName <=< imageBarGetImage
+      , flags = Nothing
+      }
+
+  gobjectInstallCIntProperty @ImageBar
+    gClass
+    CIntPropertyInfo
+      { name = T.pack "bar_icon_size"
+      , nick = T.pack "Bar Icon Size"
+      , blurb = T.pack "Size of the background icon"
+      , defaultValue = 0
+      , setter = \widget v -> flip setImageIconSize (fromIntegral v) =<< imageBarGetImage widget
+      , getter = \widget -> fromIntegral <$> (getImageIconSize =<< imageBarGetImage widget)
+      , flags = Nothing
+      , minValue = Just 0
+      , maxValue = Just 6
+      }
+
   -- As Widget
   Just oldDestroy <- get widgetClass #destroy
   Just oldAllocate <- get widgetClass #sizeAllocate
@@ -226,7 +255,6 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
 imageBarInstanceInit :: GObjectClass -> ImageBar -> IO ImageBarPrivate
 imageBarInstanceInit _gclass widget = do
   -- Window not needed (Takes no input)
-
   image <- new Image []
   #add widget image
 

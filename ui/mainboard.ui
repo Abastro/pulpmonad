@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk+" version="3.20"/>
+  <object class="GtkButton" id="mainboard">
+    <property name="name">mainboard</property>
+    <signal name="clicked" handler="mainboard-open" swapped="no"/>
+    <child>
+      <object class="GtkOverlay" id="mainboard-icon">
+        <child>
+          <object class="GtkImage" id="mainboard-placeholder">
+            <property name="width_request">42</property>
+            <property name="height_request">-1</property>
+          </object>
+        </child>
+        <child type="overlay">
+          <object class="ImageBar" id="mainboard-mem">
+            <property name="name">mem</property>
+            <property name="halign">start</property>
+            <property name="valign">center</property>
+            <property name="orient">1</property>
+            <property name="bar_scale">32</property>
+            <property name="bar_portion_left">14</property>
+            <property name="bar_portion_top">8</property>
+            <property name="bar_portion_width">4</property>
+            <property name="bar_portion_height">16</property>
+            <property name="bar_icon_name">ram-symbolic</property>
+            <property name="bar_icon_size">3</property>
+          </object>
+        </child>
+        <child type="overlay">
+          <object class="ImageBar" id="mainboard-cpu">
+            <property name="name">cpu</property>
+            <property name="halign">end</property>
+            <property name="valign">center</property>
+            <property name="orient">1</property>
+            <property name="bar_scale">64</property>
+            <property name="bar_portion_left">28</property>
+            <property name="bar_portion_top">25</property>
+            <property name="bar_portion_width">8</property>
+            <property name="bar_portion_height">14</property>
+            <property name="bar_icon_name">cpu-symbolic</property>
+            <property name="bar_icon_size">3</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>
