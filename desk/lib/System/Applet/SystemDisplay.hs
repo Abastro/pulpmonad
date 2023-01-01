@@ -1,13 +1,15 @@
 {-# LANGUAGE OverloadedLabels #-}
 
 module System.Applet.SystemDisplay (
-  batDisplay
-  , mainboardDisplay
+  batDisplay,
+  mainboardDisplay,
 ) where
 
 import Control.Concurrent.Task
+import Control.Event.Entry
 import Control.Monad.IO.Class
 import Data.Foldable
+import Data.GI.Base.Attributes
 import Data.GI.Base.Constructible
 import Data.GI.Base.Signals
 import Data.Int
@@ -21,8 +23,9 @@ import Gtk.Styles qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Status.HWStatus
 import Text.Printf
-import View.Imagery qualified as View
 import XMonad.Util.Run (safeSpawn)
+import System.FilePath
+import System.Pulp.PulpEnv
 
 data Temperature = T20 | T40 | T60 | T80 | T100 | T120
   deriving (Eq, Ord, Enum, Bounded)
@@ -39,33 +42,44 @@ tempClass = \case
   T100 -> T.pack "temp-100"
   T120 -> T.pack "temp-120"
 
--- TODO Warning colors when too full
-
 -- | Battery status display.
-batDisplay :: MonadIO m => Gtk.IconSize -> m Gtk.Widget
-batDisplay iconSize = do
-  img <- startRegular 500 batStat >>= traverse batIcon
-  ev <- Gtk.buttonNewWith (View.imageDynWidget <$> img) $ safeSpawn "gnome-control-center" ["power"]
-  #setName ev (T.pack "bat")
-  ev <$ #showAll ev
+batDisplay :: (MonadIO m, MonadPulpPath m) => Gtk.IconSize -> m Gtk.Widget
+batDisplay _iconSize = startRegular 500 batStat >>= \case
+  Nothing -> Gtk.toWidget =<< new Gtk.Image [] -- Empty image when battery cannot be accessed
+  Just batt -> do
+    uiFile <- pulpDataPath ("ui" </> "battery.ui")
+    BatView{..} <- liftIO $ batView (T.pack uiFile) $ safeSpawn "gnome-control-center" ["power"]
+    liftIO $ do
+      kill <- Gtk.uiTask batt $ \BatStat{capacity, batStatus} ->
+        setBatIcon $ batName ((capacity `div` 10) * 10) batStatus
+      Gtk.onWidgetDestroy batWidget kill
+    pure batWidget
   where
-    batIcon task = do
-      img <- View.imageDynNew iconSize True
-      liftIO $ do
-        kill <- Gtk.uiTask task $ \BatStat{capacity, batStatus} ->
-          View.imageDynSetImg img $ View.ImgSName $ batName ((capacity `div` 10) * 10) batStatus
-        Gtk.onWidgetDestroy (View.imageDynWidget img) kill
-      pure img
-
     batName level = \case
       Charging -> T.pack $ printf "battery-level-%d-charging-symbolic" level
       _ -> T.pack $ printf "battery-level-%d-symbolic" level
+
+data BatView = BatView
+  { batWidget :: !Gtk.Widget
+  , setBatIcon :: Sink T.Text
+  }
+
+batView :: T.Text -> IO () -> IO BatView
+batView uiFile act = Gtk.buildFromFile uiFile $ do
+  Just batWidget <- Gtk.getElement (T.pack "battery") Gtk.Widget
+  Just batIcon <- Gtk.getElement (T.pack "battery-icon") Gtk.Image
+
+  let setBatIcon icon = set batIcon [#iconName := icon]
+  Gtk.addCallback (T.pack "battery-open") act
+  pure BatView{..}
 
 -- MAYBE Migrate to GtkBuilder.
 -- `g_type_ensure` would likely ensure it is loaded.
 -- Calling `glibType` could be enough instead.
 
 -- MAYBE Roll down "menu" showing status & settings, on hold until above is resolved
+
+-- TODO Warning colors when too full
 
 -- | Mainboard status display with given icon size & width.
 mainboardDisplay :: MonadIO m => Gtk.IconSize -> Int32 -> m Gtk.Widget
