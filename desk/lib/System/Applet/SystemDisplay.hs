@@ -7,6 +7,7 @@ module System.Applet.SystemDisplay (
 
 import Control.Concurrent.Task
 import Control.Event.Entry
+import Control.Exception
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.GI.Base.BasicTypes
@@ -19,6 +20,8 @@ import Gtk.Commons qualified as Gtk
 import Gtk.ImageBar qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import Gtk.Task qualified as Gtk
+import Reactive.Banana.Combinators
+import Reactive.Banana.Frameworks
 import Status.HWStatus
 import System.FilePath
 import System.Pulp.PulpEnv
@@ -39,6 +42,35 @@ tempClass = \case
   T80 -> T.pack "temp-80"
   T100 -> T.pack "temp-100"
   T120 -> T.pack "temp-120"
+
+{-------------------------------------------------------------------
+                            Battery
+--------------------------------------------------------------------}
+
+batDisplayAlt :: (MonadIO m, MonadPulpPath m) => Gtk.IconSize -> m Gtk.Widget
+batDisplayAlt _iconSize = do
+  uiFile <- pulpDataPath ("ui" </> "battery.ui")
+  BatView{..} <- liftIO $ batView (T.pack uiFile) $ safeSpawn "gnome-control-center" ["power"]
+
+  network <- liftIO . compile $ do
+    ticker <- liftIO (periodicSource 500) >>= sourceEvent
+    battSamples <- mapEventIO (\() -> getBattery) ticker
+    -- TODO Better one than the bogus initial value
+    -- MAYBE Report error to logs
+    battery <- stepper (Left $ userError "Not initialized") battSamples
+    syncBehavior battery (Gtk.uiSingleRun . setBatIcon . iconOf)
+  liftIO $ actuate network
+  pure batWidget
+  where
+    getBattery = try @IOException batStat
+
+    iconOf = \case
+      Right BatStat{capacity, batStatus = Charging} ->
+        T.pack $ printf "battery-level-%d-charging-symbolic" (levelOf capacity)
+      Right BatStat{capacity, batStatus = _} ->
+        T.pack $ printf "battery-level-%d-symbolic" (levelOf capacity)
+      Left _ -> T.pack "battery-missing-symbolic"
+    levelOf capacity = (capacity `div` 10) * 10
 
 -- | Battery status display.
 batDisplay :: (MonadIO m, MonadPulpPath m) => Gtk.IconSize -> m Gtk.Widget
@@ -72,7 +104,11 @@ batView uiFile act = Gtk.buildFromFile uiFile $ do
   Gtk.addCallback (T.pack "battery-open") act
   pure BatView{..}
 
--- MAYBE Roll down "menu" showing status & settings, on hold until above is resolved
+{-------------------------------------------------------------------
+                            Mainboard
+--------------------------------------------------------------------}
+
+-- MAYBE Roll down "menu" showing status & settings
 
 -- TODO Warning colors when too full
 
