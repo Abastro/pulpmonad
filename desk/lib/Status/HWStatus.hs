@@ -88,12 +88,10 @@ cpuDelta delay = do
   pure (liftA2 (-) post pre)
 
 -- | Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
+--
 -- Pulls from </sys/class/hwmon/hwmon?/temp1_input>.
 --
--- Changed to use "Tctl" instead of "Tdie" as the latter is often not available.
---
--- (Some CPUs adds offset to attain Tctl,
--- and frankly the adjusted temp is likely appropriate for display)
+-- Uses "Tctl" instead of "Tdie" as the latter is often not available.
 cpuTemp :: IO Double
 cpuTemp = do
   dirs <- map (baseDir </>) <$> listDirectory baseDir

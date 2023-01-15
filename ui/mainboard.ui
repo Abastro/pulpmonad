@@ -26,6 +26,9 @@
             <property name="bar_icon_name">ram-symbolic</property>
             <property name="bar_icon_size">3</property>
           </object>
+          <packing>
+            <property name="pass-through">1</property>
+          </packing>
         </child>
         <child type="overlay">
           <object class="ImageBar" id="mainboard-cpu">
@@ -41,6 +44,9 @@
             <property name="bar_icon_name">cpu-symbolic</property>
             <property name="bar_icon_size">3</property>
           </object>
+          <packing>
+            <property name="pass-through">1</property>
+          </packing>
         </child>
       </object>
     </child>

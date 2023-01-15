@@ -9,6 +9,7 @@ module Control.Event.Entry (
   syncBehavior,
   taskToSource,
   periodicSource,
+  pollingBehavior,
 ) where
 
 import Control.Concurrent
@@ -42,6 +43,9 @@ sourceEvent = fromAddHandler
 -- | Sync with behavior changes using given sink.
 syncBehavior :: Behavior a -> Sink a -> MomentIO ()
 syncBehavior behav sink = do
+  -- Reflects initial value
+  initial <- valueBLater behav
+  liftIOLater $ sink initial
   chEvent <- changes behav
   reactimate' (fmap sink <$> chEvent)
 
@@ -59,9 +63,17 @@ loopSource act cleanup = do
 taskToSource :: Task a -> IO (Source a)
 taskToSource task = loopSource (taskNextWait task) (taskStop task)
 
--- Problem: The looping source have to use time for calling callbacks.
+-- Potential Problem: The looping source have to use time for calling callbacks.
 -- This might lead to delay issues.
+-- Reactimates might better run tasks on other threads.
 
 -- | Simple periodic source with given period (in millisecond).
 periodicSource :: Int -> IO (Source ())
 periodicSource period = loopSource (threadDelay $ period * 1000) (pure ())
+
+-- | Polling behavior which updates at each event.
+pollingBehavior :: IO b -> Event a -> MomentIO (Behavior b)
+pollingBehavior act evt = do
+  initial <- liftIO act
+  later <- mapEventIO (const act) evt
+  stepper initial later

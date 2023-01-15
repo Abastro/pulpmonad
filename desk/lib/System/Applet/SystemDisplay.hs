@@ -5,14 +5,12 @@ module System.Applet.SystemDisplay (
   mainboardDisplay,
 ) where
 
-import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Exception
 import Control.Monad.IO.Class
+import Control.Monad.IO.Unlift
 import Data.GI.Base.Attributes
 import Data.GI.Base.BasicTypes
-import Data.GI.Base.Constructible
-import Data.GI.Base.Signals
 import Data.Int
 import Data.Text qualified as T
 import GI.Gtk.Objects.Image qualified as Gtk
@@ -20,10 +18,10 @@ import Gtk.Commons qualified as Gtk
 import Gtk.ImageBar qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import Gtk.Task qualified as Gtk
-import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
 import Status.HWStatus
 import System.FilePath
+import System.Log.LogPrint
 import System.Pulp.PulpEnv
 import Text.Printf
 import XMonad.Util.Run (safeSpawn)
@@ -47,23 +45,23 @@ tempClass = \case
                             Battery
 --------------------------------------------------------------------}
 
-batDisplayAlt :: (MonadIO m, MonadPulpPath m) => Gtk.IconSize -> m Gtk.Widget
-batDisplayAlt _iconSize = do
-  uiFile <- pulpDataPath ("ui" </> "battery.ui")
-  BatView{..} <- liftIO $ batView (T.pack uiFile) $ safeSpawn "gnome-control-center" ["power"]
+batDisplay :: (MonadUnliftIO m, MonadPulpPath m, MonadLog m) => Gtk.IconSize -> m Gtk.Widget
+batDisplay _iconSize = withRunInIO $ \unlift -> do
+  uiFile <- unlift $ pulpDataPath ("ui" </> "battery.ui")
+  BatView{..} <- batView (T.pack uiFile)
 
-  network <- liftIO . compile $ do
+  network <- compile $ do
     ticker <- liftIO (periodicSource 500) >>= sourceEvent
-    battSamples <- mapEventIO (\() -> getBattery) ticker
-    -- TODO Better one than the bogus initial value
-    -- MAYBE Report error to logs
-    battery <- stepper (Left $ userError "Not initialized") battSamples
+    clicks <- sourceEvent batClicks
+    battery <- pollingBehavior getBattery ticker
+
     syncBehavior battery (Gtk.uiSingleRun . setBatIcon . iconOf)
-  liftIO $ actuate network
+    syncBehavior battery (unlift . handleExc)
+    reactimate (safeSpawn "gnome-control-center" ["power"] <$ clicks)
+  actuate network
   pure batWidget
   where
     getBattery = try @IOException batStat
-
     iconOf = \case
       Right BatStat{capacity, batStatus = Charging} ->
         T.pack $ printf "battery-level-%d-charging-symbolic" (levelOf capacity)
@@ -72,36 +70,23 @@ batDisplayAlt _iconSize = do
       Left _ -> T.pack "battery-missing-symbolic"
     levelOf capacity = (capacity `div` 10) * 10
 
--- | Battery status display.
-batDisplay :: (MonadIO m, MonadPulpPath m) => Gtk.IconSize -> m Gtk.Widget
-batDisplay _iconSize =
-  startRegular 500 batStat >>= \case
-    Nothing -> Gtk.toWidget =<< new Gtk.Image [] -- Empty image when battery cannot be accessed
-    Just batt -> do
-      uiFile <- pulpDataPath ("ui" </> "battery.ui")
-      BatView{..} <- liftIO $ batView (T.pack uiFile) $ safeSpawn "gnome-control-center" ["power"]
-      liftIO $ do
-        kill <- Gtk.uiTask batt $ \BatStat{capacity, batStatus} ->
-          setBatIcon $ batName ((capacity `div` 10) * 10) batStatus
-        Gtk.onWidgetDestroy batWidget kill
-      pure batWidget
-  where
-    batName level = \case
-      Charging -> T.pack $ printf "battery-level-%d-charging-symbolic" level
-      _ -> T.pack $ printf "battery-level-%d-symbolic" level
+    handleExc (Left exc) = logS (T.pack "Battery") LevelWarn $ logStrf "Battery error : $1" (show exc)
+    handleExc _ = pure ()
 
 data BatView = BatView
   { batWidget :: !Gtk.Widget
+  , batClicks :: Source ()
   , setBatIcon :: Sink T.Text
   }
 
-batView :: T.Text -> IO () -> IO BatView
-batView uiFile act = Gtk.buildFromFile uiFile $ do
+batView :: T.Text -> IO BatView
+batView uiFile = Gtk.buildFromFile uiFile $ do
   Just batWidget <- Gtk.getElement (T.pack "battery") Gtk.Widget
   Just batIcon <- Gtk.getElement (T.pack "battery-icon") Gtk.Image
 
   let setBatIcon icon = set batIcon [#iconName := icon]
-  Gtk.addCallback (T.pack "battery-open") act
+  (batClicks, onClick) <- liftIO sourceSink
+  Gtk.addCallback (T.pack "battery-open") $ onClick ()
   pure BatView{..}
 
 {-------------------------------------------------------------------
@@ -112,33 +97,53 @@ batView uiFile act = Gtk.buildFromFile uiFile $ do
 
 -- TODO Warning colors when too full
 
--- | Mainboard status display with given icon size & width.
-mainboardDisplay :: (MonadIO m, MonadPulpPath m) => Gtk.IconSize -> Int32 -> m Gtk.Widget
-mainboardDisplay _iconSize _mainWidth = do
-  memUse <- startRegular 500 memStat
-  cpuUse <- startRegular 50 (cpuDelta 50)
-  cpuTemps <- startRegular 100 cpuTemp
-  case (,,) <$> memUse <*> cpuUse <*> cpuTemps of
-    Nothing -> Gtk.toWidget =<< new Gtk.Image []
-    Just (memUse, cpuUse, cpuTemps) -> do
-      uiFile <- pulpDataPath ("ui" </> "mainboard.ui")
-      MainboardView{..} <- liftIO $ mainboardView (T.pack uiFile) $ safeSpawn "gnome-system-monitor" ["-r"]
-      liftIO $ do
-        killMem <- Gtk.uiTask memUse $ setMemFill . memUsed . memRatios
-        killCUse <- Gtk.uiTask cpuUse $ setCPUFill . cpuUsed . cpuRatios
-        killCTemp <- Gtk.uiTask cpuTemps $ setCPUTemp . tempVal
-        on mainboardWidget #destroy (killMem *> killCUse *> killCTemp)
-      pure mainboardWidget
+mainboardDisplay :: (MonadUnliftIO m, MonadPulpPath m, MonadLog m) => Gtk.IconSize -> Int32 -> m Gtk.Widget
+mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
+  uiFile <- unlift $ pulpDataPath ("ui" </> "mainboard.ui")
+  MainboardView{..} <- mainboardView (T.pack uiFile)
+
+  network <- compile $ do
+    clicks <- sourceEvent mainClicks
+    memTicker <- liftIO (periodicSource 500) >>= sourceEvent
+    -- TODO Measure CPU Use properly by diffs every 100 second
+    cpuUseTicker <- liftIO (periodicSource 50) >>= sourceEvent
+    cpuTempTicker <- liftIO (periodicSource 100) >>= sourceEvent
+    memory <- pollingBehavior getMemory memTicker
+    cpuUse <- pollingBehavior getCPUUse cpuUseTicker
+    cpuTemp <- pollingBehavior getCPUTemp cpuTempTicker
+
+    -- TODO Set icon when data is missing
+    syncBehavior memory (unlift . handleMem setMemFill)
+    syncBehavior cpuUse (unlift . handleCPUUse setCPUFill)
+    syncBehavior cpuTemp (unlift . handleCPUTemp setCPUTemp)
+    reactimate (safeSpawn "gnome-system-monitor" ["-r"] <$ clicks)
+  actuate network
+  pure mainboardWidget
+  where
+    getMemory = try @IOException memStat
+    getCPUUse = try @IOException $ cpuDelta 50
+    getCPUTemp = try @IOException $ cpuTemp
+
+    handleMem setFill = \case
+      Right memory -> liftIO . Gtk.uiSingleRun . setFill $ memUsed (memRatios memory)
+      Left exc -> logS (T.pack "Memory") LevelWarn $ logStrf "Memory error : $1" (show exc)
+    handleCPUUse setFill = \case
+      Right cpuUse -> liftIO . Gtk.uiSingleRun . setFill $ cpuUsed (cpuRatios cpuUse)
+      Left exc -> logS (T.pack "CPU") LevelWarn $ logStrf "CPU error (usage) : $1" (show exc)
+    handleCPUTemp setTemp = \case
+      Right cpuTemp -> liftIO . Gtk.uiSingleRun . setTemp $ tempVal cpuTemp
+      Left exc -> logS (T.pack "CPU") LevelWarn $ logStrf "CPU error (temp) : $1" (show exc)
 
 data MainboardView = MainboardView
   { mainboardWidget :: !Gtk.Widget
+  , mainClicks :: Source ()
   , setMemFill :: Sink Double
   , setCPUFill :: Sink Double
   , setCPUTemp :: Sink Temperature
   }
 
-mainboardView :: T.Text -> IO () -> IO MainboardView
-mainboardView uiFile act = do
+mainboardView :: T.Text -> IO MainboardView
+mainboardView uiFile = do
   glibType @Gtk.ImageBar -- Ensures ImageBar is registered
   Gtk.buildFromFile uiFile $ do
     Just mainboardWidget <- Gtk.getElement (T.pack "mainboard") Gtk.Widget
@@ -149,5 +154,6 @@ mainboardView uiFile act = do
         setCPUFill = Gtk.imageBarSetFill cpuBar
         setCPUTemp tempV = #getStyleContext cpuBar >>= Gtk.updateCssClass tempClass [tempV]
 
-    Gtk.addCallback (T.pack "mainboard-open") act
+    (mainClicks, onClick) <- liftIO sourceSink
+    Gtk.addCallback (T.pack "mainboard-open") $ onClick ()
     pure MainboardView{..}
