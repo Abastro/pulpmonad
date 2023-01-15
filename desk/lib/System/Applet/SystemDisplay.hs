@@ -10,6 +10,7 @@ import Control.Exception
 import Control.Monad.IO.Class
 import Control.Monad.IO.Unlift
 import Data.Bifunctor
+import Data.Foldable
 import Data.GI.Base.Attributes
 import Data.GI.Base.BasicTypes
 import Data.Int
@@ -20,6 +21,7 @@ import Gtk.Commons qualified as Gtk
 import Gtk.ImageBar qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import Gtk.Task qualified as Gtk
+import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
 import Status.HWStatus
 import System.FilePath
@@ -27,7 +29,6 @@ import System.Log.LogPrint
 import System.Pulp.PulpEnv
 import Text.Printf
 import XMonad.Util.Run (safeSpawn)
-import Data.Foldable
 
 data Temperature = T20 | T40 | T60 | T80 | T100 | T120
   deriving (Eq, Ord, Enum, Bounded)
@@ -111,12 +112,13 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
     memTicker <- liftIO (periodicSource 500) >>= sourceEvent
     -- TODO Measure CPU Use properly by diffs every 100 second
     -- (combine with cpu temp ticker)
-    cpuUseTicker <- liftIO (periodicSource 50) >>= sourceEvent
-    cpuTempTicker <- liftIO (periodicSource 100) >>= sourceEvent
+    cpuTicker <- liftIO (periodicSource 100) >>= sourceEvent
     memory <- pollingBehavior getMemory memTicker
-    cpuUse <- pollingBehavior getCPUUse cpuUseTicker
-    cpuTemp <- pollingBehavior getCPUTemp cpuTempTicker
-    let cpu = combineCPU <$> cpuUse <*> cpuTemp
+    cpuTemp <- pollingBehavior getCPUTemp cpuTicker
+    (evtCPUStat, cpuStat) <- pollingBehaviorWithEvent getCPUStat cpuTicker
+    -- Usage is determined as time spent (difference of spot time)
+    cpuUsage <- stepper (Right cpuZero) $ liftA2 diff <$> cpuStat <@> evtCPUStat
+    let cpu = combineCPU <$> cpuUsage <*> cpuTemp
 
     syncBehavior memory (Gtk.uiSingleRun . setMemFill . memFillOf)
     syncBehavior memory (Gtk.uiSingleRun . setMemIcon . memIconOf)
@@ -131,9 +133,10 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
   pure mainboardWidget
   where
     getMemory = try @IOException $ memStat
-    getCPUUse = try @IOException $ cpuDelta 50
     getCPUTemp = try @IOException $ cpuTemp
+    getCPUStat = try @IOException $ fst <$> cpuStat
 
+    diff old new = liftA2 (-) new old
     combineCPU use temp = validToEither $ (,) <$> useE <*> tempE
       where
         useE = case use of
@@ -147,7 +150,7 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
     cpuInfoOf = \case
       Right (use, temp) -> (cpuUsed (cpuRatios use), tempVal temp)
       Left _ -> (0, T20)
-    
+
     memIconOf = \case
       Right _ -> T.pack "ram-symbolic"
       Left _ -> T.pack "ram-missing-symbolic"
@@ -161,7 +164,6 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
     handleCPUExc = \case
       Left excs -> traverse_ (logS (T.pack "CPU") LevelWarn . logStrf "CPU error : $1") excs
       Right _ -> pure ()
-
 
 data MainboardView = MainboardView
   { mainboardWidget :: !Gtk.Widget

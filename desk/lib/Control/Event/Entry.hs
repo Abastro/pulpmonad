@@ -10,6 +10,7 @@ module Control.Event.Entry (
   taskToSource,
   periodicSource,
   pollingBehavior,
+  pollingBehaviorWithEvent,
 ) where
 
 import Control.Concurrent
@@ -72,8 +73,13 @@ periodicSource :: Int -> IO (Source ())
 periodicSource period = loopSource (threadDelay $ period * 1000) (pure ())
 
 -- | Polling behavior which updates at each event.
-pollingBehavior :: IO b -> Event a -> MomentIO (Behavior b)
-pollingBehavior act evt = do
-  initial <- liftIO act
-  later <- mapEventIO (const act) evt
-  stepper initial later
+pollingBehavior :: IO a -> Event b -> MomentIO (Behavior a)
+pollingBehavior act evt = snd <$> pollingBehaviorWithEvent act evt
+
+-- | Polling behavior with event for the updates of the behavior.
+pollingBehaviorWithEvent :: IO a -> Event b -> MomentIO (Event a, Behavior a)
+pollingBehaviorWithEvent act evt = do
+  first <- liftIO act
+  updates <- mapEventIO (const act) evt
+  behav <- stepper first updates
+  pure (updates, behav)

@@ -2,6 +2,7 @@
 
 module Status.HWStatus (
   CPUStat (..),
+  cpuZero,
   cpuRatios,
   cpuUsed,
   cpuStat,
@@ -54,6 +55,11 @@ data CPUStat a = CPUStat
   }
   deriving stock (Show, Generic1)
   deriving (Functor, Applicative) via (Generically1 CPUStat)
+
+cpuZero :: Num a => CPUStat a
+cpuZero = CPUStat{..}
+  where
+    userTime : niceTime : systemTime : idleTime : ioWait : irqTime : softirqTime : _ = repeat 0
 
 cpuOf :: [a] -> Maybe (CPUStat a)
 cpuOf = \case
@@ -157,8 +163,8 @@ data BatStatus = Charging | Discharging | NotCharging | Full | Unknown
 --  * current: μA
 data BatStat = BatStat
   { batStatus :: BatStatus
-  , -- | Current capacity in percentage to full
-    capacity :: Int
+  , capacity :: Int
+  -- ^ Current capacity in percentage to full
   , energyFull :: Maybe Int
   , chargeFull :: Maybe Int
   , energyFullDesign :: Maybe Int
@@ -228,8 +234,8 @@ diskSpeed IOStat{..} =
 data DiskStat a = DiskStat
   { readStat :: !(IOStat a)
   , writeStat :: !(IOStat a)
-  , -- | 10th field, not 9th
-    ioMilliSecs :: !a
+  , ioMilliSecs :: !a
+  -- ^ 10th field, not 9th
   }
   deriving stock (Show, Generic1)
   deriving (Functor, Applicative) via (Generically1 DiskStat)
@@ -238,10 +244,10 @@ diskOf :: [a] -> Maybe (DiskStat a)
 diskOf = \case
   xs
     | (reads, xs') <- splitAt 4 xs
-      , (writes, ioMilliSecs : _) <- splitAt 4 xs'
-      , Just readStat <- ioOf reads
-      , Just writeStat <- ioOf writes ->
-      Just DiskStat{..}
+    , (writes, ioMilliSecs : _) <- splitAt 4 xs'
+    , Just readStat <- ioOf reads
+    , Just writeStat <- ioOf writes ->
+        Just DiskStat{..}
   _ -> Nothing
   where
     ioOf = \case
