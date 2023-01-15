@@ -110,8 +110,6 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
   network <- compile $ do
     clicks <- sourceEvent mainClicks
     memTicker <- liftIO (periodicSource 500) >>= sourceEvent
-    -- TODO Measure CPU Use properly by diffs every 100 second
-    -- (combine with cpu temp ticker)
     cpuTicker <- liftIO (periodicSource 100) >>= sourceEvent
     memory <- pollingBehavior getMemory memTicker
     cpuTemp <- pollingBehavior getCPUTemp cpuTicker
