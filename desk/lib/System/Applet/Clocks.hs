@@ -25,14 +25,11 @@ textClock format = do
   View{..} <- liftIO $ view (T.pack uiFile)
 
   -- To update right away
-  (src, sink) <- liftIO sourceSink
   network <- liftIO . compile $ do
-    initial <- sourceEvent src
     ticker <- liftIO (periodicSource 1000) >>= sourceEvent
-    timeEvent <- mapEventIO (\() -> getZonedTime) (initial <> ticker)
-    -- Not using syncBehavior - simpler this way
-    reactimate (Gtk.uiSingleRun . setClock . formatted <$> timeEvent)
-  liftIO $ actuate network <* sink ()
+    time <- pollingBehavior getZonedTime ticker
+    syncBehavior time (Gtk.uiSingleRun . setClock . formatted)
+  liftIO $ actuate network
   pure clockWidget
   where
     formatted zoned = T.pack $ formatTime defaultTimeLocale format zoned
