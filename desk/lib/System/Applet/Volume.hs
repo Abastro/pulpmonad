@@ -5,7 +5,6 @@ module System.Applet.Volume (volumeDisplay) where
 import Control.Event.Entry
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
-import Data.GI.Base.Constructible
 import Data.Ord
 import Data.Text qualified as T
 import GI.Gdk.Structs.EventScroll qualified as Gdk
@@ -19,7 +18,6 @@ import System.FilePath
 import System.Pulp.PulpEnv
 import XMonad.Util.Run
 import Control.Monad
-import Reactive.Banana.Combinators
 import qualified GI.Gdk.Structs.EventButton as Gdk
 
 data VolumeLevel = Muted | VolLow | VolMid | VolHigh
@@ -32,14 +30,15 @@ volLevel VolStat{..}
   | curVolume < 2 / 3 = VolMid
   | otherwise = VolHigh
 
-volIconName :: VolumeLevel -> T.Text
+volIconName :: Maybe VolumeLevel -> T.Text
 volIconName = \case
-  Muted -> T.pack "audio-volume-muted-symbolic"
-  VolLow -> T.pack "audio-volume-low-symbolic"
-  VolMid -> T.pack "audio-volume-medium-symbolic"
-  VolHigh -> T.pack "audio-volume-high-symbolic"
+  Just Muted -> T.pack "audio-volume-muted-symbolic"
+  Just VolLow -> T.pack "audio-volume-low-symbolic"
+  Just VolMid -> T.pack "audio-volume-medium-symbolic"
+  Just VolHigh -> T.pack "audio-volume-high-symbolic"
+  Nothing -> T.pack "volume-warning-symbolic"
 
--- TODO Warn when "Nothing" is received
+-- TODO Warn when "Nothing" is received (proper logging)
 
 -- | Volume display. First argument is mixer name, second is control name.
 volumeDisplay :: (MonadIO m, MonadPulpPath m) => String -> String -> m Gtk.Widget
@@ -47,26 +46,19 @@ volumeDisplay mixerName controlName = do
   uiFile <- pulpDataPath ("ui" </> "volume.ui")
   View{..} <- liftIO $ view (T.pack uiFile)
 
-  let netDesc initVol = do
-        ticker <- liftIO (periodicSource 200) >>= sourceEvent
-        clickEvent <- sourceEvent clicks
-        scrollEvent <- sourceEvent scrolls
-        switchEvent <- sourceEvent switches
+  network <- liftIO . compile $ do
+    ticker <- liftIO (periodicSource 200) >>= sourceEvent
+    clickEvent <- sourceEvent clicks
+    scrollEvent <- sourceEvent scrolls
+    switchEvent <- sourceEvent switches
 
-        -- Ticker and Scroll/Switch updates volume view
-        volSamples <- mapEventIO (\() -> getVolume) (ticker <> void scrollEvent <> switchEvent)
-        volumes <- stepper initVol (filterJust volSamples)
-        syncBehavior volumes (Gtk.uiSingleRun . setVolIcon . volIconName . volLevel)
-        reactimate (safeSpawnProg "pavucontrol" <$ clickEvent)
-        reactimate (onScroll <$> scrollEvent)
-        reactimate (onSwitch <$ switchEvent)
-
-  liftIO getVolume >>= \case
-    Nothing -> Gtk.toWidget =<< new Gtk.Image [] -- Empty image when volume cannot be accessed
-    Just initVol -> do
-      network <- liftIO . compile $ netDesc initVol
-      liftIO $ actuate network
-      pure volWidget
+    volume <- pollingBehavior getVolume (ticker <> void scrollEvent <> switchEvent)
+    syncBehavior volume (Gtk.uiSingleRun . setVolIcon . volIconName . fmap volLevel)
+    reactimate (safeSpawnProg "pavucontrol" <$ clickEvent)
+    reactimate (onScroll <$> scrollEvent)
+    reactimate (onSwitch <$ switchEvent)
+  liftIO $ actuate network
+  pure volWidget
   where
     getVolume = curVolStat mixerName controlName
     chVolume adj = updateRelVolume mixerName controlName (\vol -> clamp (0, 1) $ vol + adj)
