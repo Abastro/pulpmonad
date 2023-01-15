@@ -9,10 +9,12 @@ import Control.Event.Entry
 import Control.Exception
 import Control.Monad.IO.Class
 import Control.Monad.IO.Unlift
+import Data.Bifunctor
 import Data.GI.Base.Attributes
 import Data.GI.Base.BasicTypes
 import Data.Int
 import Data.Text qualified as T
+import Data.Validation
 import GI.Gtk.Objects.Image qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.ImageBar qualified as Gtk
@@ -25,6 +27,7 @@ import System.Log.LogPrint
 import System.Pulp.PulpEnv
 import Text.Printf
 import XMonad.Util.Run (safeSpawn)
+import Data.Foldable
 
 data Temperature = T20 | T40 | T60 | T80 | T100 | T120
   deriving (Eq, Ord, Enum, Bounded)
@@ -70,8 +73,9 @@ batDisplay _iconSize = withRunInIO $ \unlift -> do
       Left _ -> T.pack "battery-missing-symbolic"
     levelOf capacity = (capacity `div` 10) * 10
 
-    handleExc (Left exc) = logS (T.pack "Battery") LevelWarn $ logStrf "Battery error : $1" (show exc)
-    handleExc _ = pure ()
+    handleExc = \case
+      Left exc -> logS (T.pack "Battery") LevelWarn $ logStrf "Battery error : $1" (show exc)
+      Right _ -> pure ()
 
 data BatView = BatView
   { batWidget :: !Gtk.Widget
@@ -106,37 +110,64 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
     clicks <- sourceEvent mainClicks
     memTicker <- liftIO (periodicSource 500) >>= sourceEvent
     -- TODO Measure CPU Use properly by diffs every 100 second
+    -- (combine with cpu temp ticker)
     cpuUseTicker <- liftIO (periodicSource 50) >>= sourceEvent
     cpuTempTicker <- liftIO (periodicSource 100) >>= sourceEvent
     memory <- pollingBehavior getMemory memTicker
     cpuUse <- pollingBehavior getCPUUse cpuUseTicker
     cpuTemp <- pollingBehavior getCPUTemp cpuTempTicker
+    let cpu = combineCPU <$> cpuUse <*> cpuTemp
 
-    -- TODO Set icon when data is missing
-    syncBehavior memory (unlift . handleMem setMemFill)
-    syncBehavior cpuUse (unlift . handleCPUUse setCPUFill)
-    syncBehavior cpuTemp (unlift . handleCPUTemp setCPUTemp)
+    syncBehavior memory (Gtk.uiSingleRun . setMemFill . memFillOf)
+    syncBehavior memory (Gtk.uiSingleRun . setMemIcon . memIconOf)
+    syncBehavior memory (unlift . handleMemExc)
+
+    -- For now this feels better than handle action
+    syncBehavior cpu (Gtk.uiSingleRun . uncurry (<>) . bimap setCPUFill setCPUTemp . cpuInfoOf)
+    syncBehavior cpu (Gtk.uiSingleRun . setCPUIcon . cpuIconOf)
+    syncBehavior cpu (unlift . handleCPUExc)
     reactimate (safeSpawn "gnome-system-monitor" ["-r"] <$ clicks)
   actuate network
   pure mainboardWidget
   where
-    getMemory = try @IOException memStat
+    getMemory = try @IOException $ memStat
     getCPUUse = try @IOException $ cpuDelta 50
     getCPUTemp = try @IOException $ cpuTemp
 
-    handleMem setFill = \case
-      Right memory -> liftIO . Gtk.uiSingleRun . setFill $ memUsed (memRatios memory)
+    combineCPU use temp = validToEither $ (,) <$> useE <*> tempE
+      where
+        useE = case use of
+          Left exc -> Failure ["<usage> " <> show exc]
+          Right u -> Success u
+        tempE = case temp of
+          Left exc -> Failure ["<temperature> " <> show exc]
+          Right t -> Success t
+
+    memFillOf = either (const 0) (memUsed . memRatios)
+    cpuInfoOf = \case
+      Right (use, temp) -> (cpuUsed (cpuRatios use), tempVal temp)
+      Left _ -> (0, T20)
+    
+    memIconOf = \case
+      Right _ -> T.pack "ram-symbolic"
+      Left _ -> T.pack "ram-missing-symbolic"
+    cpuIconOf = \case
+      Right _ -> T.pack "cpu-symbolic"
+      Left _ -> T.pack "cpu-missing-symbolic"
+
+    handleMemExc = \case
       Left exc -> logS (T.pack "Memory") LevelWarn $ logStrf "Memory error : $1" (show exc)
-    handleCPUUse setFill = \case
-      Right cpuUse -> liftIO . Gtk.uiSingleRun . setFill $ cpuUsed (cpuRatios cpuUse)
-      Left exc -> logS (T.pack "CPU") LevelWarn $ logStrf "CPU error (usage) : $1" (show exc)
-    handleCPUTemp setTemp = \case
-      Right cpuTemp -> liftIO . Gtk.uiSingleRun . setTemp $ tempVal cpuTemp
-      Left exc -> logS (T.pack "CPU") LevelWarn $ logStrf "CPU error (temp) : $1" (show exc)
+      Right _ -> pure ()
+    handleCPUExc = \case
+      Left excs -> traverse_ (logS (T.pack "CPU") LevelWarn . logStrf "CPU error : $1") excs
+      Right _ -> pure ()
+
 
 data MainboardView = MainboardView
   { mainboardWidget :: !Gtk.Widget
   , mainClicks :: Source ()
+  , setCPUIcon :: Sink T.Text
+  , setMemIcon :: Sink T.Text
   , setMemFill :: Sink Double
   , setCPUFill :: Sink Double
   , setCPUTemp :: Sink Temperature
@@ -150,7 +181,9 @@ mainboardView uiFile = do
     Just memBar <- Gtk.getElement (T.pack "mainboard-mem") Gtk.ImageBar
     Just cpuBar <- Gtk.getElement (T.pack "mainboard-cpu") Gtk.ImageBar
 
-    let setMemFill = Gtk.imageBarSetFill memBar
+    let setMemIcon icon = Gtk.imageBarSetIcon memBar icon Gtk.IconSizeLargeToolbar
+        setCPUIcon icon = Gtk.imageBarSetIcon cpuBar icon Gtk.IconSizeLargeToolbar
+        setMemFill = Gtk.imageBarSetFill memBar
         setCPUFill = Gtk.imageBarSetFill cpuBar
         setCPUTemp tempV = #getStyleContext cpuBar >>= Gtk.updateCssClass tempClass [tempV]
 
