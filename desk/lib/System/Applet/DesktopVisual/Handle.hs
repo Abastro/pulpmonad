@@ -1,3 +1,5 @@
+{-# LANGUAGE RecursiveDo #-}
+
 module System.Applet.DesktopVisual.Handle (
   NumWindows,
   GetXIcon,
@@ -8,6 +10,7 @@ module System.Applet.DesktopVisual.Handle (
 
 import Control.Applicative
 import Control.Concurrent.Task
+import Control.Event.Entry
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Unlift
@@ -20,21 +23,24 @@ import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Data.Text qualified as T
+import Data.Time.Clock.POSIX
 import Data.Traversable
 import Data.Vector qualified as V
+import GI.GLib qualified as Glib
 import GI.Gio.Interfaces.AppInfo qualified as Gio
+import GI.Gio.Interfaces.Icon qualified as Gio
 import Graphics.X11.Types
 import Gtk.Commons qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
 import Gtk.Task qualified as Gtk
+import Reactive.Banana.Combinators
+import Reactive.Banana.Frameworks
 import Status.AppInfos
 import Status.X11.WMStatus
 import Status.X11.XHandle
-import System.Log.LogPrint
 import System.Applet.DesktopVisual.View qualified as View
-import qualified GI.Gio.Interfaces.Icon as Gio
-import Data.Time.Clock.POSIX
-import qualified GI.GLib as Glib
+import System.Log.LogPrint
+import System.Pulp.PulpEnv
 
 deskCssClass :: DesktopState -> T.Text
 deskCssClass = \case
@@ -56,19 +62,85 @@ type NumWindows = Word
 
 -- | Desktop part of the setup.
 data DesktopSetup = DesktopSetup
-  { -- | Labeling rule for the desktop.
-    desktopLabeling :: Maybe T.Text -> T.Text
-  , -- | Whether to show certain desktop or not.
-    showDesktop :: DesktopStat -> NumWindows -> Bool
+  { desktopLabeling :: Maybe T.Text -> T.Text
+  -- ^ Labeling rule for the desktop.
+  , showDesktop :: DesktopStat -> NumWindows -> Bool
+  -- ^ Whether to show certain desktop or not.
   }
 
 -- | Window part of the setup.
 data WindowSetup = WindowSetup
-  { -- | With which icon the window is going to set to.
-    windowImgIcon :: WindowInfo -> MaybeT IO Gio.Icon
+  { windowImgIcon :: WindowInfo -> MaybeT IO Gio.Icon
+  -- ^ With which icon the window is going to set to.
   , windowIconSize :: Gtk.IconSize
   }
 
+deskVisualizer ::
+  (MonadUnliftIO m, MonadLog m, MonadXHand m, MonadPulpPath m) =>
+  DesktopSetup ->
+  WindowSetup ->
+  m Gtk.Widget
+deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
+  DeskVisRcvs{..} <- unlift $ runXHand deskVisInitiate
+  mainView <- View.mainView
+
+  compile $ do
+    desktopUpdate <- liftIO (taskToSource desktopStats) >>= sourceEvent
+    windowListUpdate <- liftIO (taskToSource windowsList) >>= sourceEvent
+
+    (desktops, deskMods) <- desktopDescripts (unlift View.deskItemView) desktopUpdate
+
+    syncBehaviorDiff (V.map fst <$> desktops) (mainSyncDesktop mainView)
+
+    -- TODO Call reflectDesktop
+    undefined
+  undefined
+
+data DeskModified = DeskModified
+  { added :: !(V.Vector View.DeskItemView)
+  , removed :: !(V.Vector View.DeskItemView)
+  }
+
+desktopDescripts ::
+  IO View.DeskItemView ->
+  Event (V.Vector DesktopStat) ->
+  MomentIO (Behavior (V.Vector (View.DeskItemView, DesktopStat)), Event DeskModified)
+desktopDescripts mkView updates = do
+  -- Starts empty to add later
+  rec list <- stepper V.empty (fst <$> newMod)
+      let views = V.map fst <$> list
+          modActs = flip listWithUpdate <$> views <@> updates
+      newMod <- mapEventIO id modActs
+  pure (list, snd <$> newMod)
+  where
+    -- TODO Remove IO involved here
+    listWithUpdate update old = do
+      -- 'new' includes 'update' exactly
+      new <- V.iforM update $ \i stat -> (,stat) <$> maybe mkView pure (old V.!? i)
+      let added = V.drop (V.length old) (V.map fst new)
+          removed = V.drop (V.length new) old
+      pure (new, DeskModified{..})
+
+mainSyncDesktop :: View.MainView -> V.Vector View.DeskItemView -> V.Vector View.DeskItemView -> IO ()
+mainSyncDesktop View.MainView{..} old new = do
+  -- Remove first, then add "in order".
+  traverse_ mainRemoveDesktop $ V.drop (V.length new) old
+  traverse_ mainAddDesktop $ V.drop (V.length old) new
+
+reflectDesktop :: DesktopSetup -> NumWindows -> View.DeskItemView -> DesktopStat -> IO ()
+reflectDesktop DesktopSetup{..} numWin View.DeskItemView{..} stat@DesktopStat{..} = do
+  deskSetName (desktopLabeling desktopName)
+  deskSetVisible (showDesktop stat numWin)
+  deskSetState desktopState
+
+windowDescripts ::
+  IO View.WinItemView ->
+  Event (V.Vector Window) ->
+  MomentIO ()
+windowDescripts mkView updates = do
+  undefined
+
+{-
 -- | Desktops visualizer widget. Forks its own X11 event handler.
 deskVisualizer ::
   (MonadUnliftIO m, MonadLog m, MonadXHand m) =>
@@ -86,7 +158,7 @@ deskVisualizer deskSetup winSetup = do
 data DeskVisHandle = DeskVisHandle
 
 -- TODO Model scheme is not working, need to make it work with pure states.
--- ..Later. I don't have time to design a proper one
+
 deskVisMake ::
   (MonadUnliftIO m, MonadLog m) =>
   DeskVisRcvs ->
@@ -272,6 +344,7 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
             -- receive updates solely from that property
             (unlift . runMaybeT) (imgIcon winInfo) >>= View.winItemSetIcon view getXIcon
             View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
+-}
 
 {-------------------------------------------------------------------
                           Application Info

@@ -6,8 +6,11 @@ module Control.Event.Entry (
   sourceWithUnreg,
   sourceSink,
   sourceEvent,
+  sourceBehavior,
   syncBehavior,
+  syncBehaviorDiff,
   taskToSource,
+  taskToBehavior,
   periodicSource,
   pollingBehavior,
   pollingBehaviorWithEvent,
@@ -41,7 +44,10 @@ sourceSink = newAddHandler
 sourceEvent :: Source a -> MomentIO (Event a)
 sourceEvent = fromAddHandler
 
--- | Sync with behavior changes using given sink.
+sourceBehavior :: a -> Source a -> MomentIO (Behavior a)
+sourceBehavior = fromChanges
+
+-- | Sync with behavior using given sink.
 syncBehavior :: Behavior a -> Sink a -> MomentIO ()
 syncBehavior behav sink = do
   -- Reflects initial value
@@ -49,6 +55,16 @@ syncBehavior behav sink = do
   liftIOLater $ sink initial
   chEvent <- changes behav
   reactimate' (fmap sink <$> chEvent)
+
+-- | Sync with behavior using given sink, which takes both older and newer values.
+--
+-- Since older value does not exist on startup, sync is not performed then.
+syncBehaviorDiff :: Behavior a -> (a -> a -> IO ()) -> MomentIO ()
+syncBehaviorDiff behav sink = do
+  chEvent <- changes behav
+  reactimate' (sinkFuture <$> behav <@> chEvent)
+  where
+    sinkFuture old newFuture = sink old <$> newFuture
 
 -- | Looping source from performing action with cleanup.
 loopSource :: IO a -> IO () -> IO (Source a)
@@ -63,6 +79,15 @@ loopSource act cleanup = do
 -- | Temporary solution before phasing out Task.
 taskToSource :: Task a -> IO (Source a)
 taskToSource task = loopSource (taskNextWait task) (taskStop task)
+
+-- Do we need taskToBehavior?
+
+-- | Waits for first task to finish, so that we get behavior
+taskToBehavior :: Task a -> MomentIO (Behavior a)
+taskToBehavior task = do
+  init <- liftIO (taskNextWait task)
+  src <- liftIO (taskToSource task)
+  sourceBehavior init src
 
 -- Potential Problem: The looping source have to use time for calling callbacks.
 -- This might lead to delay issues.
