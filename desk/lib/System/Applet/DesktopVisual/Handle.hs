@@ -88,7 +88,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     desktopUpdate <- liftIO (taskToSource desktopStats) >>= sourceEvent
     windowListUpdate <- liftIO (taskToSource windowsList) >>= sourceEvent
 
-    (desktops, deskMods) <- desktopDescripts (unlift View.deskItemView) desktopUpdate
+    desktops <- desktopDescripts (unlift View.deskItemView) desktopUpdate
 
     syncBehaviorDiff (V.map fst <$> desktops) (mainSyncDesktop mainView)
 
@@ -96,30 +96,23 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     undefined
   undefined
 
-data DeskModified = DeskModified
-  { added :: !(V.Vector View.DeskItemView)
-  , removed :: !(V.Vector View.DeskItemView)
-  }
-
 desktopDescripts ::
   IO View.DeskItemView ->
   Event (V.Vector DesktopStat) ->
-  MomentIO (Behavior (V.Vector (View.DeskItemView, DesktopStat)), Event DeskModified)
+  MomentIO (Behavior (V.Vector (View.DeskItemView, DesktopStat)))
 desktopDescripts mkView updates = do
   -- Starts empty to add later
-  rec list <- stepper V.empty (fst <$> newMod)
+  rec list <- stepper V.empty newList
       let views = V.map fst <$> list
           modActs = flip listWithUpdate <$> views <@> updates
-      newMod <- mapEventIO id modActs
-  pure (list, snd <$> newMod)
+      newList <- mapEventIO id modActs
+  pure list
   where
     -- TODO Remove IO involved here
     listWithUpdate update old = do
       -- 'new' includes 'update' exactly
       new <- V.iforM update $ \i stat -> (,stat) <$> maybe mkView pure (old V.!? i)
-      let added = V.drop (V.length old) (V.map fst new)
-          removed = V.drop (V.length new) old
-      pure (new, DeskModified{..})
+      pure new
 
 mainSyncDesktop :: View.MainView -> V.Vector View.DeskItemView -> V.Vector View.DeskItemView -> IO ()
 mainSyncDesktop View.MainView{..} old new = do

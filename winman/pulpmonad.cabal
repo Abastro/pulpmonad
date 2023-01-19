@@ -23,7 +23,7 @@ common pulp-xmonad
     , directory
     , X11
     , unix
-    , stm == 2.5.*
+    , stm ==2.5.*
     , xmonad >=0.13
     , xmonad-contrib >=0.14
     , pulp-commons
