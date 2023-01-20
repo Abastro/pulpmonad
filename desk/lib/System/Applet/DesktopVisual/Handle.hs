@@ -21,6 +21,7 @@ import Data.IORef
 import Data.List
 import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
+import Data.Maybe
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Time.Clock.POSIX
@@ -87,51 +88,123 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   compile $ do
     desktopUpdate <- liftIO (taskToSource desktopStats) >>= sourceEvent
     windowListUpdate <- liftIO (taskToSource windowsList) >>= sourceEvent
+    activeWindowUpdate <- liftIO (taskToSource windowActive) >>= sourceEvent
 
-    desktops <- desktopDescripts (unlift View.deskItemView) desktopUpdate
+    desktops <- desktopList (unlift View.deskItemView) desktopUpdate
+    windows <- windowMap (unlift View.winItemView) trackWinInfo windowListUpdate
+    activeWindow <- stepper Nothing activeWindowUpdate
+    let deskViews = V.map desktopView <$> desktops
+        -- In fact, we need to track pairs (window, desktop)
+        deskWindows = flipWinDesk <$> windows
+        deskWindowCnt = M.map (fromIntegral . V.length) <$> deskWindows
+        deskWithWinCnt = withCount <$> deskWindowCnt <*> desktops
 
-    syncBehaviorDiff (V.map fst <$> desktops) (mainSyncDesktop mainView)
+    syncBehaviorDiff deskViews (fmap Gtk.uiSingleRun . mainSyncDesktop mainView)
+    syncBehavior deskWithWinCnt (Gtk.uiSingleRun . traverse_ (uncurry $ reflectDesktop deskSetup))
 
-    -- TODO Call reflectDesktop
+    deskChanges <- differences windows windowDeskDiff
+    let deskChangesIdxed = fmap fmap (winDeskIdxed <$> deskViews) <@> deskChanges
+
     undefined
   undefined
+  where
+    -- Window -> Desk to Desk -> Win
+    -- Vector is needed to track the index!
+    -- ..this is complex.
+    flipWinDesk = M.map (V.fromList . map snd . sortOn fst) . M.fromListWith (<>) . map toIdxPair . M.toList
+      where
+        toIdxPair (win, WinItemHandle{..}) = (winItemDesktop, [(winIndex, win)])
 
-desktopDescripts ::
+    withCount cnts = V.imap $ \i v -> (fromMaybe 0 (cnts M.!? i), v)
+
+    -- Missing is interpreted as -1.
+    windowDeskDiff = M.merge @Window onRemove onAdd onChange
+      where
+        onRemove = M.mapMissing $ \_ WinItemHandle{..} -> (windowView, winItemDesktop, -1)
+        onAdd = M.mapMissing $ \_ WinItemHandle{..} -> (windowView, -1, winItemDesktop)
+        onChange = M.zipWithMatched $ \_ old new -> (windowView new, winItemDesktop old, winItemDesktop new)
+    winDeskIdxed desks = M.map $ \(view, old, new) -> (view, desks V.!? old, desks V.!? new)
+
+    winChangeDesktop _ (winView, oldDesk, newDesk) = do
+      -- TODO Find index of window among desktop!
+      undefined
+
+data DeskItemHandle = DeskItemHandle
+  { desktopView :: !View.DeskItemView
+  , deskItemStat :: !DesktopStat
+  }
+
+-- How would I handle click event?
+desktopList ::
   IO View.DeskItemView ->
   Event (V.Vector DesktopStat) ->
-  MomentIO (Behavior (V.Vector (View.DeskItemView, DesktopStat)))
-desktopDescripts mkView updates = do
+  MomentIO (Behavior (V.Vector DeskItemHandle))
+desktopList mkView updates = do
   -- Starts empty to add later
   rec list <- stepper V.empty newList
-      let views = V.map fst <$> list
-          modActs = flip listWithUpdate <$> views <@> updates
-      newList <- mapEventIO id modActs
+      let views = V.map desktopView <$> list
+          mkNew = getNew <$> views <@> updates
+      newList <- mapEventIO id mkNew
   pure list
   where
-    -- TODO Remove IO involved here
-    listWithUpdate update old = do
-      -- 'new' includes 'update' exactly
-      new <- V.iforM update $ \i stat -> (,stat) <$> maybe mkView pure (old V.!? i)
-      pure new
+    -- TODO Remove IO involved here, somehow - avoid creating views?
+    -- Maybe simulate "lazy" with IO? Still hard.
 
+    -- new matches update exactly
+    getNew old = V.imapM $ \i stat -> (`DeskItemHandle` stat) <$> maybe mkView pure (old V.!? i)
+
+-- Can I phase this out? Create action could take care of it, after all.
 mainSyncDesktop :: View.MainView -> V.Vector View.DeskItemView -> V.Vector View.DeskItemView -> IO ()
 mainSyncDesktop View.MainView{..} old new = do
   -- Remove first, then add "in order".
   traverse_ mainRemoveDesktop $ V.drop (V.length new) old
   traverse_ mainAddDesktop $ V.drop (V.length old) new
 
-reflectDesktop :: DesktopSetup -> NumWindows -> View.DeskItemView -> DesktopStat -> IO ()
-reflectDesktop DesktopSetup{..} numWin View.DeskItemView{..} stat@DesktopStat{..} = do
+reflectDesktop :: DesktopSetup -> NumWindows -> DeskItemHandle -> IO ()
+reflectDesktop DesktopSetup{..} numWin (DeskItemHandle View.DeskItemView{..} stat@DesktopStat{..}) = do
   deskSetName (desktopLabeling desktopName)
   deskSetVisible (showDesktop stat numWin)
   deskSetState desktopState
 
-windowDescripts ::
+data WinItemHandle = WinItemHandle
+  { windowView :: !View.WinItemView
+  , winIndex :: !Int
+  -- ^ Index in the window list.
+  , winItemDesktop :: !Int
+  , winItemInfo :: !WindowInfo
+  }
+
+windowMap ::
   IO View.WinItemView ->
+  (Window -> IO (Maybe PerWinRcvs)) ->
   Event (V.Vector Window) ->
-  MomentIO ()
-windowDescripts mkView updates = do
-  undefined
+  MomentIO (Behavior (M.Map Window WinItemHandle))
+windowMap mkView trackInfo updates = do
+  -- Map of behaviors
+  rec mapB <- stepper M.empty newMapB
+      let mkNewUpd = getNewWithUpdate <$> mapB <@> updates
+      newMapUpd <- execute mkNewUpd
+      let newMapB = fst <$> newMapUpd
+  -- Updates whenever the handle changes
+  switchB (pure M.empty) $ sequenceA <$> newMapB
+  where
+    getNewWithUpdate old update = (,update) <$> getNew old update
+    getNew old update = M.mergeA onRemove onAdd onPersist old (vecToMap update)
+    vecToMap = M.fromList . (`zip` [0 ..]) . V.toList
+
+    -- Destroy action is not performed here
+    onRemove = M.dropMissing
+    -- Track window here to drop the window without info
+    onAdd = M.traverseMaybeMissing $ \window idx ->
+      liftIO (trackInfo window) >>= \case
+        Nothing -> pure Nothing
+        Just PerWinRcvs{..} -> do
+          view <- liftIO mkView
+          -- Both properties are available from the get go.
+          bDesktop <- taskToBehavior winDesktop
+          bInfo <- taskToBehavior winInfo
+          pure . Just $ WinItemHandle view idx <$> bDesktop <*> bInfo
+    onPersist = M.zipWithMatched $ \_ behav newIdx -> (\handle -> handle{winIndex = newIdx}) <$> behav
 
 {-
 -- | Desktops visualizer widget. Forks its own X11 event handler.

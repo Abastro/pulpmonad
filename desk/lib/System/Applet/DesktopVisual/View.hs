@@ -75,6 +75,7 @@ deskCssClass = \case
   DeskVisible -> T.pack "visible"
   DeskHidden -> T.pack "hidden"
 
+-- TODO Change to use flowbox
 deskItemView :: (MonadIO m, MonadPulpPath m) => m DeskItemView
 deskItemView = pulpDataPath ("ui" </> "desk-item.ui") >>= liftIO . view
   where

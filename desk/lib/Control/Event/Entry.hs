@@ -7,6 +7,7 @@ module Control.Event.Entry (
   sourceSink,
   sourceEvent,
   sourceBehavior,
+  differences,
   syncBehavior,
   syncBehaviorDiff,
   taskToSource,
@@ -47,6 +48,16 @@ sourceEvent = fromAddHandler
 sourceBehavior :: a -> Source a -> MomentIO (Behavior a)
 sourceBehavior = fromChanges
 
+-- | Event of differences with previous one.
+--
+-- In diff function, first parameter is older.
+differences :: Behavior a -> (a -> a -> b) -> MomentIO (Event (Future b))
+differences behav diff = do
+  chEvent <- changes behav
+  pure $ diffFuture <$> behav <@> chEvent
+  where
+    diffFuture old = fmap (diff old)
+
 -- | Sync with behavior using given sink.
 syncBehavior :: Behavior a -> Sink a -> MomentIO ()
 syncBehavior behav sink = do
@@ -60,11 +71,7 @@ syncBehavior behav sink = do
 --
 -- Since older value does not exist on startup, sync is not performed then.
 syncBehaviorDiff :: Behavior a -> (a -> a -> IO ()) -> MomentIO ()
-syncBehaviorDiff behav sink = do
-  chEvent <- changes behav
-  reactimate' (sinkFuture <$> behav <@> chEvent)
-  where
-    sinkFuture old newFuture = sink old <$> newFuture
+syncBehaviorDiff behav sink = differences behav sink >>= reactimate'
 
 -- | Looping source from performing action with cleanup.
 loopSource :: IO a -> IO () -> IO (Source a)
