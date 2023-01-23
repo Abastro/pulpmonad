@@ -6,7 +6,6 @@ import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
-import Data.GI.Base.Signals
 import Data.Text qualified as T
 import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gtk.Objects.Label qualified as Gtk
@@ -16,32 +15,29 @@ import Reactive.Banana.Frameworks
 import Status.X11.WMStatus
 import Status.X11.XHandle
 import System.FilePath
-import System.Pulp.PulpEnv (MonadPulpPath (..))
+import System.Pulp.PulpPath
+import Control.Monad.IO.Unlift
 
 newtype LayoutArg = LayoutArg
   { layoutPrettyName :: T.Text -> T.Text
   }
 
 -- | Applet showing current window layout.
-layout :: (MonadXHand m, MonadPulpPath m) => LayoutArg -> m Gtk.Widget
-layout LayoutArg{..} = do
-  LayoutComm{..} <- runXHand layoutInitiate
-  layoutSrc <- liftIO $ taskToSource curLayout
-  uiFile <- pulpDataPath ("ui" </> "layout.ui")
-  View{..} <- liftIO $ view (T.pack uiFile)
+layout :: (MonadUnliftIO m, MonadXHand m) => LayoutArg -> m Gtk.Widget
+layout LayoutArg{..} = withRunInIO $ \unlift -> do
+  LayoutComm{..} <- unlift $ runXHand layoutInitiate
+  layoutSrc <- taskToSource curLayout
+  uiFile <- dataPath ("ui" </> "layout.ui")
+  View{..} <- view (T.pack uiFile)
   let onLayout layout = setLabel (layoutPrettyName layout)
 
-  network <- liftIO . compile $ do
+  network <- compile $ do
     clickEvent <- sourceEvent clicks
     layoutEvent <- sourceEvent layoutSrc
 
     reactimate (reqToLayout . clickReq <$> clickEvent)
     reactimate (Gtk.uiSingleRun . onLayout <$> layoutEvent)
-  liftIO $ actuate network
-
-  liftIO $ do
-    killLayout <- Gtk.uiTask curLayout $ \layout -> setLabel (layoutPrettyName layout)
-    on layoutWid #destroy killLayout
+  actuate network
 
   pure layoutWid
   where

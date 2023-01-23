@@ -104,6 +104,7 @@ library
     System.Applet.SysTray.Handle
     System.Applet.SysTray
 
+    System.Pulp.PulpPath
     System.Pulp.PulpEnv
     System.Pulp.PulpBar
 

@@ -55,13 +55,13 @@ buildFromFile uiFile act = do
   builder <- builderNewFromFile uiFile
   built <- runReaderT act builder
   -- Finalizes signal connection
-  builderConnectSignals builder nullPtr
+  #connectSignals builder nullPtr
   pure built
 
 -- | Adds callback to a signal.
 addCallback :: MonadIO m => T.Text -> IO () -> BuilderM m ()
 addCallback name act = ReaderT $ \builder -> do
-  builderAddCallbackSymbol builder name act
+  #addCallbackSymbol builder name act
 
 -- | Adds callback with event.
 --
@@ -75,5 +75,5 @@ addCallbackWithEvent name specify act = addCallback name $ void . runMaybeT $ do
 -- | Gets an element in GtkBuilder.
 getElement :: (GObject o, MonadIO m) => T.Text -> (ManagedPtr o -> o) -> BuilderM m (Maybe o)
 getElement name constr = ReaderT $ \builder -> runMaybeT $ do
-  obj <- MaybeT $ builderGetObject builder name
+  obj <- MaybeT $ #getObject builder name
   MaybeT . liftIO $ castTo constr obj
