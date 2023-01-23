@@ -14,7 +14,12 @@
       </object>
     </child>
     <child>
-      <object class="GtkBox" id="desktop-container">
+      <object class="GtkFlowBox" id="desktop-container">
+        <property name="orientation">1</property>
+        <property name="homogeneous">1</property>
+        <property name="max-children-per-line">1</property>
+        <property name="min-children-per-line">1</property>
+        <property name="selection-mode">0</property>
       </object>
     </child>
   </object>

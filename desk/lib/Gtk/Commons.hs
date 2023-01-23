@@ -7,6 +7,7 @@ module Gtk.Commons (
   module GI.Gtk.Constants,
   module GI.Gdk.Constants,
   module GI.Gtk.Objects.Widget,
+  withClassAs,
   BuilderM,
   buildFromFile,
   addCallback,
@@ -31,6 +32,11 @@ import GI.Gtk.Functions
 import GI.Gtk.Objects.Builder
 import GI.Gtk.Objects.Widget
 import GI.Gdk.Unions.Event
+import Data.GI.Base.GObject
+import Data.Coerce
+
+withClassAs :: (ManagedPtr a -> a) -> GObjectClass -> (a -> IO b) -> IO b
+withClassAs constr gClass act = withTransient (coerce gClass) (act . constr)
 
 -- | Monad with builder attached
 type BuilderM m = ReaderT Builder m

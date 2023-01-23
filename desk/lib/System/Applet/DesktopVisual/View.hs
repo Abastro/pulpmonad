@@ -20,14 +20,15 @@ import GI.Gdk.Structs.EventButton qualified as Gdk
 import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gtk.Objects.Box qualified as Gtk
+import GI.Gtk.Objects.FlowBox qualified as Gtk
 import GI.Gtk.Objects.Image qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
 import Gtk.Styles qualified as Gtk
+import Status.X11.WMStatus
 import System.FilePath
 import System.Pulp.PulpEnv
-import Status.X11.WMStatus
 
 widgetUpdateClass :: (Enum s, Bounded s, MonadIO m) => Gtk.Widget -> (s -> T.Text) -> [s] -> m ()
 widgetUpdateClass widget asClass state =
@@ -82,7 +83,13 @@ deskItemView = pulpDataPath ("ui" </> "desk-item.ui") >>= liftIO . view
     view uiFile = Gtk.buildFromFile (T.pack uiFile) $ do
       Just deskWidget <- Gtk.getElement (T.pack "desktop-item") Gtk.Widget
       Just deskLabel <- Gtk.getElement (T.pack "desktop-label") Gtk.Label
+      -- Just deskCo <- Gtk.getElement (T.pack "desktop-container") Gtk.FlowBox
       Just deskCont <- Gtk.getElement (T.pack "desktop-container") Gtk.Box
+
+      -- ListStore with my own objects?
+      -- Window view should not be created by desktop view.
+      -- Thus, having ListModel which creates widget does not make sense.
+      -- Extending window item widget (accessible by FlowBoxChild) it is (include order).
 
       let deskSetName name = set deskLabel [#label := name]
           deskSetVisible flag = if flag then #showAll deskWidget else #hide deskWidget
