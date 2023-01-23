@@ -11,10 +11,13 @@ import Data.GI.Base.BasicTypes
 import Data.GI.Base.GObject
 import Data.GI.Base.Overloading
 import Data.Text qualified as T
+import GI.Gio.Interfaces.File qualified as Gio
+import GI.Gio.Objects.Cancellable qualified as Gio
 import GI.Gtk.Objects.Button qualified as Gtk
 import GI.Gtk.Objects.Image qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
+import System.Pulp.PulpPath
 
 newtype WindowItemView = WindowItemView (ManagedPtr WindowItemView)
 
@@ -40,7 +43,10 @@ instance DerivedGObject WindowItemView where
 
   objectClassInit :: GObjectClass -> IO ()
   objectClassInit gClass = Gtk.withClassAs Gtk.WidgetClass gClass $ \widgetClass -> do
-    #setTemplate widgetClass undefined -- FIXME
+    uiFile <- Gio.fileNewForPath =<< dataPath ("ui" </> "desktop-visualizer" </> "window-item.ui")
+    (bytes, _) <- #loadBytes uiFile (Nothing @Gio.Cancellable)
+    #setTemplate widgetClass bytes
+
     -- Icon as an internal child
     #bindTemplateChildFull widgetClass (T.pack "window-item-icon") True 0
     -- Handling signal is sadly not supported for now.
