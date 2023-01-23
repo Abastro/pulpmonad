@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLabels #-}
+
 module Gtk.Commons (
   module GI.Gtk.Enums,
   module GI.Gdk.Enums,
@@ -7,6 +9,8 @@ module Gtk.Commons (
   module GI.Gtk.Constants,
   module GI.Gdk.Constants,
   module GI.Gtk.Objects.Widget,
+  withClassAs,
+  templateChild,
   BuilderM,
   buildFromFile,
   addCallback,
@@ -17,20 +21,31 @@ module Gtk.Commons (
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
+import Data.Coerce
 import Data.GI.Base.BasicTypes
+import Data.GI.Base.GObject
 import Data.GI.Base.ManagedPtr
 import Data.Text qualified as T
 import Foreign.Ptr (nullPtr)
 import GI.Gdk.Constants hiding (MAJOR_VERSION, MICRO_VERSION, MINOR_VERSION)
 import GI.Gdk.Enums hiding (AnotherWindowType, WindowType, WindowTypeToplevel)
 import GI.Gdk.Flags
+import GI.Gdk.Unions.Event
 import GI.Gtk.Constants hiding (MAJOR_VERSION, MICRO_VERSION, MINOR_VERSION)
 import GI.Gtk.Enums
 import GI.Gtk.Flags
 import GI.Gtk.Functions
 import GI.Gtk.Objects.Builder
 import GI.Gtk.Objects.Widget
-import GI.Gdk.Unions.Event
+
+withClassAs :: (ManagedPtr a -> a) -> GObjectClass -> (a -> IO b) -> IO b
+withClassAs constr gClass act = withTransient (coerce gClass) (act . constr)
+
+templateChild :: forall o. (GObject o) => Widget -> T.Text -> (ManagedPtr o -> o) -> IO o
+templateChild widget name constr = do
+  childType <- glibType @o
+  asObj <- #getTemplateChild widget childType name
+  unsafeCastTo constr asObj
 
 -- | Monad with builder attached
 type BuilderM m = ReaderT Builder m
