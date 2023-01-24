@@ -1,3 +1,4 @@
+{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE OverloadedLabels #-}
 
 module Gtk.Commons (
@@ -41,10 +42,13 @@ import GI.Gtk.Objects.Widget
 withClassAs :: (ManagedPtr a -> a) -> GObjectClass -> (a -> IO b) -> IO b
 withClassAs constr gClass act = withTransient (coerce gClass) (act . constr)
 
-templateChild :: forall o. (GObject o) => Widget -> T.Text -> (ManagedPtr o -> o) -> IO o
-templateChild widget name constr = do
-  childType <- glibType @o
-  asObj <- #getTemplateChild widget childType name
+-- | Obtains template child, only intended for private use.
+-- CAUTION: need to be called with exact type.
+templateChild :: forall p o. (IsWidget p, GObject o) => p -> T.Text -> (ManagedPtr o -> o) -> IO o
+templateChild parent name constr = do
+  parentType <- glibType @p
+  parentWid <- toWidget parent
+  asObj <- #getTemplateChild parentWid parentType name
   unsafeCastTo constr asObj
 
 -- | Monad with builder attached
