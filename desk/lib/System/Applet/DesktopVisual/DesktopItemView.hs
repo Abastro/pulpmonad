@@ -8,7 +8,6 @@ module System.Applet.DesktopVisual.DesktopItemView () where
 import Data.GI.Base.BasicTypes
 import Data.GI.Base.GObject
 import Data.GI.Base.Overloading
-import Data.GI.Gtk qualified as Gtk
 import Data.Text qualified as T
 import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Objects.FlowBox qualified as Gtk
@@ -18,6 +17,8 @@ import GHC.OverloadedLabels
 import qualified GI.Gio.Interfaces.File as Gio
 import System.Pulp.PulpPath
 import qualified GI.Gio as Gio
+import qualified GI.Gtk.Objects.Container as Gtk
+import qualified GI.Gtk.Structs.WidgetClass as Gtk
 
 -- Thin wrapper around the template for desktop item
 newtype DesktopItemView = DesktopItemView (ManagedPtr DesktopItemView)
