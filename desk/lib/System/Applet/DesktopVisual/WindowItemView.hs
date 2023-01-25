@@ -7,7 +7,8 @@ module System.Applet.DesktopVisual.WindowItemView (
   WindowItemView (..),
   getPriority,
   setPriority,
-  windowSetIcon,
+  windowSetGIcon,
+  windowSetRawIcons,
   windowClickAct,
 ) where
 
@@ -25,7 +26,8 @@ import GI.Gtk.Objects.Image qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import System.Pulp.PulpPath
-import View.Imagery
+import qualified Gtk.Pixbufs as Gtk
+import qualified GI.Gio.Interfaces.Icon as Gio
 
 -- MAYBE Use image internal to the button
 -- Essentially, a button with priority. Select in CSS by "button.windowitem".
@@ -101,13 +103,17 @@ getPriority window = priority <$> gobjectGetPrivateData window
 setPriority :: WindowItemView -> Int -> IO ()
 setPriority window priority = gobjectModifyPrivateData window $ \dat -> dat{priority}
 
-windowSetIcon :: WindowItemView -> ImageSet -> IO ()
-windowSetIcon window iconSet = do
+windowSetGIcon :: WindowItemView -> Gio.Icon -> IO ()
+windowSetGIcon window gic = do
   WindowItemPrivate{windowIcon} <- gobjectGetPrivateData window
-  case iconSet of
-    ImgSName name -> set windowIcon [#iconName := name]
-    ImgSGIcon gic -> set windowIcon [#gicon := gic]
-    ImgSPixbuf pbuf -> set windowIcon [#pixbuf := pbuf]
+  set windowIcon [#gicon := gic]
+
+windowSetRawIcons :: WindowItemView -> [Gtk.RawIcon] -> IO ()
+windowSetRawIcons window icons = do
+  WindowItemPrivate{windowIcon} <- gobjectGetPrivateData window
+  Gtk.iconsChoosePixbuf (Gtk.iconSizePx Gtk.IconSizeLargeToolbar) Gtk.argbTorgba icons >>= \case
+    Just scaled -> set windowIcon [#pixbuf := scaled]
+    Nothing -> set windowIcon [#iconName := T.pack "image-missing"]
 
 windowClickAct :: WindowItemView -> IO () -> IO ()
 windowClickAct window act = do

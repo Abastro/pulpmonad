@@ -126,14 +126,15 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
         removeOldWin _window WinItemHandle{itemWindowDestroy} = do
           False <$ liftIO itemWindowDestroy
 
-        addNewWin window () = withRunInIO $ \unlift -> trackWinInfo window >>= \case
-          Just winRcvs -> do
-            winItemView <- Glib.new View.WindowItemView []
-            View.windowClickAct winItemView $ reqActivate window
-            let getIcon = winGetIcon window
-            let switcher item x y = unlift (winSwitch window item x y)
-            unlift $ Just <$> winItemMake winSetup appCol getIcon switcher winRcvs winItemView
-          Nothing -> pure Nothing
+        addNewWin window () = withRunInIO $ \unlift ->
+          trackWinInfo window >>= \case
+            Just winRcvs -> do
+              winItemView <- Glib.new View.WindowItemView []
+              View.windowClickAct winItemView $ reqActivate window
+              let getIcon = winGetIcon window
+              let switcher item x y = unlift (winSwitch window item x y)
+              unlift $ Just <$> winItemMake winSetup appCol getIcon switcher winRcvs winItemView
+            Nothing -> pure Nothing
 
         updateWinList :: (MonadUnliftIO m, MonadLog m) => V.Vector Window -> m ()
         updateWinList windows = withRunInIO $ \unlift -> do
@@ -261,8 +262,16 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
           when (diff > 1) $ do
             Gtk.widgetSetTooltipText view (Just windowTitle)
             -- TODO When the icon is decided by X property,
-            -- receive updates solely from that property
-            (unlift . runMaybeT) (imgIcon winInfo) >>= View.winItemSetIcon view getXIcon
+            -- receive updates solely from that property (Forgot, does it mean getXIcon?)
+            (unlift . runMaybeT) (imgIcon winInfo) >>= \case
+              Just gicon -> View.windowSetGIcon view gicon
+              Nothing -> do
+                rawIcons <- getXIcon >>= \case
+                  Left err -> unlift $ do
+                    -- MAYBE Window id?
+                    [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
+                  Right icons -> pure icons
+                View.windowSetRawIcons view rawIcons
             View.widgetUpdateClass view windowCssClass (S.toList windowState)
 
 {-------------------------------------------------------------------
