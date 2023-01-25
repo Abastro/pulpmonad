@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk+" version="3.20" />
+  <template class="DesktopItemView" parent="GtkBox">
+    <child>
+      <object class="GtkLabel" id="desktop-label">
+        <style>
+          <class name="desktop-label"/>
+        </style>
+      </object>
+    </child>
+    <child>
+      <object class="GtkFlowBox" id="desktop-container">
+        <property name="orientation">1</property>
+        <property name="homogeneous">1</property>
+        <property name="max-children-per-line">1</property>
+        <property name="min-children-per-line">1</property>
+        <property name="selection-mode">0</property>
+      </object>
+    </child>  </template>
+</interface>

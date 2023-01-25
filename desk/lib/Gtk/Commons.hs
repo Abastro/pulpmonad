@@ -11,6 +11,7 @@ module Gtk.Commons (
   module GI.Gdk.Constants,
   module GI.Gtk.Objects.Widget,
   withClassAs,
+  setTemplateFromGFile,
   templateChild,
   BuilderM,
   buildFromFile,
@@ -32,15 +33,23 @@ import GI.Gdk.Constants hiding (MAJOR_VERSION, MICRO_VERSION, MINOR_VERSION)
 import GI.Gdk.Enums hiding (AnotherWindowType, WindowType, WindowTypeToplevel)
 import GI.Gdk.Flags
 import GI.Gdk.Unions.Event
+import GI.Gio.Interfaces.File qualified as Gio
+import GI.Gio.Objects.Cancellable qualified as Gio
 import GI.Gtk.Constants hiding (MAJOR_VERSION, MICRO_VERSION, MINOR_VERSION)
 import GI.Gtk.Enums
 import GI.Gtk.Flags
 import GI.Gtk.Functions
 import GI.Gtk.Objects.Builder
 import GI.Gtk.Objects.Widget
+import GI.Gtk.Structs.WidgetClass
 
 withClassAs :: (ManagedPtr a -> a) -> GObjectClass -> (a -> IO b) -> IO b
 withClassAs constr gClass act = withTransient (coerce gClass) (act . constr)
+
+setTemplateFromGFile :: WidgetClass -> Gio.File -> IO ()
+setTemplateFromGFile widgetClass file = do
+  (bytes, _) <- #loadBytes file (Nothing @Gio.Cancellable)
+  #setTemplate widgetClass bytes
 
 -- | Obtains template child, only intended for private use.
 -- CAUTION: need to be called with exact type.

@@ -25,14 +25,14 @@ import GI.Cairo.Render qualified as C
 import GI.Cairo.Render.Connector qualified as C
 import GI.Cairo.Structs.Context qualified as C
 import GI.Gdk.Functions qualified as Gdk
+import GI.Gio.Interfaces.File qualified as Gio
+import GI.Gio.Objects.Cancellable qualified as Gio
 import GI.Gtk.Objects.Bin
 import GI.Gtk.Objects.Image
 import GI.Gtk.Structs.WidgetClass
 import Graphics.X11.Xlib.Types (Rectangle (..))
 import Gtk.Commons
-import qualified GI.Gio.Interfaces.File as Gio
 import System.Pulp.PulpPath
-import qualified GI.Gio.Objects.Cancellable as Gio
 
 -- MAYBE Figure out how to attach label for attributes. This is not crucial, though.
 
