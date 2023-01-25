@@ -95,6 +95,8 @@ library
     System.Applet.WMCtrl
     System.Applet.Volume
 
+    System.Applet.DesktopVisual.WindowItemView
+    System.Applet.DesktopVisual.DesktopItemView
     System.Applet.DesktopVisual.View
     System.Applet.DesktopVisual.Handle
     System.Applet.DesktopVisual

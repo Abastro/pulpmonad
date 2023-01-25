@@ -26,7 +26,6 @@ import GI.Cairo.Render.Connector qualified as C
 import GI.Cairo.Structs.Context qualified as C
 import GI.Gdk.Functions qualified as Gdk
 import GI.Gio.Interfaces.File qualified as Gio
-import GI.Gio.Objects.Cancellable qualified as Gio
 import GI.Gtk.Objects.Bin
 import GI.Gtk.Objects.Image
 import GI.Gtk.Structs.WidgetClass
@@ -86,8 +85,8 @@ instance DerivedGObject ImageBar where
 imageBarClassInit :: GObjectClass -> IO ()
 imageBarClassInit gClass = withClassAs WidgetClass gClass $ \widgetClass -> do
   uiFile <- Gio.fileNewForPath =<< dataPath ("ui" </> "image-bar.ui")
-  (bytes, _) <- #loadBytes uiFile (Nothing @Gio.Cancellable)
-  #setTemplate widgetClass bytes
+  setTemplateFromGFile widgetClass uiFile
+
   #bindTemplateChildFull widgetClass (T.pack "bar-foreground") True 0
 
   -- As GObject
