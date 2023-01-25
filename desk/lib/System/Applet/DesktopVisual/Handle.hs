@@ -76,10 +76,10 @@ deskVisualizer ::
   m Gtk.Widget
 deskVisualizer deskSetup winSetup = do
   rcvs <- runXHand deskVisInitiate
-  deskVisualView <- View.deskVisualNew
+  deskVisualView <- Glib.new View.DesktopVisual []
   DeskVisHandle <- deskVisMake rcvs (deskSetup, winSetup) deskVisualView
 
-  pure $ View.deskVisualWidget deskVisualView
+  Gtk.toWidget deskVisualView
 
 -- Currently handle is empty, because no external handling is permitted.
 data DeskVisHandle = DeskVisHandle
@@ -90,7 +90,7 @@ deskVisMake ::
   (MonadUnliftIO m, MonadLog m) =>
   DeskVisRcvs ->
   (DesktopSetup, WindowSetup) ->
-  View.DeskVisual ->
+  View.DesktopVisual ->
   m DeskVisHandle
 deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -> do
   act <- registers <$> trackAppInfo <*> newIORef V.empty <*> newIORef M.empty <*> newIORef Nothing
@@ -100,7 +100,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
       killStat <- Gtk.uiTask desktopStats (unlift . updateDeskStats)
       killWinCh <- Gtk.uiTask windowsList (unlift . updateWinList)
       killActiv <- Gtk.uiTask windowActive (unlift . changeActivate)
-      _ <- Gtk.onWidgetDestroy (View.deskVisualWidget view) (killStat >> killWinCh >> killActiv)
+      _ <- Gtk.onWidgetDestroy view (killStat >> killWinCh >> killActiv)
       pure DeskVisHandle
       where
         updateDeskStats :: (MonadUnliftIO m, MonadLog m) => V.Vector DesktopStat -> m ()
@@ -108,7 +108,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           -- Cut down to available desktops
           let numDesk = V.length newStats
           modifyIORef' desksRef (V.take numDesk)
-          View.deskVisualCtrl view (View.CutDeskItemsTo numDesk)
+          View.cutDesktopToCount view numDesk
 
           -- Add additional available desktops
           oldNum <- V.length <$> readIORef desksRef
@@ -117,7 +117,7 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
             View.desktopClickAct deskItemView $ reqToDesktop idx
             (deskItemView,) <$> unlift (deskItemMake deskSetup stat deskItemView)
           modifyIORef' desksRef (<> fmap snd addeds)
-          View.deskVisualCtrl view (View.AddDeskItems $ fmap fst addeds)
+          View.addDesktops view (fst <$> addeds)
 
           -- Update all desktops
           deskItems <- readIORef desksRef

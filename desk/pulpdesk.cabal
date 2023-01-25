@@ -97,6 +97,7 @@ library
 
     System.Applet.DesktopVisual.WindowItemView
     System.Applet.DesktopVisual.DesktopItemView
+    System.Applet.DesktopVisual.DesktopVisual
     System.Applet.DesktopVisual.View
     System.Applet.DesktopVisual.Handle
     System.Applet.DesktopVisual
