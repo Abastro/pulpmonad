@@ -55,50 +55,54 @@ separator {
 
 /* Desktop Visualizer Widget */
 
-.desk-visual {
+desktopvisualizer {
 	margin: 2px;
 }
 
 /* TODO Padding */
-.desktop-item {
+desktopitem {
 	transition: background-color .5s;
 	border-radius: 5px;
 }
 
-.desktop-item box {
+desktopitem box {
 	padding-left: 1px;
 	padding-right: 1px;
 }
 
-.desktop-item.active {
+desktopitem.active {
 	background-color: rgba(0, 0, 0, 0.8);
 }
 
-.desktop-item.visible {
+desktopitem.visible {
 	background-color: rgba(0, 0, 0, 0.5);
 }
 
-.desktop-label {
+desktopitem flowboxchild {
+	padding: 0px;
+}
+
+desktopitem label {
 	margin-left: 4px;
-	margin-right: 2px;
+	margin-right: 4px;
 	font-family: "Font Awesome 6 Free Solid", sans-serif;
 	font-size: 10pt;
 }
 
-.window-item {
+button.windowitem {
 	transition: opacity .5s, box-shadow .5s;
 	opacity: 1;
 }
 
-.window-item.active {
+button.windowitem.active {
 	box-shadow: inset 0 -2px #ffffff;
 }
 
-.window-item.demanding {
+button.windowitem.demanding {
 	box-shadow: inset 0 -2px #0c7cd5;
 }
 
-.window-item.hidden {
+button.windowitem.hidden {
 	opacity: .3;
 }
 
@@ -175,40 +179,40 @@ imagebar#cpu {
 
 /* System Ctrl */
 #pulp-sysctl {
-  padding: 10px 15px;
-  border: 10px inset rgba(40, 16, 56, 0.7);
-  border-radius: 20px;
-  background-color: rgba(84, 56, 108, 0.7);
+	padding: 10px 15px;
+	border: 10px inset rgba(40, 16, 56, 0.7);
+	border-radius: 20px;
+	background-color: rgba(84, 56, 108, 0.7);
 }
 
 #pulp-sysctl button {
-  background-image: none;
-  border-width: 3px;
-  border-radius: 30px;
+	background-image: none;
+	border-width: 3px;
+	border-radius: 30px;
 }
 
 #pulp-sysctl button:focus {
-  box-shadow: inset 0 -6px rgba(200, 200, 200, 0.5);
+	box-shadow: inset 0 -6px rgba(200, 200, 200, 0.5);
 }
 
 #pulp-sysctl button.btn-sys {
-  border-color: rgb(100, 80, 120);
-  background-color: rgb(120, 100, 140);
+	border-color: rgb(100, 80, 120);
+	background-color: rgb(120, 100, 140);
 }
 
 #pulp-sysctl button.btn-logout {
-  border-color: rgb(140, 120, 60);
-  background-color: rgb(160, 140, 90);
+	border-color: rgb(140, 120, 60);
+	background-color: rgb(160, 140, 90);
 }
 
 #pulp-sysctl button.btn-reboot {
-  border-color: rgb(80, 105, 80);
-  background-color: rgb(100, 125, 100);
+	border-color: rgb(80, 105, 80);
+	background-color: rgb(100, 125, 100);
 }
 
 #pulp-sysctl button.btn-poweroff {
-  border-color: rgb(120, 60, 60);
-  background-color: rgb(160, 80, 80);
+	border-color: rgb(120, 60, 60);
+	background-color: rgb(160, 80, 80);
 }
 
 /* WM Ctrl */

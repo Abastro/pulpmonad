@@ -18,7 +18,6 @@ import Control.Monad.Trans.Maybe
 import Data.Bifunctor (first)
 import Data.Foldable
 import Data.IORef
-import Data.List
 import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Maybe
@@ -39,25 +38,10 @@ import Reactive.Banana.Frameworks
 import Status.AppInfos
 import Status.X11.WMStatus
 import Status.X11.XHandle
-import System.Applet.DesktopVisual.View qualified as View
+import System.Applet.DesktopVisual.DesktopItemView qualified as View
+import System.Applet.DesktopVisual.DesktopVisual qualified as View
+import System.Applet.DesktopVisual.WindowItemView qualified as View
 import System.Log.LogPrint
-import System.Pulp.PulpEnv
-
-deskCssClass :: DesktopState -> T.Text
-deskCssClass = \case
-  DeskActive -> T.pack "active"
-  DeskVisible -> T.pack "visible"
-  DeskHidden -> T.pack "hidden"
-
--- Okay, I know, but I cannot resist
-winActiveCssClass :: () -> T.Text
-winActiveCssClass = \case
-  () -> T.pack "active"
-
-windowCssClass :: WMStateEx -> T.Text
-windowCssClass = \case
-  WinHidden -> T.pack "hidden"
-  WinDemandAttention -> T.pack "demanding"
 
 type NumWindows = Word
 
@@ -70,10 +54,9 @@ data DesktopSetup = DesktopSetup
   }
 
 -- | Window part of the setup.
-data WindowSetup = WindowSetup
+newtype WindowSetup = WindowSetup
   { windowImgIcon :: WindowInfo -> MaybeT IO Gio.Icon
   -- ^ With which icon the window is going to set to.
-  , windowIconSize :: Gtk.IconSize
   }
 
 deskVisualizer ::
@@ -215,10 +198,10 @@ deskVisualizer ::
   m Gtk.Widget
 deskVisualizer deskSetup winSetup = do
   rcvs <- runXHand deskVisInitiate
-  deskVisualView <- View.deskVisualNew
+  deskVisualView <- Glib.new View.DesktopVisual []
   DeskVisHandle <- deskVisMake rcvs (deskSetup, winSetup) deskVisualView
 
-  pure $ View.deskVisualWidget deskVisualView
+  Gtk.toWidget deskVisualView
 
 -- Currently handle is empty, because no external handling is permitted.
 data DeskVisHandle = DeskVisHandle
@@ -229,18 +212,17 @@ deskVisMake ::
   (MonadUnliftIO m, MonadLog m) =>
   DeskVisRcvs ->
   (DesktopSetup, WindowSetup) ->
-  View.DeskVisual ->
+  View.DesktopVisual ->
   m DeskVisHandle
 deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -> do
-  act <- registers <$> trackAppInfo <*> newIORef V.empty <*> newIORef M.empty <*> newIORef M.empty <*> newIORef Nothing
+  act <- registers <$> trackAppInfo <*> newIORef V.empty <*> newIORef M.empty <*> newIORef Nothing
   unlift act
   where
-    WindowSetup{windowIconSize} = winSetup
-    registers appCol desksRef winsRef ordersRef activeRef = withRunInIO $ \unlift -> do
+    registers appCol desksRef winsRef activeRef = withRunInIO $ \unlift -> do
       killStat <- Gtk.uiTask desktopStats (unlift . updateDeskStats)
       killWinCh <- Gtk.uiTask windowsList (unlift . updateWinList)
       killActiv <- Gtk.uiTask windowActive (unlift . changeActivate)
-      _ <- Gtk.onWidgetDestroy (View.deskVisualWidget view) (killStat >> killWinCh >> killActiv)
+      _ <- Gtk.onWidgetDestroy view (killStat >> killWinCh >> killActiv)
       pure DeskVisHandle
       where
         updateDeskStats :: (MonadUnliftIO m, MonadLog m) => V.Vector DesktopStat -> m ()
@@ -248,15 +230,16 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
           -- Cut down to available desktops
           let numDesk = V.length newStats
           modifyIORef' desksRef (V.take numDesk)
-          View.deskVisualCtrl view (View.CutDeskItemsTo numDesk)
+          View.cutDesktopToCount view numDesk
 
           -- Add additional available desktops
           oldNum <- V.length <$> readIORef desksRef
           addeds <- for (V.drop oldNum $ V.indexed newStats) $ \(idx, stat) -> do
-            deskItemView <- View.deskItemNew $ reqToDesktop idx
+            deskItemView <- Glib.new View.DesktopItemView []
+            View.desktopClickAct deskItemView $ reqToDesktop idx
             (deskItemView,) <$> unlift (deskItemMake deskSetup stat deskItemView)
           modifyIORef' desksRef (<> fmap snd addeds)
-          View.deskVisualCtrl view (View.AddDeskItems $ fmap fst addeds)
+          View.addDesktops view (fst <$> addeds)
 
           -- Update all desktops
           deskItems <- readIORef desksRef
@@ -265,12 +248,15 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
         removeOldWin _window WinItemHandle{itemWindowDestroy} = do
           False <$ liftIO itemWindowDestroy
 
-        addNewWin window () = withRunInIO $ \unlift -> runMaybeT $ do
-          winRcvs <- MaybeT $ trackWinInfo window
-          winItemView <- View.winItemNew windowIconSize $ reqActivate window
-          let getIcon = winGetIcon window
-          let switcher item x y = unlift (winSwitch window item x y)
-          liftIO . unlift $ winItemMake winSetup appCol getIcon switcher winRcvs winItemView
+        addNewWin window () = withRunInIO $ \unlift ->
+          trackWinInfo window >>= \case
+            Just winRcvs -> do
+              winItemView <- Glib.new View.WindowItemView []
+              View.windowClickAct winItemView $ reqActivate window
+              let getIcon = winGetIcon window
+              let switcher item x y = unlift (winSwitch window item x y)
+              unlift $ Just <$> winItemMake winSetup appCol getIcon switcher winRcvs winItemView
+            Nothing -> pure Nothing
 
         updateWinList :: (MonadUnliftIO m, MonadLog m) => V.Vector Window -> m ()
         updateWinList windows = withRunInIO $ \unlift -> do
@@ -287,83 +273,78 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
                 newWinMap
           writeIORef winsRef updWinMap
 
-          -- Reorder windows appropriately
-          let newOrder = M.fromList (V.toList windows `zip` [0 ..])
-          writeIORef ordersRef newOrder
+          -- Apply window order through priority
+          let newPriority = M.fromList (V.toList windows `zip` [0 ..])
           curWins <- readIORef winsRef
           desktops <- readIORef desksRef
-          for_ desktops $ \DeskItemHandle{reorderWinItems} -> reorderWinItems (newOrder M.!?) (curWins M.!?)
+          for_ (M.toList curWins) $ \(window, WinItemHandle{itemWindowView}) -> do
+            View.setPriority itemWindowView (newPriority M.! window)
+          for_ desktops $ \DeskItemHandle{reorderWinItems} -> reorderWinItems
 
         changeActivate :: (MonadUnliftIO m, MonadLog m) => Maybe Window -> m ()
         changeActivate nextActive = withRunInIO $ \_unlift -> do
           windows <- readIORef winsRef
           prevActive <- atomicModifyIORef' activeRef (nextActive,)
-          -- Little hack
           for_ (prevActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
-            View.widgetUpdateClass (View.winItemWidget itemWindowView) winActiveCssClass []
+            View.windowSetActivate itemWindowView False
           for_ (nextActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
-            View.widgetUpdateClass (View.winItemWidget itemWindowView) winActiveCssClass [()]
+            View.windowSetActivate itemWindowView True
 
-        winSwitch :: (MonadUnliftIO m, MonadLog m) => Window -> View.WinItem -> Int -> Int -> m ()
+        winSwitch :: (MonadUnliftIO m, MonadLog m) => Window -> View.WindowItemView -> Int -> Int -> m ()
         winSwitch windowId winView deskOld deskNew = withRunInIO $ \unlift -> do
           unlift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "[$1] desktop $2 -> $3" windowId deskOld deskNew
           desktops <- readIORef desksRef
-          curOrders <- readIORef ordersRef
           -- Out of bounds: was already removed, no need to care
           for_ (desktops V.!? deskOld) $ \DeskItemHandle{addRmWinItem} -> do
-            addRmWinItem winView windowId WinRemove
+            addRmWinItem winView WinRemove
           -- For now, let's not care about out of bounds from new windows.
           -- That is likely a sync issue, so it needs proper logging later.
           for_ (desktops V.!? deskNew) $ \DeskItemHandle{addRmWinItem} -> do
-            addRmWinItem winView windowId (WinAdd (curOrders M.!?))
+            addRmWinItem winView WinAdd
 
--- WinAdd parameter is for ordering
-data DeskWinMod = WinRemove | WinAdd (Window -> Maybe Int)
+data DeskWinMod = WinRemove | WinAdd
 data DeskItemHandle = DeskItemHandle
   { updateDeskItem :: DesktopStat -> IO ()
-  , addRmWinItem :: View.WinItem -> Window -> DeskWinMod -> IO ()
-  , reorderWinItems :: (Window -> Maybe Int) -> (Window -> Maybe WinItemHandle) -> IO ()
+  , addRmWinItem :: View.WindowItemView -> DeskWinMod -> IO ()
+  , reorderWinItems :: IO ()
   }
 
-deskItemMake :: MonadIO m => DesktopSetup -> DesktopStat -> View.DeskItem -> m DeskItemHandle
+deskItemMake :: MonadIO m => DesktopSetup -> DesktopStat -> View.DesktopItemView -> m DeskItemHandle
 deskItemMake DesktopSetup{..} initStat view = liftIO $ do
-  creates <$> newIORef initStat <*> newIORef V.empty
+  creates <$> newIORef initStat <*> newIORef 0
   where
-    creates statRef curWindows = DeskItemHandle{..}
+    creates statRef numWindows = DeskItemHandle{..}
       where
         updateDeskItem deskStat@DesktopStat{..} = do
-          View.deskItemCtrl view (View.DeskLabelName $ desktopLabeling desktopName)
-          View.widgetUpdateClass (View.deskItemWidget view) deskCssClass [desktopState]
+          View.desktopSetLabel view (desktopLabeling desktopName)
+          View.desktopSetState view (viewState desktopState)
           writeIORef statRef deskStat
-          updateVisible curWindows
+          updateVisible
 
-        addRmWinItem winView windowId = \case
+        addRmWinItem winView = \case
           WinRemove -> do
-            View.deskItemCtrl view (View.RemoveWinItem winView)
-            modifyIORef' curWindows (V.filter (/= windowId))
-            updateVisible curWindows
-          WinAdd curOrd -> do
-            (prev, next) <- V.span (\w -> curOrd w < curOrd windowId) <$> readIORef curWindows
-            writeIORef curWindows (prev <> V.singleton windowId <> next)
-            View.deskItemCtrl view (View.AddWinItemAt winView $ V.length prev)
-            updateVisible curWindows
+            View.removeWindow view winView
+            modifyIORef' numWindows pred
+            updateVisible
+          WinAdd -> do
+            View.insertWindow view winView
+            modifyIORef' numWindows succ
+            updateVisible
 
-        reorderWinItems newOrd getHandle = do
-          olds <- readIORef curWindows
-          let news = V.fromList . sortOn newOrd . V.toList $ olds
-          when (news /= olds) $ do
-            writeIORef curWindows news
-            let newViewOrd =
-                  (\WinItemHandle{itemWindowView} -> itemWindowView) <$> V.mapMaybe getHandle news
-            View.deskItemCtrl view (View.ReorderWinItems newViewOrd)
+        reorderWinItems = View.reflectPriority view
 
-        updateVisible curWindows = do
+        updateVisible = do
           deskStat <- readIORef statRef
-          numWindows <- fromIntegral . V.length <$> readIORef curWindows
-          View.deskItemCtrl view (View.DeskVisibility $ showDesktop deskStat numWindows)
+          numWindows <- readIORef numWindows
+          View.desktopSetVisible view (showDesktop deskStat numWindows)
+        
+        viewState = \case
+          DeskActive -> View.DesktopActive
+          DeskVisible -> View.DesktopVisible
+          DeskHidden -> View.DesktopHidden
 
 data WinItemHandle = WinItemHandle
-  { itemWindowView :: View.WinItem -- As window can move around, its view should be separately owned.
+  { itemWindowView :: View.WindowItemView -- As window can move around, its view should be separately owned.
   , itemWindowDestroy :: IO ()
   }
 
@@ -372,9 +353,9 @@ winItemMake ::
   WindowSetup ->
   AppInfoCol ->
   GetXIcon ->
-  (View.WinItem -> Int -> Int -> IO ()) ->
+  (View.WindowItemView -> Int -> Int -> IO ()) ->
   PerWinRcvs ->
-  View.WinItem ->
+  View.WindowItemView ->
   m WinItemHandle
 winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withRunInIO $ \unlift -> do
   -- (-1) is never a valid desktop (means the window is omnipresent)
@@ -394,7 +375,7 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
           freeAct -- Stop receiving updates
           changeDesktop (-1) -- Frees from desktops
           -- Release the object (replacing widgetDestroy)
-          Glib.releaseObject (View.winItemWidget view)
+          Glib.releaseObject view
 
         changeDesktop newDesk = do
           oldDesk <- atomicModifyIORef' curDeskRef (newDesk,)
@@ -405,11 +386,24 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
           updTime <- getPOSIXTime
           diff <- atomicModifyIORef' lastUpRef $ \oldTime -> (updTime, updTime - oldTime)
           when (diff > 1) $ do
-            View.winItemSetTitle view windowTitle
+            Gtk.widgetSetTooltipText view (Just windowTitle)
             -- TODO When the icon is decided by X property,
-            -- receive updates solely from that property
-            (unlift . runMaybeT) (imgIcon winInfo) >>= View.winItemSetIcon view getXIcon
-            View.widgetUpdateClass (View.winItemWidget view) windowCssClass (S.toList windowState)
+            -- receive updates solely from that property (Forgot, does it mean getXIcon?)
+            (unlift . runMaybeT) (imgIcon winInfo) >>= \case
+              Just gicon -> View.windowSetGIcon view gicon
+              Nothing -> do
+                rawIcons <-
+                  getXIcon >>= \case
+                    Left err -> unlift $ do
+                      -- MAYBE Window id?
+                      [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
+                    Right icons -> pure icons
+                View.windowSetRawIcons view rawIcons
+            View.windowSetStates view (map viewState $ S.toList windowState)
+        
+        viewState = \case
+          WinHidden -> View.WindowHidden
+          WinDemandAttention -> View.WindowDemanding
 -}
 
 {-------------------------------------------------------------------

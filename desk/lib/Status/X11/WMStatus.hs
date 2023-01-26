@@ -172,7 +172,7 @@ data DesktopState
     DeskVisible
   | -- | Other hidden desktops
     DeskHidden
-  deriving (Eq, Ord, Enum, Bounded)
+  deriving (Eq, Ord)
 
 -- | Desktop status for each desktop.
 data DesktopStat = DesktopStat
@@ -250,7 +250,7 @@ reqActiveWindow flag = do
 
 -- | Inclusive states of the window.
 data WMStateEx = WinHidden | WinDemandAttention
-  deriving (Eq, Ord, Enum, Bounded)
+  deriving (Eq, Ord)
 
 -- TODO WM_CLASS must be [instance name, class name]
 

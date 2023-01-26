@@ -49,7 +49,6 @@ common pulp-gtk
     , gi-gdk ==3.*
     , gi-gdkpixbuf ==2.0.*
     , gi-gdkx11 ==3.*
-    , gi-gtk-hs ==0.3.*
     , gi-cairo ==1.0.*
     , gi-cairo-render ==0.1.*
     , gi-cairo-connector ==0.1.*
@@ -84,8 +83,6 @@ library
     Gtk.Window
     Gtk.Application
     Gtk.ImageBar
-    View.Imagery
-    View.Boxes
 
     System.Log.LogPrint
 
@@ -96,14 +93,18 @@ library
     System.Applet.WMCtrl
     System.Applet.Volume
 
-    System.Applet.DesktopVisual.View
+    System.Applet.DesktopVisual.WindowItemView
+    System.Applet.DesktopVisual.DesktopItemView
+    System.Applet.DesktopVisual.DesktopVisual
     System.Applet.DesktopVisual.Handle
     System.Applet.DesktopVisual
 
-    System.Applet.SysTray.View
+    System.Applet.SysTray.TrayItemView
+    System.Applet.SysTray.SystemTrayView
     System.Applet.SysTray.Handle
     System.Applet.SysTray
 
+    System.Pulp.PulpPath
     System.Pulp.PulpEnv
     System.Pulp.PulpBar
 

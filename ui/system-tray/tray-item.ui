@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk+" version="3.20" />
+  <template class="TrayItemView" parent="GtkEventBox">
+    <child>
+      <object class="GtkOverlay">
+        <child>
+          <object class="GtkImage" id="tray-icon">
+            <property name="icon-size">3</property>
+          </object>
+        </child>
+        <child type="overlay">
+          <object class="GtkImage" id="tray-overlay">
+            <property name="icon-size">3</property>
+          </object>
+          <packing>
+            <property name="pass-through">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>

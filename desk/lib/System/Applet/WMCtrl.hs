@@ -6,7 +6,6 @@ import Control.Concurrent
 import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Exception
-import Control.Monad.IO.Class
 import Data.Function hiding (on)
 import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
@@ -26,19 +25,20 @@ import Status.X11.XHandle
 import System.FilePath
 import System.IO
 import System.Process
-import System.Pulp.PulpEnv
 import XMonad.Util.Run (safeSpawn)
+import System.Pulp.PulpPath
+import Control.Monad.IO.Unlift
 
 -- | Window manager control button.
 -- Shows the system control dialog.
-wmCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
-wmCtrlBtn parent = do
-  watch <- runXHand wmCtrlListen
-  callSrc <- liftIO $ taskToSource watch
-  uiFile <- pulpDataPath ("ui" </> "wmctl.ui")
-  View{..} <- liftIO $ view (T.pack uiFile) parent
+wmCtrlBtn :: (MonadUnliftIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
+wmCtrlBtn parent = withRunInIO $ \unlift -> do
+  watch <- unlift $ runXHand wmCtrlListen
+  callSrc <- taskToSource watch
+  uiFile <- dataPath ("ui" </> "wmctl.ui")
+  View{..} <- view (T.pack uiFile) parent
 
-  network <- liftIO . compile $ do
+  network <- compile $ do
     callEvent <- sourceEvent callSrc
     buildEvent <- sourceEvent toBuild
     refreshEvent <- sourceEvent toRefresh
@@ -52,7 +52,7 @@ wmCtrlBtn parent = do
     buildTxt <- switchB mempty $ snd <$> builds
     syncBehavior tab $ Gtk.uiSingleRun . setTab
     syncBehavior buildTxt $ Gtk.uiSingleRun . setBuildText
-  liftIO $ actuate network -- Not concurrent, "actuate" call only sets a variable
+  actuate network -- Not concurrent, "actuate" call only sets a variable
 
   pure ctrlButton
   where

@@ -15,10 +15,10 @@ import Gtk.Task qualified as Gtk
 import Reactive.Banana.Frameworks
 import Status.AudioStatus
 import System.FilePath
-import System.Pulp.PulpEnv
 import XMonad.Util.Run
 import Control.Monad
 import qualified GI.Gdk.Structs.EventButton as Gdk
+import System.Pulp.PulpPath
 
 data VolumeLevel = Muted | VolLow | VolMid | VolHigh
   deriving (Eq, Ord, Enum, Bounded)
@@ -41,12 +41,12 @@ volIconName = \case
 -- TODO Warn when "Nothing" is received (proper logging)
 
 -- | Volume display. First argument is mixer name, second is control name.
-volumeDisplay :: (MonadIO m, MonadPulpPath m) => String -> String -> m Gtk.Widget
-volumeDisplay mixerName controlName = do
-  uiFile <- pulpDataPath ("ui" </> "volume.ui")
-  View{..} <- liftIO $ view (T.pack uiFile)
+volumeDisplay :: (MonadIO m) => String -> String -> m Gtk.Widget
+volumeDisplay mixerName controlName = liftIO $ do
+  uiFile <- dataPath ("ui" </> "volume.ui")
+  View{..} <- view (T.pack uiFile)
 
-  network <- liftIO . compile $ do
+  network <- compile $ do
     ticker <- liftIO (periodicSource 200) >>= sourceEvent
     clickEvent <- sourceEvent clicks
     scrollEvent <- sourceEvent scrolls
@@ -57,7 +57,8 @@ volumeDisplay mixerName controlName = do
     reactimate (safeSpawnProg "pavucontrol" <$ clickEvent)
     reactimate (onScroll <$> scrollEvent)
     reactimate (onSwitch <$ switchEvent)
-  liftIO $ actuate network
+  actuate network
+
   pure volWidget
   where
     getVolume = curVolStat mixerName controlName

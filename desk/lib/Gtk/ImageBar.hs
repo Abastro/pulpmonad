@@ -14,7 +14,6 @@ module Gtk.ImageBar (
 ) where
 
 import Control.Monad
-import Data.Coerce
 import Data.GI.Base
 import Data.GI.Base.GObject
 import Data.GI.Base.GParamSpec
@@ -26,18 +25,20 @@ import GI.Cairo.Render qualified as C
 import GI.Cairo.Render.Connector qualified as C
 import GI.Cairo.Structs.Context qualified as C
 import GI.Gdk.Functions qualified as Gdk
+import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gtk.Objects.Bin
 import GI.Gtk.Objects.Image
 import GI.Gtk.Structs.WidgetClass
 import Graphics.X11.Xlib.Types (Rectangle (..))
 import Gtk.Commons
+import System.Pulp.PulpPath
 
 -- MAYBE Figure out how to attach label for attributes. This is not crucial, though.
--- TODO Expose properties
 
 newtype ImageBar = ImageBar (ManagedPtr ImageBar)
 
 instance TypedObject ImageBar where
+  glibType :: IO GType
   glibType = registerGType ImageBar
 instance GObject ImageBar
 
@@ -52,16 +53,10 @@ data ImageBarPrivate = ImageBarPrivate
   , barPortion :: !Rectangle
   -- ^ Portion where bar is displayed. left - top - width - height.
   , barFill :: !(IORef Double)
+  , barIcon :: !Image
   }
 
 -- MAYBE Export portion to CSS?
-
-instance DerivedGObject ImageBar where
-  type GObjectParentType ImageBar = Bin
-  type GObjectPrivateData ImageBar = ImageBarPrivate
-  objectTypeName = T.pack "ImageBar"
-  objectClassInit = imageBarClassInit
-  objectInstanceInit = imageBarInstanceInit
 
 type instance AttributeList ImageBar = AttributeList Bin
 instance HasAttributeList ImageBar
@@ -74,11 +69,26 @@ instance
   where
   fromLabel = overloadedMethod @info
 
-withWidgetClass :: GObjectClass -> (WidgetClass -> IO b) -> IO b
-withWidgetClass gclass act = withTransient (coerce gclass) $ act . WidgetClass
+instance DerivedGObject ImageBar where
+  type GObjectParentType ImageBar = Bin
+  type GObjectPrivateData ImageBar = ImageBarPrivate
+
+  objectTypeName :: T.Text
+  objectTypeName = T.pack "ImageBar"
+
+  objectClassInit :: GObjectClass -> IO ()
+  objectClassInit = imageBarClassInit
+
+  objectInstanceInit :: GObjectClass -> ImageBar -> IO (GObjectPrivateData ImageBar)
+  objectInstanceInit = imageBarInstanceInit
 
 imageBarClassInit :: GObjectClass -> IO ()
-imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
+imageBarClassInit gClass = withClassAs WidgetClass gClass $ \widgetClass -> do
+  uiFile <- Gio.fileNewForPath =<< dataPath ("ui" </> "image-bar.ui")
+  setTemplateFromGFile widgetClass uiFile
+
+  #bindTemplateChildFull widgetClass (T.pack "bar-foreground") True 0
+
   -- As GObject
   gobjectInstallCIntProperty @ImageBar
     gClass
@@ -205,11 +215,9 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
       , maxValue = Just 6
       }
 
-  -- As Widget
-  Just oldDestroy <- get widgetClass #destroy
+  -- Container should take care of "destroy"
   Just oldAllocate <- get widgetClass #sizeAllocate
 
-  set widgetClass [#destroy :&= destroy oldDestroy]
   set widgetClass [#draw :&= draw]
   set
     widgetClass
@@ -224,39 +232,28 @@ imageBarClassInit gClass = withWidgetClass gClass $ \widgetClass -> do
   #setCssName widgetClass (T.pack "imagebar")
   where
     -- Somehow, style properties does not work...
-
-    destroy oldDestroy widget = do
-      Just mine <- castTo ImageBar widget
-      image <- imageBarGetImage mine
-      #destroy image -- The image needs to be destroyed
-      oldDestroy widget
-
     draw widget ctx = do
-      Just mine <- castTo ImageBar widget
+      mine <- unsafeCastTo ImageBar widget
       imageBarDraw mine ctx
-      return True
+      pure True
 
     prefSize f widget = do
-      Just mine <- castTo ImageBar widget
-      image <- imageBarGetImage mine
+      image <- imageBarGetImage =<< unsafeCastTo ImageBar widget
       f image
     prefRatio f widget other = do
-      Just mine <- castTo ImageBar widget
-      image <- imageBarGetImage mine
+      image <- imageBarGetImage =<< unsafeCastTo ImageBar widget
       f image other
 
     sizeAllocate oldAllocate widget rect = do
-      Just mine <- castTo ImageBar widget
-      image <- imageBarGetImage mine
+      image <- imageBarGetImage =<< unsafeCastTo ImageBar widget
       -- Allocate entire rectangle to the foreground image
       #sizeAllocate image rect
       oldAllocate widget rect
 
 imageBarInstanceInit :: GObjectClass -> ImageBar -> IO ImageBarPrivate
-imageBarInstanceInit _gclass widget = do
-  -- Window not needed (Takes no input)
-  image <- new Image []
-  #add widget image
+imageBarInstanceInit _gclass inst = do
+  #initTemplate inst
+  barIcon <- templateChild inst (T.pack "bar-foreground") Image
 
   let barOrientation = OrientationHorizontal
   let barScale = 1
@@ -266,15 +263,13 @@ imageBarInstanceInit _gclass widget = do
   pure ImageBarPrivate{..}
 
 imageBarGetImage :: ImageBar -> IO Image
-imageBarGetImage widget = do
-  Just child <- binGetChild widget
-  Just image <- castTo Image child
-  pure image
+imageBarGetImage imgBar = do
+  ImageBarPrivate{barIcon} <- gobjectGetPrivateData imgBar
+  pure barIcon
 
 imageBarDraw :: ImageBar -> C.Context -> IO ()
 imageBarDraw widget ctxt = do
   ImageBarPrivate{..} <- gobjectGetPrivateData widget
-  image <- imageBarGetImage widget
 
   style <- #getStyleContext widget
   width <- fromIntegral <$> #getAllocatedWidth widget
@@ -304,7 +299,7 @@ imageBarDraw widget ctxt = do
     C.fill
 
   -- Lastly, render the foreground image
-  #draw image ctxt
+  #draw barIcon ctxt
 
 -- I do not know how to properly set up labels :/
 

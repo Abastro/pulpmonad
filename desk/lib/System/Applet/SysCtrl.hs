@@ -18,26 +18,27 @@ import Gtk.Window qualified as Gtk
 import Reactive.Banana.Frameworks
 import Status.X11.XHandle
 import System.FilePath
-import System.Pulp.PulpEnv
 import XMonad.Util.Run (safeSpawn)
+import System.Pulp.PulpPath
+import Control.Monad.IO.Unlift
 
 -- | System control button with shutdown symbol icon.
 -- Shows the system control dialog.
-sysCtrlBtn :: (MonadIO m, MonadXHand m, MonadPulpPath m) => Gtk.Window -> m Gtk.Widget
-sysCtrlBtn parent = do
-  watch <- runXHand sysCtrlListen
-  callSrc <- liftIO $ taskToSource watch
-  uiFile <- pulpDataPath ("ui" </> "sysctl.ui")
-  View{..} <- liftIO $ view (T.pack uiFile) parent
+sysCtrlBtn :: (MonadUnliftIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
+sysCtrlBtn parent = withRunInIO $ \unlift -> do
+  watch <- unlift $ runXHand sysCtrlListen
+  callSrc <- taskToSource watch
+  uiFile <- dataPath ("ui" </> "sysctl.ui")
+  View{..} <- view (T.pack uiFile) parent
 
-  network <- liftIO . compile $ do
+  network <- compile $ do
     callEvent <- sourceEvent callSrc
     actEvent <- sourceEvent toAct
 
     -- Problem: Calling "openWindow" somehow does not grab focus correctly.
     reactimate (Gtk.uiSingleRun (Gtk.widgetActivate ctrlButton) <$ callEvent)
     reactimate (actOn <$> actEvent)
-  liftIO $ actuate network
+  actuate network
 
   pure ctrlButton
   where

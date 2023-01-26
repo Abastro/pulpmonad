@@ -8,6 +8,7 @@ import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 import Defines
 import GI.Gtk.Objects.Box qualified as Gtk
+import GI.Gtk.Objects.Separator qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Window qualified as Gtk
 import Status.X11.WMStatus (DesktopStat (..))
@@ -24,7 +25,6 @@ import System.Log.LogPrint (LogLevel (..), defLogFormat)
 import System.Pulp.PulpBar
 import System.Pulp.PulpEnv
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
-import qualified GI.Gtk.Objects.Separator as Gtk
 
 workspaceMaps :: M.Map String String
 workspaceMaps =
@@ -118,7 +118,6 @@ app isTest = do
         deskVisWinSetup =
           App.WindowSetup
             { windowImgIcon = App.defImageIcon
-            , windowIconSize = Gtk.IconSizeLargeToolbar
             }
 
     rightBar =
@@ -139,7 +138,6 @@ app isTest = do
         sysTrayArgs =
           App.SysTrayArgs
             { App.trayOrientation = Gtk.OrientationHorizontal
-            , App.trayIconSize = Gtk.IconSizeLargeToolbar
             , App.trayAlignBegin = False
             }
 
