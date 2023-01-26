@@ -10,6 +10,8 @@ module System.Applet.DesktopVisual.DesktopItemView (
   reflectPriority,
   desktopSetLabel,
   desktopSetVisible,
+  DesktopState (..),
+  desktopSetState,
   desktopClickAct,
 ) where
 
@@ -24,14 +26,15 @@ import Data.Int
 import Data.Text qualified as T
 import GHC.OverloadedLabels
 import GI.Gio.Interfaces.File qualified as Gio
+import GI.Gtk.Objects.EventBox qualified as Gtk
 import GI.Gtk.Objects.FlowBox qualified as Gtk
 import GI.Gtk.Objects.FlowBoxChild qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
+import Gtk.Styles qualified as Gtk
 import System.Applet.DesktopVisual.WindowItemView
 import System.Pulp.PulpPath
-import qualified GI.Gtk.Objects.EventBox as Gtk
 
 -- Desktop item which has windows sorted via priority
 newtype DesktopItemView = DesktopItemView (ManagedPtr DesktopItemView)
@@ -135,6 +138,18 @@ desktopSetVisible :: DesktopItemView -> Bool -> IO ()
 desktopSetVisible desktop = \case
   True -> #showAll desktop
   False -> #hide desktop
+
+data DesktopState = DesktopActive | DesktopVisible | DesktopHidden
+  deriving (Enum, Bounded)
+
+desktopSetState :: DesktopItemView -> DesktopState -> IO ()
+desktopSetState desktop state = do
+  #getStyleContext desktop >>= Gtk.updateCssClass asClass [state]
+  where
+    asClass = \case
+      DesktopActive -> T.pack "active"
+      DesktopVisible -> T.pack "visible"
+      DesktopHidden -> T.pack "hidden"
 
 desktopClickAct :: DesktopItemView -> IO () -> IO ()
 desktopClickAct desktop act = do

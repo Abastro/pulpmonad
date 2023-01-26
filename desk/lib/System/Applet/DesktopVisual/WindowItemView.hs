@@ -9,6 +9,9 @@ module System.Applet.DesktopVisual.WindowItemView (
   setPriority,
   windowSetGIcon,
   windowSetRawIcons,
+  windowSetActivate,
+  WindowState (..),
+  windowSetStates,
   windowClickAct,
 ) where
 
@@ -21,13 +24,14 @@ import Data.GI.Base.Signals
 import Data.Text qualified as T
 import GHC.OverloadedLabels
 import GI.Gio.Interfaces.File qualified as Gio
+import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gtk.Objects.Button qualified as Gtk
 import GI.Gtk.Objects.Image qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
+import Gtk.Pixbufs qualified as Gtk
+import Gtk.Styles qualified as Gtk
 import System.Pulp.PulpPath
-import qualified Gtk.Pixbufs as Gtk
-import qualified GI.Gio.Interfaces.Icon as Gio
 
 -- MAYBE Use image internal to the button
 -- Essentially, a button with priority. Select in CSS by "button.windowitem".
@@ -115,6 +119,22 @@ windowSetRawIcons window icons = do
   Gtk.iconsChoosePixbuf (Gtk.iconSizePx iconSize) Gtk.argbTorgba icons >>= \case
     Just scaled -> set windowIcon [#pixbuf := scaled]
     Nothing -> set windowIcon [#iconName := T.pack "image-missing"]
+
+windowSetActivate :: WindowItemView -> Bool -> IO ()
+windowSetActivate window flag = do
+  ctxt <- #getStyleContext window
+  (if flag then #addClass else #removeClass) ctxt (T.pack "active")
+
+data WindowState = WindowHidden | WindowDemanding
+  deriving (Enum, Bounded)
+
+windowSetStates :: WindowItemView -> [WindowState] -> IO ()
+windowSetStates window states = do
+  #getStyleContext window >>= Gtk.updateCssClass asClass states
+  where
+    asClass = \case
+      WindowHidden -> T.pack "hidden"
+      WindowDemanding -> T.pack "demanding"
 
 windowClickAct :: WindowItemView -> IO () -> IO ()
 windowClickAct window act = do

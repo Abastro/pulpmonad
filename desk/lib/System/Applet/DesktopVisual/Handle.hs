@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-simplifiable-class-constraints #-}
+
 module System.Applet.DesktopVisual.Handle (
   NumWindows,
   GetXIcon,
@@ -32,24 +34,10 @@ import Gtk.Task qualified as Gtk
 import Status.AppInfos
 import Status.X11.WMStatus
 import Status.X11.XHandle
-import System.Applet.DesktopVisual.View qualified as View
+import System.Applet.DesktopVisual.DesktopItemView qualified as View
+import System.Applet.DesktopVisual.DesktopVisual qualified as View
+import System.Applet.DesktopVisual.WindowItemView qualified as View
 import System.Log.LogPrint
-
-deskCssClass :: DesktopState -> T.Text
-deskCssClass = \case
-  DeskActive -> T.pack "active"
-  DeskVisible -> T.pack "visible"
-  DeskHidden -> T.pack "hidden"
-
--- Okay, I know, but I cannot resist
-winActiveCssClass :: () -> T.Text
-winActiveCssClass = \case
-  () -> T.pack "active"
-
-windowCssClass :: WMStateEx -> T.Text
-windowCssClass = \case
-  WinHidden -> T.pack "hidden"
-  WinDemandAttention -> T.pack "demanding"
 
 type NumWindows = Word
 
@@ -163,11 +151,10 @@ deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -
         changeActivate nextActive = withRunInIO $ \_unlift -> do
           windows <- readIORef winsRef
           prevActive <- atomicModifyIORef' activeRef (nextActive,)
-          -- Little hack
           for_ (prevActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
-            View.widgetUpdateClass itemWindowView winActiveCssClass []
+            View.windowSetActivate itemWindowView False
           for_ (nextActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
-            View.widgetUpdateClass itemWindowView winActiveCssClass [()]
+            View.windowSetActivate itemWindowView True
 
         winSwitch :: (MonadUnliftIO m, MonadLog m) => Window -> View.WindowItemView -> Int -> Int -> m ()
         winSwitch windowId winView deskOld deskNew = withRunInIO $ \unlift -> do
@@ -196,7 +183,7 @@ deskItemMake DesktopSetup{..} initStat view = liftIO $ do
       where
         updateDeskItem deskStat@DesktopStat{..} = do
           View.desktopSetLabel view (desktopLabeling desktopName)
-          View.widgetUpdateClass view deskCssClass [desktopState]
+          View.desktopSetState view (viewState desktopState)
           writeIORef statRef deskStat
           updateVisible
 
@@ -216,6 +203,11 @@ deskItemMake DesktopSetup{..} initStat view = liftIO $ do
           deskStat <- readIORef statRef
           numWindows <- readIORef numWindows
           View.desktopSetVisible view (showDesktop deskStat numWindows)
+        
+        viewState = \case
+          DeskActive -> View.DesktopActive
+          DeskVisible -> View.DesktopVisible
+          DeskHidden -> View.DesktopHidden
 
 data WinItemHandle = WinItemHandle
   { itemWindowView :: View.WindowItemView -- As window can move around, its view should be separately owned.
@@ -266,13 +258,18 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
             (unlift . runMaybeT) (imgIcon winInfo) >>= \case
               Just gicon -> View.windowSetGIcon view gicon
               Nothing -> do
-                rawIcons <- getXIcon >>= \case
-                  Left err -> unlift $ do
-                    -- MAYBE Window id?
-                    [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
-                  Right icons -> pure icons
+                rawIcons <-
+                  getXIcon >>= \case
+                    Left err -> unlift $ do
+                      -- MAYBE Window id?
+                      [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
+                    Right icons -> pure icons
                 View.windowSetRawIcons view rawIcons
-            View.widgetUpdateClass view windowCssClass (S.toList windowState)
+            View.windowSetStates view (map viewState $ S.toList windowState)
+        
+        viewState = \case
+          WinHidden -> View.WindowHidden
+          WinDemandAttention -> View.WindowDemanding
 
 {-------------------------------------------------------------------
                           Application Info

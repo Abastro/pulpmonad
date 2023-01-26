@@ -55,7 +55,7 @@ separator {
 
 /* Desktop Visualizer Widget */
 
-#desktop-visual {
+desktopvisualizer {
 	margin: 2px;
 }
 
@@ -63,6 +63,9 @@ separator {
 desktopitem {
 	transition: background-color .5s;
 	border-radius: 5px;
+}
+
+desktopitem box {
 	padding-left: 1px;
 	padding-right: 1px;
 }
