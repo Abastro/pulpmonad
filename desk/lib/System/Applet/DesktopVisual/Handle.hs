@@ -50,10 +50,9 @@ data DesktopSetup = DesktopSetup
   }
 
 -- | Window part of the setup.
-data WindowSetup = WindowSetup
+newtype WindowSetup = WindowSetup
   { windowImgIcon :: WindowInfo -> MaybeT IO Gio.Icon
   -- ^ With which icon the window is going to set to.
-  , windowIconSize :: Gtk.IconSize
   }
 
 -- | Desktops visualizer widget. Forks its own X11 event handler.

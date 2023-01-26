@@ -23,7 +23,6 @@ import System.Posix.Process (getProcessID)
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !Gtk.Orientation
-  , trayIconSize :: !Gtk.IconSize
   , trayAlignBegin :: !Bool
   -- ^ Whether to align from the beginning
   }
@@ -33,7 +32,7 @@ data SysTrayArgs = SysTrayArgs
 --
 -- Throws if the host cannot be started.
 systemTray :: SysTrayArgs -> IO Gtk.Widget
-systemTray args@SysTrayArgs{..} = do
+systemTray SysTrayArgs{..} = do
   -- Creates its own dbus client.
   client <- connectSession
   procID <- getProcessID
@@ -48,14 +47,14 @@ systemTray args@SysTrayArgs{..} = do
   View.traySetOrientation trayView trayOrientation
   View.traySetPackAt trayView (if trayAlignBegin then View.PackStart else View.PackEnd)
 
-  SysTrayHandle <- sysTrayMake host client args trayView
+  SysTrayHandle <- sysTrayMake host client trayView
   Gtk.toWidget trayView
 
 -- Currently, no way provided to externally handle system ray
 data SysTrayHandle = SysTrayHandle
 
-sysTrayMake :: HS.Host -> Client -> SysTrayArgs -> View.SystemTrayView -> IO SysTrayHandle
-sysTrayMake HS.Host{..} client SysTrayArgs{} view = do
+sysTrayMake :: HS.Host -> Client -> View.SystemTrayView -> IO SysTrayHandle
+sysTrayMake HS.Host{..} client view = do
   registers =<< newIORef M.empty
   where
     registers itemsRef = do
