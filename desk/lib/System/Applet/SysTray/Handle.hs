@@ -7,6 +7,7 @@ import Control.Monad
 import DBus
 import DBus.Client
 import Data.Foldable
+import Data.GI.Base.Constructible qualified as Glib
 import Data.IORef
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
@@ -16,9 +17,9 @@ import Gtk.Commons qualified as Gtk
 import Gtk.Task qualified as Gtk
 import StatusNotifier.Host.Service qualified as HS
 import StatusNotifier.Item.Client qualified as IC
-import System.Applet.SysTray.View qualified as View
+import System.Applet.SysTray.SystemTrayView qualified as View
+import System.Applet.SysTray.TrayItemView qualified as View
 import System.Posix.Process (getProcessID)
-import qualified Data.GI.Base.Constructible as Glib
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !Gtk.Orientation
@@ -43,20 +44,23 @@ systemTray args@SysTrayArgs{..} = do
           { HS.dbusClient = Just client
           , HS.uniqueIdentifier = "pulp-system-tray-" <> show procID
           }
-  trayView <- View.sysTrayNew trayOrientation trayAlignBegin
+  trayView <- Glib.new View.SystemTrayView [] -- trayOrientation trayAlignBegin
+  View.traySetOrientation trayView trayOrientation
+  View.traySetPackAt trayView (if trayAlignBegin then View.PackStart else View.PackEnd)
+
   SysTrayHandle <- sysTrayMake host client args trayView
-  pure (View.sysTrayWidget trayView)
+  Gtk.toWidget trayView
 
 -- Currently, no way provided to externally handle system ray
 data SysTrayHandle = SysTrayHandle
 
-sysTrayMake :: HS.Host -> Client -> SysTrayArgs -> View.SysTray -> IO SysTrayHandle
+sysTrayMake :: HS.Host -> Client -> SysTrayArgs -> View.SystemTrayView -> IO SysTrayHandle
 sysTrayMake HS.Host{..} client SysTrayArgs{} view = do
   registers =<< newIORef M.empty
   where
     registers itemsRef = do
       trayHandle <- addUpdateHandler $ \typ info -> Gtk.uiSingleRun (onUpdate info typ)
-      Gtk.onWidgetDestroy (View.sysTrayWidget view) $ removeUpdateHandler trayHandle
+      Gtk.onWidgetDestroy view $ removeUpdateHandler trayHandle
       pure SysTrayHandle
       where
         onUpdate :: HS.ItemInfo -> HS.UpdateType -> IO ()
@@ -98,7 +102,7 @@ sysTrayMake HS.Host{..} client SysTrayArgs{} view = do
           pure (Just item)
 
 data TrayItemHandle = TrayItemHandle
-  { itemAddRemove :: View.SysTray -> Bool -> IO ()
+  { itemAddRemove :: View.SystemTrayView -> Bool -> IO ()
   -- ^ True for add
   , itemUpdateIcon :: Maybe String -> T.Text -> HS.ImageInfo -> IO ()
   , itemUpdateOverlay :: Maybe String -> Maybe T.Text -> HS.ImageInfo -> IO ()
@@ -117,8 +121,8 @@ trayItemMake client HS.ItemInfo{..} view = do
   pure TrayItemHandle{..}
   where
     itemAddRemove trayView = \case
-      True -> View.sysTrayCtrl trayView (View.TrayAddItem view)
-      False -> View.sysTrayCtrl trayView (View.TrayRemoveItem view)
+      True -> View.trayAddItem trayView view
+      False -> View.trayRemoveItem trayView view
 
     itemUpdateIcon itemThemePath iconName itemIconInfo = do
       View.itemSetIcon view View.TrayItemIcon{itemIconName = Just iconName, ..}

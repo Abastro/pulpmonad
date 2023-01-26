@@ -102,7 +102,7 @@ library
     System.Applet.DesktopVisual
 
     System.Applet.SysTray.TrayItemView
-    System.Applet.SysTray.View
+    System.Applet.SysTray.SystemTrayView
     System.Applet.SysTray.Handle
     System.Applet.SysTray
 
