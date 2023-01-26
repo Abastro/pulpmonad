@@ -83,8 +83,6 @@ library
     Gtk.Window
     Gtk.Application
     Gtk.ImageBar
-    View.Imagery
-    View.Boxes
 
     System.Log.LogPrint
 
