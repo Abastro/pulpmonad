@@ -5,6 +5,7 @@
     <child>
       <object class="GtkImage" id="window-icon">
         <property name="icon-size">3</property>
+        <property name="pixel-size">24</property>
       </object>
     </child>
   </template>

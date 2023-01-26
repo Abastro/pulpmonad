@@ -42,11 +42,11 @@ instance
   where
   fromLabel = overloadedMethod @info
 
-data MainPrivate = MainPrivate
+data VisualPrivate = VisualPrivate
 
 instance DerivedGObject DesktopVisual where
   type GObjectParentType DesktopVisual = Gtk.Box
-  type GObjectPrivateData DesktopVisual = MainPrivate
+  type GObjectPrivateData DesktopVisual = VisualPrivate
 
   objectTypeName :: T.Text
   objectTypeName = T.pack "DesktopVisualizer"
@@ -58,10 +58,10 @@ instance DerivedGObject DesktopVisual where
 
     #setCssName widgetClass (T.pack "desktopvisualizer")
 
-  objectInstanceInit :: GObjectClass -> DesktopVisual -> IO MainPrivate
+  objectInstanceInit :: GObjectClass -> DesktopVisual -> IO VisualPrivate
   objectInstanceInit _gClass inst = do
     #initTemplate inst
-    pure MainPrivate
+    pure VisualPrivate
 
 addDesktops :: DesktopVisual -> V.Vector DesktopItemView -> IO ()
 addDesktops view newDesks = for_ newDesks $ \desktop -> do

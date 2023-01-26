@@ -111,7 +111,8 @@ windowSetGIcon window gic = do
 windowSetRawIcons :: WindowItemView -> [Gtk.RawIcon] -> IO ()
 windowSetRawIcons window icons = do
   WindowItemPrivate{windowIcon} <- gobjectGetPrivateData window
-  Gtk.iconsChoosePixbuf (Gtk.iconSizePx Gtk.IconSizeLargeToolbar) Gtk.argbTorgba icons >>= \case
+  iconSize <- toEnum . fromIntegral <$> get windowIcon #iconSize
+  Gtk.iconsChoosePixbuf (Gtk.iconSizePx iconSize) Gtk.argbTorgba icons >>= \case
     Just scaled -> set windowIcon [#pixbuf := scaled]
     Nothing -> set windowIcon [#iconName := T.pack "image-missing"]
 
