@@ -66,6 +66,7 @@ data TrayItemPrivate = TrayItemPrivate
   }
 
 instance DerivedGObject TrayItemView where
+  -- MAYBE Inherit button and its styling
   type GObjectParentType TrayItemView = Gtk.EventBox
   type GObjectPrivateData TrayItemView = TrayItemPrivate
 
