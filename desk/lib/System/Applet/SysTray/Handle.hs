@@ -12,18 +12,19 @@ import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 import Data.Traversable
 import GI.DbusmenuGtk3.Objects.Menu qualified as DMenu
+import Gtk.Commons qualified as Gtk
+import Gtk.Task qualified as Gtk
 import StatusNotifier.Host.Service qualified as HS
 import StatusNotifier.Item.Client qualified as IC
 import System.Applet.SysTray.View qualified as View
-import Gtk.Commons qualified as Gtk
-import Gtk.Task qualified as Gtk
 import System.Posix.Process (getProcessID)
+import qualified Data.GI.Base.Constructible as Glib
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !Gtk.Orientation
   , trayIconSize :: !Gtk.IconSize
-  , -- | Whether to align from the beginning
-    trayAlignBegin :: !Bool
+  , trayAlignBegin :: !Bool
+  -- ^ Whether to align from the beginning
   }
 
 -- | Starts system tray and presents it as widget.
@@ -50,7 +51,7 @@ systemTray args@SysTrayArgs{..} = do
 data SysTrayHandle = SysTrayHandle
 
 sysTrayMake :: HS.Host -> Client -> SysTrayArgs -> View.SysTray -> IO SysTrayHandle
-sysTrayMake HS.Host{..} client SysTrayArgs{trayIconSize} view = do
+sysTrayMake HS.Host{..} client SysTrayArgs{} view = do
   registers =<< newIORef M.empty
   where
     registers itemsRef = do
@@ -89,7 +90,7 @@ sysTrayMake HS.Host{..} client SysTrayArgs{trayIconSize} view = do
 
         addItem :: HS.ItemInfo -> IO (Maybe TrayItemHandle)
         addItem info@HS.ItemInfo{..} = do
-          itemView <- View.trayItemNew trayIconSize
+          itemView <- Glib.new View.TrayItemView []
           item@TrayItemHandle{..} <- trayItemMake client info itemView
           itemAddRemove view True
           itemUpdateIcon iconThemePath (T.pack iconName) iconPixmaps
@@ -97,19 +98,19 @@ sysTrayMake HS.Host{..} client SysTrayArgs{trayIconSize} view = do
           pure (Just item)
 
 data TrayItemHandle = TrayItemHandle
-  { -- | True for add
-    itemAddRemove :: View.SysTray -> Bool -> IO ()
+  { itemAddRemove :: View.SysTray -> Bool -> IO ()
+  -- ^ True for add
   , itemUpdateIcon :: Maybe String -> T.Text -> HS.ImageInfo -> IO ()
   , itemUpdateOverlay :: Maybe String -> Maybe T.Text -> HS.ImageInfo -> IO ()
   , itemUpdateTooltip :: Maybe (String, HS.ImageInfo, String, String) -> IO ()
   }
 
 -- MAYBE Status effect
-trayItemMake :: Client -> HS.ItemInfo -> View.TrayItem -> IO TrayItemHandle
+trayItemMake :: Client -> HS.ItemInfo -> View.TrayItemView -> IO TrayItemHandle
 trayItemMake client HS.ItemInfo{..} view = do
   mayMenu <- for menuPath $ \mPath ->
     DMenu.menuNew (T.pack . formatBusName $ itemServiceName) (T.pack . formatObjectPath $ mPath)
-  View.trayItemCtrl view . View.ItemSetInputHandler $ \case
+  View.itemSetInputHandler view $ \case
     View.TrayItemScroll dir -> onScroll dir
     View.TrayItemClick btn xRoot yRoot -> onClick mayMenu xRoot yRoot btn
 
@@ -120,21 +121,20 @@ trayItemMake client HS.ItemInfo{..} view = do
       False -> View.sysTrayCtrl trayView (View.TrayRemoveItem view)
 
     itemUpdateIcon itemThemePath iconName itemIconInfo = do
-      View.trayItemCtrl view (View.ItemSetIcon View.TrayItemIcon{..})
-      where
-        itemIconName = Just iconName
+      View.itemSetIcon view View.TrayItemIcon{itemIconName = Just iconName, ..}
 
     itemUpdateOverlay itemThemePath itemIconName itemIconInfo = do
-      View.trayItemCtrl view (View.ItemSetOverlay View.TrayItemIcon{..})
+      View.itemSetIcon view View.TrayItemIcon{..}
 
     itemUpdateTooltip = \case
-      Nothing -> View.trayItemCtrl view (View.ItemSetTooltip Nothing)
+      Nothing -> Gtk.widgetSetTooltipText view Nothing
       Just (_, _, title, full) -> do
-        View.trayItemCtrl view $
-          View.ItemSetTooltip . Just . T.pack $ case (title, full) of
-            ("", f) -> f
-            (t, "") -> t
-            (t, f) -> t <> ": " <> f
+        Gtk.widgetSetTooltipText view (Just . T.pack $ tooltipOf (title, full))
+      where
+        tooltipOf = \case
+          ("", f) -> f
+          (t, "") -> t
+          (t, f) -> t <> ": " <> f
 
     onScroll = \case
       Gtk.ScrollDirectionUp -> void $ IC.scroll client itemServiceName itemServicePath (-1) "vertical"
@@ -146,4 +146,4 @@ trayItemMake client HS.ItemInfo{..} view = do
     onClick mayMenu xRoot yRoot = \case
       View.MouseLeft | not itemIsMenu -> void $ IC.activate client itemServiceName itemServicePath xRoot yRoot
       View.MouseMiddle -> void $ IC.secondaryActivate client itemServiceName itemServicePath xRoot yRoot
-      _ -> traverse_ (View.trayItemCtrl view . View.ItemShowPopup) mayMenu
+      _ -> traverse_ (View.itemShowPopup view) mayMenu

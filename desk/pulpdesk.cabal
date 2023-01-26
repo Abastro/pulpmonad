@@ -101,6 +101,7 @@ library
     System.Applet.DesktopVisual.Handle
     System.Applet.DesktopVisual
 
+    System.Applet.SysTray.TrayItemView
     System.Applet.SysTray.View
     System.Applet.SysTray.Handle
     System.Applet.SysTray
