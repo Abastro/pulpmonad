@@ -5,16 +5,14 @@
 
 module System.Applet.DesktopVisual.DesktopVisual (
   DesktopVisual (..),
-  addDesktops,
-  cutDesktopToCount,
+  addDesktop,
+  removeDesktop,
 ) where
 
-import Data.Foldable
 import Data.GI.Base.BasicTypes
 import Data.GI.Base.GObject
 import Data.GI.Base.Overloading
 import Data.Text qualified as T
-import Data.Vector qualified as V
 import GHC.OverloadedLabels
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gtk.Objects.Box qualified as Gtk
@@ -63,16 +61,12 @@ instance DerivedGObject DesktopVisual where
     #initTemplate inst
     pure VisualPrivate
 
-addDesktops :: DesktopVisual -> V.Vector DesktopItemView -> IO ()
-addDesktops view newDesks = for_ newDesks $ \desktop -> do
+addDesktop :: DesktopVisual -> DesktopItemView -> IO ()
+addDesktop view desktop = do
   #add (view `asA` Gtk.Box) desktop
   #showAll desktop
 
-cutDesktopToCount :: DesktopVisual -> Int -> IO ()
-cutDesktopToCount view cnt = do
-  let box = view `asA` Gtk.Box
-  desktops <- #getChildren box
-  -- Removes except for first cnt desktops
-  for_ (drop cnt desktops) $ \desktop -> do
-    #hide desktop
-    #remove box desktop
+removeDesktop :: DesktopVisual -> DesktopItemView -> IO ()
+removeDesktop view desktop = do
+  #hide desktop
+  #remove (view `asA` Gtk.Box) desktop

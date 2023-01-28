@@ -11,19 +11,21 @@ module System.Applet.DesktopVisual.Handle (
 import Control.Applicative
 import Control.Concurrent.Task
 import Control.Event.Entry
+import Control.Event.State
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Unlift
 import Control.Monad.Trans.Maybe
-import Data.Bifunctor (first)
+import Data.Bifunctor (Bifunctor (..), first)
 import Data.Foldable
-import Data.IORef
+import Data.Function
+import Data.IntMap.Strict qualified as IM
+import Data.List
 import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Set qualified as S
 import Data.Text qualified as T
-import Data.Time.Clock.POSIX
 import Data.Traversable
 import Data.Vector qualified as V
 import GI.GLib qualified as Glib
@@ -45,6 +47,8 @@ import System.Log.LogPrint
 
 type NumWindows = Word
 
+-- TODO Consider that in XMonad, "Workspace" has String ID.
+
 -- | Desktop part of the setup.
 data DesktopSetup = DesktopSetup
   { desktopLabeling :: Maybe T.Text -> T.Text
@@ -60,154 +64,220 @@ newtype WindowSetup = WindowSetup
   }
 
 deskVisualizer ::
-  (MonadUnliftIO m, MonadLog m, MonadXHand m, MonadPulpPath m) =>
+  (MonadUnliftIO m, MonadLog m, MonadXHand m) =>
   DesktopSetup ->
   WindowSetup ->
   m Gtk.Widget
 deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   DeskVisRcvs{..} <- unlift $ runXHand deskVisInitiate
-  mainView <- View.mainView
+  mainView <- Glib.new View.DesktopVisual []
 
   compile $ do
-    desktopUpdate <- liftIO (taskToSource desktopStats) >>= sourceEvent
-    windowListUpdate <- liftIO (taskToSource windowsList) >>= sourceEvent
-    activeWindowUpdate <- liftIO (taskToSource windowActive) >>= sourceEvent
+    eDesktopList <- liftIO (taskToSource desktopStats) >>= sourceEvent
+    eWindowList <- liftIO (taskToSource windowsList) >>= sourceEvent
+    eActiveWindow <- liftIO (taskToSource windowActive) >>= sourceEvent
 
-    desktops <- desktopList (unlift View.deskItemView) desktopUpdate
-    windows <- windowMap (unlift View.winItemView) trackWinInfo windowListUpdate
-    activeWindow <- stepper Nothing activeWindowUpdate
-    let deskViews = V.map desktopView <$> desktops
-        -- In fact, we need to track pairs (window, desktop)
-        deskWindows = flipWinDesk <$> windows
-        deskWindowCnt = M.map (fromIntegral . V.length) <$> deskWindows
-        deskWithWinCnt = withCount <$> deskWindowCnt <*> desktops
+    bDesktops <- desktopList (updateDesktop deskSetup (Glib.new View.DesktopItemView [])) eDesktopList
+    (bWindows, bWinWithDesk) <- windowMapA (updateWindow (Glib.new View.WindowItemView []) trackWinInfo) eWindowList
+    activeWindow <- stepper Nothing eActiveWindow
+    let deskViews = V.map desktopView <$> bDesktops
+        winDeskPairs = windowDesktopPairs <$> bDesktops <*> bWinWithDesk
+        deskWithWinCnt = pairDeskCnt <$> winDeskPairs <*> bDesktops
 
-    syncBehaviorDiff deskViews (fmap Gtk.uiSingleRun . mainSyncDesktop mainView)
-    syncBehavior deskWithWinCnt (Gtk.uiSingleRun . traverse_ (uncurry $ reflectDesktop deskSetup))
+    -- Compute differences
+    deskDiffs <- updateEvent deskViewDiff deskViews deskViews
+    pairDiffs <- updateEvent viewPairDiff winDeskPairs winDeskPairs
 
-    deskChanges <- differences windows windowDeskDiff
-    let deskChangesIdxed = fmap fmap (winDeskIdxed <$> deskViews) <@> deskChanges
+    -- Apply differences
+    reactimate' (fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> deskDiffs)
+    reactimate' (fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> pairDiffs)
 
-    undefined
+    syncBehavior deskWithWinCnt (Gtk.uiSingleRun . traverse_ (uncurry $ applyDesktopVisible deskSetup))
   undefined
   where
-    -- Window -> Desk to Desk -> Win
-    -- Vector is needed to track the index!
-    -- ..this is complex.
-    flipWinDesk = M.map (V.fromList . map snd . sortOn fst) . M.fromListWith (<>) . map toIdxPair . M.toList
+    pairDeskCnt pairMap = V.imap $ \i v -> (fromMaybe 0 (deskHisto IM.!? i), v)
       where
-        toIdxPair (win, WinItemHandle{..}) = (winItemDesktop, [(winIndex, win)])
+        pairToCnt (_win, desk) = (desk, 1 :: NumWindows)
+        deskHisto = IM.fromListWith (+) . map pairToCnt $ M.keys pairMap
 
-    withCount cnts = V.imap $ \i v -> (fromMaybe 0 (cnts M.!? i), v)
+-- | Difference represented by pair of removed and added stuffs
+data Diffs a = Diffs {removed :: a, added :: a}
+  deriving (Functor)
 
-    -- Missing is interpreted as -1.
-    windowDeskDiff = M.merge @Window onRemove onAdd onChange
-      where
-        onRemove = M.mapMissing $ \_ WinItemHandle{..} -> (windowView, winItemDesktop, -1)
-        onAdd = M.mapMissing $ \_ WinItemHandle{..} -> (windowView, -1, winItemDesktop)
-        onChange = M.zipWithMatched $ \_ old new -> (windowView new, winItemDesktop old, winItemDesktop new)
-    winDeskIdxed desks = M.map $ \(view, old, new) -> (view, desks V.!? old, desks V.!? new)
-
-    winChangeDesktop _ (winView, oldDesk, newDesk) = do
-      -- TODO Find index of window among desktop!
-      undefined
-
-data DeskItemHandle = DeskItemHandle
-  { desktopView :: !View.DeskItemView
+data DeskItem = DeskItem
+  { desktopView :: !View.DesktopItemView
   , deskItemStat :: !DesktopStat
   }
 
--- How would I handle click event?
-desktopList ::
-  IO View.DeskItemView ->
-  Event (V.Vector DesktopStat) ->
-  MomentIO (Behavior (V.Vector DeskItemHandle))
-desktopList mkView updates = do
-  -- Starts empty to add later
-  rec list <- stepper V.empty newList
-      let views = V.map desktopView <$> list
-          mkNew = getNew <$> views <@> updates
-      newList <- mapEventIO id mkNew
-  pure list
-  where
-    -- TODO Remove IO involved here, somehow - avoid creating views?
-    -- Maybe simulate "lazy" with IO? Still hard.
-
-    -- new matches update exactly
-    getNew old = V.imapM $ \i stat -> (`DeskItemHandle` stat) <$> maybe mkView pure (old V.!? i)
-
--- Can I phase this out? Create action could take care of it, after all.
-mainSyncDesktop :: View.MainView -> V.Vector View.DeskItemView -> V.Vector View.DeskItemView -> IO ()
-mainSyncDesktop View.MainView{..} old new = do
-  -- Remove first, then add "in order".
-  traverse_ mainRemoveDesktop $ V.drop (V.length new) old
-  traverse_ mainAddDesktop $ V.drop (V.length old) new
-
-reflectDesktop :: DesktopSetup -> NumWindows -> DeskItemHandle -> IO ()
-reflectDesktop DesktopSetup{..} numWin (DeskItemHandle View.DeskItemView{..} stat@DesktopStat{..}) = do
-  deskSetName (desktopLabeling desktopName)
-  deskSetVisible (showDesktop stat numWin)
-  deskSetState desktopState
-
-data WinItemHandle = WinItemHandle
-  { windowView :: !View.WinItemView
+data WinItemOf a = WinItem
+  { windowView :: !View.WindowItemView
   , winIndex :: !Int
   -- ^ Index in the window list.
-  , winItemDesktop :: !Int
-  , winItemInfo :: !WindowInfo
+  , winItemExtra :: !a
+  -- ^ Extra data to carry around signals / desktops.
   }
+  deriving (Functor, Foldable, Traversable)
 
-windowMap ::
-  IO View.WinItemView ->
-  (Window -> IO (Maybe PerWinRcvs)) ->
-  Event (V.Vector Window) ->
-  MomentIO (Behavior (M.Map Window WinItemHandle))
-windowMap mkView trackInfo updates = do
-  -- Map of behaviors
-  rec mapB <- stepper M.empty newMapB
-      let mkNewUpd = getNewWithUpdate <$> mapB <@> updates
-      newMapUpd <- execute mkNewUpd
-      let newMapB = fst <$> newMapUpd
-  -- Updates whenever the handle changes
-  switchB (pure M.empty) $ sequenceA <$> newMapB
+type WinItem = WinItemOf ()
+type WinWithDesk = WinItemOf Int
+type WinItemFull = WinItemOf (Behavior Int)
+
+type ViewPair = (View.WindowItemView, View.DesktopItemView)
+
+windowDesktopPairs ::
+  V.Vector DeskItem ->
+  M.Map Window WinWithDesk ->
+  M.Map (Window, Int) ViewPair
+windowDesktopPairs desktops windows = M.mapMaybe pairToView . M.fromSet id $ pairSet
   where
-    getNewWithUpdate old update = (,update) <$> getNew old update
-    getNew old update = M.mergeA onRemove onAdd onPersist old (vecToMap update)
-    vecToMap = M.fromList . (`zip` [0 ..]) . V.toList
+    -- Problem: Having to reference view this way is unsatisfactory.
+    -- Better way of carrying around view?
+    pairToView (win, desk) = (winViewOf win,) <$> deskViewOf desk
+    deskViewOf desk = desktopView <$> desktops V.!? desk
+    winViewOf win = windowView $ windows M.! win
 
-    -- Destroy action is not performed here
-    onRemove = M.dropMissing
-    -- Track window here to drop the window without info
-    onAdd = M.traverseMaybeMissing $ \window idx ->
-      liftIO (trackInfo window) >>= \case
-        Nothing -> pure Nothing
-        Just PerWinRcvs{..} -> do
-          view <- liftIO mkView
-          -- Both properties are available from the get go.
-          bDesktop <- taskToBehavior winDesktop
-          bInfo <- taskToBehavior winInfo
-          pure . Just $ WinItemHandle view idx <$> bDesktop <*> bInfo
-    onPersist = M.zipWithMatched $ \_ behav newIdx -> (\handle -> handle{winIndex = newIdx}) <$> behav
+    pairSet = S.fromList . map winHandleToPair . M.toList $ windows
+    winHandleToPair (window, WinItem{winItemExtra}) = (window, winItemExtra)
+
+deskViewDiff ::
+  V.Vector View.DesktopItemView ->
+  V.Vector View.DesktopItemView ->
+  Diffs [View.DesktopItemView]
+deskViewDiff old new = V.toList <$> Diffs{..}
+  where
+    removed = V.drop (V.length new) old
+    added = V.drop (V.length new) old
+
+viewPairDiff ::
+  M.Map (Window, Int) ViewPair ->
+  M.Map (Window, Int) ViewPair ->
+  Diffs [ViewPair]
+viewPairDiff old new = M.elems <$> Diffs{..}
+  where
+    removed = old M.\\ new
+    added = new M.\\ old
+
+applyDeskDiff :: View.DesktopVisual -> Diffs [View.DesktopItemView] -> IO ()
+applyDeskDiff main Diffs{..} = do
+  -- Remove first, then add "in order".
+  traverse_ (View.removeDesktop main) removed
+  traverse_ (View.addDesktop main) added
+
+applyPairDiff :: Diffs [ViewPair] -> IO ()
+applyPairDiff Diffs{..} = do
+  traverse_ (uncurry . flip $ View.removeWindow) removed
+  traverse_ (uncurry . flip $ View.insertWindow) added
+
+desktopList ::
+  (Maybe DeskItem -> DesktopStat -> MomentIO DeskItem) ->
+  Event (V.Vector DesktopStat) ->
+  MomentIO (Behavior (V.Vector DeskItem))
+desktopList update eStat = do
+  (_, bList) <- exeAccumD V.empty (flip (zipToRightM update) <$> eStat)
+  pure bList
+
+updateDesktop ::
+  DesktopSetup ->
+  IO View.DesktopItemView ->
+  Maybe DeskItem ->
+  DesktopStat ->
+  MomentIO DeskItem
+updateDesktop setup mkView old deskItemStat = do
+  desktop <- maybe createDesktop pure old
+  liftIO $ applyDesktopState setup desktop
+  pure desktop
+  where
+    createDesktop = do
+      desktopView <- liftIO mkView
+      pure DeskItem{..}
+
+windowMapA ::
+  (Maybe WinItemFull -> (Window, Int) -> MomentIO (Maybe WinItemFull)) ->
+  Event (V.Vector Window) ->
+  MomentIO (Behavior (M.Map Window WinItem), Behavior (M.Map Window WinWithDesk))
+windowMapA update eList = do
+  let eWinIdx = asMapWithIdx <$> eList
+  (eMap, bMap) <- exeAccumD M.empty (flip (filterZipToRightM update) <$> eWinIdx)
+  let bStdMap = M.map void <$> bMap
+      eDeskMap = traverse sequenceA <$> eMap
+  bDeskMap <- switchB (pure M.empty) eDeskMap
+  pure (bStdMap, bDeskMap)
+  where
+    asMapWithIdx list = M.mapWithKey (,) . M.fromList $ zip (V.toList list) [0 ..]
+
+updateWindow ::
+  IO View.WindowItemView ->
+  (Window -> IO (Maybe PerWinRcvs)) ->
+  Maybe WinItemFull ->
+  (Window, Int) ->
+  MomentIO (Maybe WinItemFull)
+updateWindow mkView trackInfo old (windowId, winIndex) = runMaybeT $ updated <|> createWindow
+  where
+    createWindow = do
+      PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
+      windowView <- liftIO mkView
+      lift $ do
+        winItemExtra <- taskToBehavior winDesktop
+        winItemInfo <- taskToBehavior winInfo
+        -- Apply the received information
+        syncBehavior winItemInfo (applyWindowState windowView)
+        -- TODO Apply Icon - how?
+
+        pure WinItem{..}
+    updated = MaybeT $ pure (setIndex <$> old)
+    setIndex window = window{winIndex}
+
+-- TODO Priority update with proper sort-invalidate call
+
+applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
+applyDesktopState DesktopSetup{..} (DeskItem desktop DesktopStat{..}) = do
+  View.desktopSetLabel desktop (desktopLabeling desktopName)
+  View.desktopSetState desktop (viewState desktopState)
+  where
+    viewState = \case
+      DeskActive -> View.DesktopActive
+      DeskVisible -> View.DesktopVisible
+      DeskHidden -> View.DesktopHidden
+
+applyDesktopVisible :: DesktopSetup -> NumWindows -> DeskItem -> IO ()
+applyDesktopVisible DesktopSetup{..} numWin (DeskItem desktop stat) = do
+  View.desktopSetVisible desktop (showDesktop stat numWin)
+
+applyWindowState :: View.WindowItemView -> WindowInfo -> IO ()
+applyWindowState view WindowInfo{..} = do
+  Gtk.widgetSetTooltipText view (Just windowTitle)
+  View.windowSetStates view (map viewState $ S.toList windowState)
+  where
+    viewState = \case
+      WinHidden -> View.WindowHidden
+      WinDemandAttention -> View.WindowDemanding
+
+applyWindowIcon ::
+  (MonadUnliftIO m, MonadLog m) =>
+  WindowSetup ->
+  AppInfoCol ->
+  GetXIcon ->
+  View.WindowItemView ->
+  WindowInfo ->
+  m ()
+applyWindowIcon WindowSetup{..} appCol getXIcon view winInfo = withRunInIO $ \unlift -> do
+  -- TODO Prevent unnecessary updates
+
+  -- TODO When the icon is decided by X property,
+  -- receive updates solely from that property
+  (unlift . runMaybeT) imgIcon >>= \case
+    Just gicon -> View.windowSetGIcon view gicon
+    Nothing -> do
+      rawIcons <- getXIcon >>= unlift . handleError
+      View.windowSetRawIcons view rawIcons
+  where
+    WindowInfo{windowClasses} = winInfo
+    imgIcon = appInfoImgSetter appCol windowClasses <|> mapMaybeT liftIO (windowImgIcon winInfo)
+    handleError = \case
+      Left err -> [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
+      Right icons -> pure icons
 
 {-
--- | Desktops visualizer widget. Forks its own X11 event handler.
-deskVisualizer ::
-  (MonadUnliftIO m, MonadLog m, MonadXHand m) =>
-  DesktopSetup ->
-  WindowSetup ->
-  m Gtk.Widget
-deskVisualizer deskSetup winSetup = do
-  rcvs <- runXHand deskVisInitiate
-  deskVisualView <- Glib.new View.DesktopVisual []
-  DeskVisHandle <- deskVisMake rcvs (deskSetup, winSetup) deskVisualView
-
-  Gtk.toWidget deskVisualView
-
--- Currently handle is empty, because no external handling is permitted.
-data DeskVisHandle = DeskVisHandle
-
--- TODO Model scheme is not working, need to make it work with pure states.
-
 deskVisMake ::
   (MonadUnliftIO m, MonadLog m) =>
   DeskVisRcvs ->
@@ -337,7 +407,7 @@ deskItemMake DesktopSetup{..} initStat view = liftIO $ do
           deskStat <- readIORef statRef
           numWindows <- readIORef numWindows
           View.desktopSetVisible view (showDesktop deskStat numWindows)
-        
+
         viewState = \case
           DeskActive -> View.DesktopActive
           DeskVisible -> View.DesktopVisible
@@ -400,7 +470,7 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
                     Right icons -> pure icons
                 View.windowSetRawIcons view rawIcons
             View.windowSetStates view (map viewState $ S.toList windowState)
-        
+
         viewState = \case
           WinHidden -> View.WindowHidden
           WinDemandAttention -> View.WindowDemanding
@@ -410,12 +480,12 @@ winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withR
                           Application Info
 --------------------------------------------------------------------}
 
-appInfoImgSetter :: (MonadUnliftIO m, MonadLog m) => AppInfoCol -> WindowInfo -> MaybeT m Gio.Icon
-appInfoImgSetter appCol WindowInfo{windowClasses} = do
+appInfoImgSetter :: (MonadUnliftIO m, MonadLog m) => AppInfoCol -> V.Vector T.Text -> MaybeT m Gio.Icon
+appInfoImgSetter appCol classes = do
   allDat <- liftIO $ getAppInfos appCol
-  let findWith matcher = V.find (\dat -> any (matcher dat) windowClasses) allDat
+  let findWith matcher = V.find (\dat -> any (matcher dat) classes) allDat
   appDat@AppInfoData{appId} <- MaybeT . pure $ findWith classMatch <|> findWith identMatch <|> findWith execMatch
-  lift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "AppInfo: $1 -> $2" (show windowClasses) appId
+  lift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "AppInfo: $1 -> $2" (show classes) appId
   appInfo <- MaybeT . liftIO $ appGetIns appDat
   MaybeT $ Gio.appInfoGetIcon appInfo
   where

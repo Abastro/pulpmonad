@@ -1,15 +1,13 @@
 module Control.Event.Entry (
   Source,
   Sink,
-  Handler,
   sourceSimple,
   sourceWithUnreg,
   sourceSink,
   sourceEvent,
   sourceBehavior,
-  differences,
+  updateEvent,
   syncBehavior,
-  syncBehaviorDiff,
   taskToSource,
   taskToBehavior,
   periodicSource,
@@ -48,15 +46,19 @@ sourceEvent = fromAddHandler
 sourceBehavior :: a -> Source a -> MomentIO (Behavior a)
 sourceBehavior = fromChanges
 
--- | Event of differences with previous one.
---
--- In diff function, first parameter is older.
-differences :: Behavior a -> (a -> a -> b) -> MomentIO (Event (Future b))
-differences behav diff = do
-  chEvent <- changes behav
-  pure $ diffFuture <$> behav <@> chEvent
+-- | Compute update using old value of a behaviors and new value of another behavior.
+updateEvent ::
+  (a -> b -> c) ->
+  -- | Uses older value of this behavior
+  Behavior a ->
+  -- | Uses newer value of this behavior
+  Behavior b ->
+  MomentIO (Event (Future c))
+updateEvent compute bOld bNew = do
+  eNew <- changes bNew
+  pure $ liftedCompute <$> bOld <@> eNew
   where
-    diffFuture old = fmap (diff old)
+    liftedCompute old = fmap (compute old)
 
 -- | Sync with behavior using given sink.
 syncBehavior :: Behavior a -> Sink a -> MomentIO ()
@@ -66,12 +68,6 @@ syncBehavior behav sink = do
   liftIOLater $ sink initial
   chEvent <- changes behav
   reactimate' (fmap sink <$> chEvent)
-
--- | Sync with behavior using given sink, which takes both older and newer values.
---
--- Since older value does not exist on startup, sync is not performed then.
-syncBehaviorDiff :: Behavior a -> (a -> a -> IO ()) -> MomentIO ()
-syncBehaviorDiff behav sink = differences behav sink >>= reactimate'
 
 -- | Looping source from performing action with cleanup.
 loopSource :: IO a -> IO () -> IO (Source a)
