@@ -21,12 +21,10 @@ import Data.Foldable
 import Data.Function
 import Data.IntMap.Strict qualified as IM
 import Data.List
-import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Set qualified as S
 import Data.Text qualified as T
-import Data.Traversable
 import Data.Vector qualified as V
 import GI.GLib qualified as Glib
 import GI.Gio.Interfaces.AppInfo qualified as Gio
@@ -61,6 +59,7 @@ data DesktopSetup = DesktopSetup
 newtype WindowSetup = WindowSetup
   { windowImgIcon :: WindowInfo -> MaybeT IO Gio.Icon
   -- ^ With which icon the window is going to set to.
+  -- Due to implementation concerns, icon would not be updated on title changes.
   }
 
 deskVisualizer ::
@@ -78,31 +77,30 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     eActiveWindow <- liftIO (taskToSource windowActive) >>= sourceEvent
 
     bDesktops <- desktopList (updateDesktop deskSetup (Glib.new View.DesktopItemView [])) eDesktopList
-    (bWindows, bWinWithDesk) <- windowMapA (updateWindow (Glib.new View.WindowItemView []) trackWinInfo) eWindowList
-    activeWindow <- stepper Nothing eActiveWindow
+    (eWindows, bWinWithDesk) <- windowMap (updateWindow (Glib.new View.WindowItemView []) trackWinInfo) eWindowList
+    bActiveWindow <- stepper Nothing eActiveWindow
     let deskViews = V.map desktopView <$> bDesktops
         winDeskPairs = windowDesktopPairs <$> bDesktops <*> bWinWithDesk
-        deskWithWinCnt = pairDeskCnt <$> winDeskPairs <*> bDesktops
 
-    -- Compute differences
-    deskDiffs <- updateEvent deskViewDiff deskViews deskViews
-    pairDiffs <- updateEvent viewPairDiff winDeskPairs winDeskPairs
+    -- Compute and apply container differences.
+    deskDiffs <- updateEvent computeDiffs deskViews deskViews
+    pairDiffs <- updateEvent computeDiffs winDeskPairs winDeskPairs
+    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> deskDiffs
+    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> pairDiffs
 
-    -- Apply differences
-    reactimate' (fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> deskDiffs)
-    reactimate' (fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> pairDiffs)
+    -- Consequence of window list update.
+    reactimate $ Gtk.uiSingleRun <$> (applyWindowPriority <$> bDesktops <@> eWindows)
 
+    -- Visibility depends on both desktop state and window count.
+    let deskWithWinCnt = pairDeskCnt <$> winDeskPairs <*> bDesktops
     syncBehavior deskWithWinCnt (Gtk.uiSingleRun . traverse_ (uncurry $ applyDesktopVisible deskSetup))
-  undefined
+
+  Gtk.toWidget mainView
   where
     pairDeskCnt pairMap = V.imap $ \i v -> (fromMaybe 0 (deskHisto IM.!? i), v)
       where
         pairToCnt (_win, desk) = (desk, 1 :: NumWindows)
         deskHisto = IM.fromListWith (+) . map pairToCnt $ M.keys pairMap
-
--- | Difference represented by pair of removed and added stuffs
-data Diffs a = Diffs {removed :: a, added :: a}
-  deriving (Functor)
 
 data DeskItem = DeskItem
   { desktopView :: !View.DesktopItemView
@@ -139,35 +137,20 @@ windowDesktopPairs desktops windows = M.mapMaybe pairToView . M.fromSet id $ pai
     pairSet = S.fromList . map winHandleToPair . M.toList $ windows
     winHandleToPair (window, WinItem{winItemExtra}) = (window, winItemExtra)
 
-deskViewDiff ::
-  V.Vector View.DesktopItemView ->
-  V.Vector View.DesktopItemView ->
-  Diffs [View.DesktopItemView]
-deskViewDiff old new = V.toList <$> Diffs{..}
-  where
-    removed = V.drop (V.length new) old
-    added = V.drop (V.length new) old
-
-viewPairDiff ::
-  M.Map (Window, Int) ViewPair ->
-  M.Map (Window, Int) ViewPair ->
-  Diffs [ViewPair]
-viewPairDiff old new = M.elems <$> Diffs{..}
-  where
-    removed = old M.\\ new
-    added = new M.\\ old
-
-applyDeskDiff :: View.DesktopVisual -> Diffs [View.DesktopItemView] -> IO ()
+-- Problem: Looks generalizable, while presence IO action complicates the matter.
+-- Remove first and Add in order, this part might need to be considered.
+applyDeskDiff :: View.DesktopVisual -> Diffs (V.Vector View.DesktopItemView) -> IO ()
 applyDeskDiff main Diffs{..} = do
   -- Remove first, then add "in order".
   traverse_ (View.removeDesktop main) removed
   traverse_ (View.addDesktop main) added
 
-applyPairDiff :: Diffs [ViewPair] -> IO ()
+applyPairDiff :: Diffs (M.Map k ViewPair) -> IO ()
 applyPairDiff Diffs{..} = do
   traverse_ (uncurry . flip $ View.removeWindow) removed
   traverse_ (uncurry . flip $ View.insertWindow) added
 
+-- TODO Need a test that same ID points towards the same View. Likely require restructure.
 desktopList ::
   (Maybe DeskItem -> DesktopStat -> MomentIO DeskItem) ->
   Event (V.Vector DesktopStat) ->
@@ -191,17 +174,17 @@ updateDesktop setup mkView old deskItemStat = do
       desktopView <- liftIO mkView
       pure DeskItem{..}
 
-windowMapA ::
+windowMap ::
   (Maybe WinItemFull -> (Window, Int) -> MomentIO (Maybe WinItemFull)) ->
   Event (V.Vector Window) ->
-  MomentIO (Behavior (M.Map Window WinItem), Behavior (M.Map Window WinWithDesk))
-windowMapA update eList = do
+  MomentIO (Event (M.Map Window WinItem), Behavior (M.Map Window WinWithDesk))
+windowMap update eList = do
   let eWinIdx = asMapWithIdx <$> eList
-  (eMap, bMap) <- exeAccumD M.empty (flip (filterZipToRightM update) <$> eWinIdx)
-  let bStdMap = M.map void <$> bMap
+  (eMap, _) <- exeAccumD M.empty (flip (filterZipToRightM update) <$> eWinIdx)
+  let eStdMap = M.map void <$> eMap
       eDeskMap = traverse sequenceA <$> eMap
   bDeskMap <- switchB (pure M.empty) eDeskMap
-  pure (bStdMap, bDeskMap)
+  pure (eStdMap, bDeskMap)
   where
     asMapWithIdx list = M.mapWithKey (,) . M.fromList $ zip (V.toList list) [0 ..]
 
@@ -227,7 +210,12 @@ updateWindow mkView trackInfo old (windowId, winIndex) = runMaybeT $ updated <|>
     updated = MaybeT $ pure (setIndex <$> old)
     setIndex window = window{winIndex}
 
--- TODO Priority update with proper sort-invalidate call
+-- | Update priority of windows, then reflect the priority.
+applyWindowPriority :: V.Vector DeskItem -> M.Map k WinItem -> IO ()
+applyWindowPriority desktops windows = do
+  -- MAYBE Too complex? Priority might be embedded in view..
+  for_ windows $ \WinItem{..} -> View.setPriority windowView winIndex
+  for_ desktops $ \DeskItem{desktopView} -> View.reflectPriority desktopView
 
 applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
 applyDesktopState DesktopSetup{..} (DeskItem desktop DesktopStat{..}) = do
@@ -262,9 +250,9 @@ applyWindowIcon ::
   m ()
 applyWindowIcon WindowSetup{..} appCol getXIcon view winInfo = withRunInIO $ \unlift -> do
   -- TODO Prevent unnecessary updates
-
-  -- TODO When the icon is decided by X property,
-  -- receive updates solely from that property
+  -- AppInfo case: Update when classes change
+  -- Other case: Update when classes or states change
+  -- .. Or watch for icons?
   (unlift . runMaybeT) imgIcon >>= \case
     Just gicon -> View.windowSetGIcon view gicon
     Nothing -> do

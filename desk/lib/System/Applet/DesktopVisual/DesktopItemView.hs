@@ -123,7 +123,7 @@ removeWindow desktop window = do
 -- | Reflect the priorities to the sort as priorities change.
 --
 -- This is here since in the end, priorities are usually updated in batch.
--- (Notifying FlowBoxChild can introduce coupling)
+-- (Also, notifying FlowBoxChild can introduce coupling)
 reflectPriority :: DesktopItemView -> IO ()
 reflectPriority desktop = do
   DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
