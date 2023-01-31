@@ -16,9 +16,7 @@ import Control.Monad.IO.Unlift
 import Control.Monad.Trans.Maybe
 import Data.Bifunctor (Bifunctor (..), first)
 import Data.Foldable
-import Data.Function
 import Data.IntMap.Strict qualified as IM
-import Data.List
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Set qualified as S
@@ -44,7 +42,7 @@ import System.Log.LogPrint
 type NumWindows = Word
 
 -- FIXME Consider that in XMonad, "Workspace" has String ID.
--- In fact, index notion of XMonad is not static - Must be fixed!
+-- In fact, index notion of XMonad is not static (consult ewmh and its sort) - Must be fixed!
 
 -- | Desktop part of the setup.
 data DesktopSetup = DesktopSetup
@@ -79,14 +77,18 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     eActiveWindow <- liftIO (taskToSource windowActive) >>= sourceEvent
 
     (eDesktops, bDesktops) <- desktopList updateDesk eDesktopList
-    (eWindows, bWinWithDesk) <- windowMap updateWin eWindowList
+    (eWindows, bWindows) <- windowMap updateWin eWindowList
     bActiveWindow <- stepper Nothing eActiveWindow
-    let deskViews = V.map desktopView <$> bDesktops
-        winDeskPairs = windowDesktopPairs <$> bDesktops <*> bWinWithDesk
+    let bDeskViews = V.map desktopView <$> bDesktops
+        bWinViews = M.map windowView <$> bWindows
+
+    -- Behavior updates at next step of eWindows, in sync with bWinView
+    winDeskPairs <- switchB (pure S.empty) (asWinDeskPairs <$> eWindows)
+    let winDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> winDeskPairs
 
     -- Compute and apply container differences.
-    deskDiffs <- updateEvent computeDiffs deskViews deskViews
-    pairDiffs <- updateEvent computeDiffs winDeskPairs winDeskPairs
+    deskDiffs <- updateEvent computeDiffs bDeskViews bDeskViews
+    pairDiffs <- updateEvent computeDiffs winDeskPairMap winDeskPairMap
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> deskDiffs
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> pairDiffs
 
@@ -103,10 +105,15 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
 
   Gtk.toWidget mainView
   where
+    asWinDeskPairs :: M.Map Window WinItem -> Behavior (S.Set (Window, Int))
+    asWinDeskPairs = fmap mapToPairs . traverse bWindowDesktop
+
+    -- Pair with desktop counts
+    pairDeskCnt :: S.Set (Window, Int) -> V.Vector a -> V.Vector (NumWindows, a)
     pairDeskCnt pairMap = V.imap $ \i v -> (fromMaybe 0 (deskHisto IM.!? i), v)
       where
         pairToCnt (_win, desk) = (desk, 1 :: NumWindows)
-        deskHisto = IM.fromListWith (+) . map pairToCnt $ M.keys pairMap
+        deskHisto = IM.fromListWith (+) . map pairToCnt $ S.toList pairMap
 
 data DeskItem = DeskItem
   { desktopView :: !View.DesktopItemView
@@ -114,35 +121,27 @@ data DeskItem = DeskItem
   , eDesktopClick :: !(Event ())
   }
 
-data WinItemOf a = WinItem
+data WinItem = WinItem
   { windowView :: !View.WindowItemView
   , winIndex :: !Int
   -- ^ Index in the window list.
-  , winItemExtra :: !a
-  -- ^ Extra data to carry around signals / desktops.
+  , bWindowDesktop :: !(Behavior Int)
+  , eWindowClick :: !(Event ())
   }
-  deriving (Functor, Foldable, Traversable)
 
-type WinItem = WinItemOf ()
-type WinWithDesk = WinItemOf Int
-type WinItemFull = WinItemOf (Behavior Int)
+mapToPairs :: (Ord a, Ord b) => M.Map a b -> S.Set (a, b)
+mapToPairs = S.fromList . M.toList
 
 type ViewPair = (View.WindowItemView, View.DesktopItemView)
 
-windowDesktopPairs ::
-  V.Vector DeskItem ->
-  M.Map Window WinWithDesk ->
+asViewPairMap ::
+  V.Vector View.DesktopItemView ->
+  M.Map Window View.WindowItemView ->
+  S.Set (Window, Int) ->
   M.Map (Window, Int) ViewPair
-windowDesktopPairs desktops windows = M.mapMaybe pairToView . M.fromSet id $ pairSet
+asViewPairMap desktops windows = M.mapMaybe pairToView . M.fromSet id
   where
-    -- Problem: Having to reference view this way is unsatisfactory.
-    -- Better way of carrying around view?
-    pairToView (win, desk) = (winViewOf win,) <$> deskViewOf desk
-    deskViewOf desk = desktopView <$> desktops V.!? desk
-    winViewOf win = windowView $ windows M.! win
-
-    pairSet = S.fromList . map winHandleToPair . M.toList $ windows
-    winHandleToPair (window, WinItem{winItemExtra}) = (window, winItemExtra)
+    pairToView (win, desk) = (windows M.! win,) <$> (desktops V.!? desk)
 
 -- Uses list since not so many events occur simultaneously
 desktopClicks :: V.Vector DeskItem -> Event [Int]
@@ -186,36 +185,31 @@ updateDesktop setup mkView old desktopStat = do
       desktopView <- liftIO mkView
       eDesktopClick <- sourceEvent (View.desktopClickSource desktopView)
       pure DeskItem{..}
-
     updated desktop = desktop{desktopStat}
 
 windowMap ::
-  (Maybe WinItemFull -> (Window, Int) -> MomentIO (Maybe WinItemFull)) ->
+  (Maybe WinItem -> (Window, Int) -> MomentIO (Maybe WinItem)) ->
   Event (V.Vector Window) ->
-  MomentIO (Event (M.Map Window WinItem), Behavior (M.Map Window WinWithDesk))
+  MomentIO (Discrete (M.Map Window WinItem))
 windowMap update eList = do
   let eWinIdx = asMapWithIdx <$> eList
-  (eMap, _) <- exeAccumD M.empty (flip (filterZipToRightM update) <$> eWinIdx)
-  let eStdMap = M.map void <$> eMap
-      eDeskMap = traverse sequenceA <$> eMap
-  bDeskMap <- switchB (pure M.empty) eDeskMap
-  pure (eStdMap, bDeskMap)
+  exeAccumD M.empty (flip (filterZipToRightM update) <$> eWinIdx)
   where
     asMapWithIdx list = M.mapWithKey (,) . M.fromList $ zip (V.toList list) [0 ..]
 
 updateWindow ::
   IO View.WindowItemView ->
   (Window -> IO (Maybe PerWinRcvs)) ->
-  Maybe WinItemFull ->
+  Maybe WinItem ->
   (Window, Int) ->
-  MomentIO (Maybe WinItemFull)
+  MomentIO (Maybe WinItem)
 updateWindow mkView trackInfo old (windowId, winIndex) = runMaybeT $ updated <|> createWindow
   where
     createWindow = do
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
       windowView <- liftIO mkView
       lift $ do
-        winItemExtra <- taskToBehavior winDesktop
+        bWindowDesktop <- taskToBehavior winDesktop
         eWinInfo <- liftIO (taskToSource winInfo) >>= sourceEvent
         eWindowClick <- sourceEvent (View.windowClickSource windowView)
 
