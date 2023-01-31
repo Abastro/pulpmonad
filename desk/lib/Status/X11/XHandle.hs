@@ -136,7 +136,7 @@ xListeners = XIO . asks $ \XHandle{xhListeners} -> xhListeners
 xActQueue :: XIO (TQueue (IO ()))
 xActQueue = XIO . asks $ \XHandle{xhActQueue} -> xhActQueue
 
--- | Run on certain window. It is advised not to use this function.
+-- | Run on certain window. It is advised not to directly use this function.
 xOnWindow :: Window -> XIO a -> XIO a
 xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
   where

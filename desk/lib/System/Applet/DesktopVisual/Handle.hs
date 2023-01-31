@@ -1,5 +1,3 @@
-{-# LANGUAGE RecursiveDo #-}
-
 module System.Applet.DesktopVisual.Handle (
   NumWindows,
   GetXIcon,
@@ -45,7 +43,8 @@ import System.Log.LogPrint
 
 type NumWindows = Word
 
--- TODO Consider that in XMonad, "Workspace" has String ID.
+-- FIXME Consider that in XMonad, "Workspace" has String ID.
+-- In fact, index notion of XMonad is not static - Must be fixed!
 
 -- | Desktop part of the setup.
 data DesktopSetup = DesktopSetup
@@ -145,6 +144,7 @@ applyDeskDiff main Diffs{..} = do
   traverse_ (View.removeDesktop main) removed
   traverse_ (View.addDesktop main) added
 
+-- MAYBE Log these occurrences
 applyPairDiff :: Diffs (M.Map k ViewPair) -> IO ()
 applyPairDiff Diffs{..} = do
   traverse_ (uncurry . flip $ View.removeWindow) removed
@@ -213,7 +213,8 @@ updateWindow mkView trackInfo old (windowId, winIndex) = runMaybeT $ updated <|>
 -- | Update priority of windows, then reflect the priority.
 applyWindowPriority :: V.Vector DeskItem -> M.Map k WinItem -> IO ()
 applyWindowPriority desktops windows = do
-  -- MAYBE Too complex? Priority might be embedded in view..
+  -- MAYBE Too complex? Perhaps better to embed inside window
+  -- Perhaps, all the widgets can be read from single file
   for_ windows $ \WinItem{..} -> View.setPriority windowView winIndex
   for_ desktops $ \DeskItem{desktopView} -> View.reflectPriority desktopView
 
@@ -240,6 +241,11 @@ applyWindowState view WindowInfo{..} = do
       WinHidden -> View.WindowHidden
       WinDemandAttention -> View.WindowDemanding
 
+data SpecifyIcon
+  = AppIconFrom !(V.Vector T.Text)
+  | CustomFrom !WindowInfo
+  | NoIcon
+
 applyWindowIcon ::
   (MonadUnliftIO m, MonadLog m) =>
   WindowSetup ->
@@ -252,7 +258,8 @@ applyWindowIcon WindowSetup{..} appCol getXIcon view winInfo = withRunInIO $ \un
   -- TODO Prevent unnecessary updates
   -- AppInfo case: Update when classes change
   -- Other case: Update when classes or states change
-  -- .. Or watch for icons?
+  -- Icons could be watched, which adds another layer..
+  -- Perhaps: Only classes change invoke different specifier.
   (unlift . runMaybeT) imgIcon >>= \case
     Just gicon -> View.windowSetGIcon view gicon
     Nothing -> do
@@ -266,208 +273,42 @@ applyWindowIcon WindowSetup{..} appCol getXIcon view winInfo = withRunInIO $ \un
       Right icons -> pure icons
 
 {-
-deskVisMake ::
-  (MonadUnliftIO m, MonadLog m) =>
-  DeskVisRcvs ->
-  (DesktopSetup, WindowSetup) ->
-  View.DesktopVisual ->
-  m DeskVisHandle
-deskVisMake DeskVisRcvs{..} (deskSetup, winSetup) view = withRunInIO $ \unlift -> do
-  act <- registers <$> trackAppInfo <*> newIORef V.empty <*> newIORef M.empty <*> newIORef Nothing
-  unlift act
-  where
-    registers appCol desksRef winsRef activeRef = withRunInIO $ \unlift -> do
-      killStat <- Gtk.uiTask desktopStats (unlift . updateDeskStats)
-      killWinCh <- Gtk.uiTask windowsList (unlift . updateWinList)
-      killActiv <- Gtk.uiTask windowActive (unlift . changeActivate)
-      _ <- Gtk.onWidgetDestroy view (killStat >> killWinCh >> killActiv)
-      pure DeskVisHandle
-      where
-        updateDeskStats :: (MonadUnliftIO m, MonadLog m) => V.Vector DesktopStat -> m ()
-        updateDeskStats newStats = withRunInIO $ \unlift -> do
-          -- Cut down to available desktops
-          let numDesk = V.length newStats
-          modifyIORef' desksRef (V.take numDesk)
-          View.cutDesktopToCount view numDesk
+Window click: reqActivate window
+Desktop click: reqToDesktop desktop
 
-          -- Add additional available desktops
-          oldNum <- V.length <$> readIORef desksRef
-          addeds <- for (V.drop oldNum $ V.indexed newStats) $ \(idx, stat) -> do
-            deskItemView <- Glib.new View.DesktopItemView []
-            View.desktopClickAct deskItemView $ reqToDesktop idx
-            (deskItemView,) <$> unlift (deskItemMake deskSetup stat deskItemView)
-          modifyIORef' desksRef (<> fmap snd addeds)
-          View.addDesktops view (fst <$> addeds)
+changeActivate :: (MonadUnliftIO m, MonadLog m) => Maybe Window -> m ()
+changeActivate nextActive = withRunInIO $ \_unlift -> do
+  windows <- readIORef winsRef
+  prevActive <- atomicModifyIORef' activeRef (nextActive,)
+  for_ (prevActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
+    View.windowSetActivate itemWindowView False
+  for_ (nextActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
+    View.windowSetActivate itemWindowView True
 
-          -- Update all desktops
-          deskItems <- readIORef desksRef
-          V.zipWithM_ (\DeskItemHandle{updateDeskItem} -> updateDeskItem) deskItems newStats
+winSwitch :: (MonadUnliftIO m, MonadLog m) => Window -> View.WindowItemView -> Int -> Int -> m ()
+winSwitch windowId winView deskOld deskNew = withRunInIO $ \unlift -> do
+  unlift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "[$1] desktop $2 -> $3" windowId deskOld deskNew
+  desktops <- readIORef desksRef
+  -- Out of bounds: was already removed, no need to care
+  for_ (desktops V.!? deskOld) $ \DeskItemHandle{addRmWinItem} -> do
+    addRmWinItem winView WinRemove
+  -- For now, let's not care about out of bounds from new windows.
+  -- That is likely a sync issue, so it needs proper logging later.
+  for_ (desktops V.!? deskNew) $ \DeskItemHandle{addRmWinItem} -> do
+    addRmWinItem winView WinAdd
 
-        removeOldWin _window WinItemHandle{itemWindowDestroy} = do
-          False <$ liftIO itemWindowDestroy
-
-        addNewWin window () = withRunInIO $ \unlift ->
-          trackWinInfo window >>= \case
-            Just winRcvs -> do
-              winItemView <- Glib.new View.WindowItemView []
-              View.windowClickAct winItemView $ reqActivate window
-              let getIcon = winGetIcon window
-              let switcher item x y = unlift (winSwitch window item x y)
-              unlift $ Just <$> winItemMake winSetup appCol getIcon switcher winRcvs winItemView
-            Nothing -> pure Nothing
-
-        updateWinList :: (MonadUnliftIO m, MonadLog m) => V.Vector Window -> m ()
-        updateWinList windows = withRunInIO $ \unlift -> do
-          -- Update window maps
-          oldWinMap <- readIORef winsRef
-          let newWinMap = M.fromSet (const ()) . S.fromList . V.toList $ windows
-          updWinMap <-
-            unlift $
-              M.mergeA
-                (M.filterAMissing removeOldWin)
-                (M.traverseMaybeMissing addNewWin)
-                (M.zipWithMatched $ \_ handle _ -> handle)
-                oldWinMap
-                newWinMap
-          writeIORef winsRef updWinMap
-
-          -- Apply window order through priority
-          let newPriority = M.fromList (V.toList windows `zip` [0 ..])
-          curWins <- readIORef winsRef
-          desktops <- readIORef desksRef
-          for_ (M.toList curWins) $ \(window, WinItemHandle{itemWindowView}) -> do
-            View.setPriority itemWindowView (newPriority M.! window)
-          for_ desktops $ \DeskItemHandle{reorderWinItems} -> reorderWinItems
-
-        changeActivate :: (MonadUnliftIO m, MonadLog m) => Maybe Window -> m ()
-        changeActivate nextActive = withRunInIO $ \_unlift -> do
-          windows <- readIORef winsRef
-          prevActive <- atomicModifyIORef' activeRef (nextActive,)
-          for_ (prevActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
-            View.windowSetActivate itemWindowView False
-          for_ (nextActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
-            View.windowSetActivate itemWindowView True
-
-        winSwitch :: (MonadUnliftIO m, MonadLog m) => Window -> View.WindowItemView -> Int -> Int -> m ()
-        winSwitch windowId winView deskOld deskNew = withRunInIO $ \unlift -> do
-          unlift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "[$1] desktop $2 -> $3" windowId deskOld deskNew
-          desktops <- readIORef desksRef
-          -- Out of bounds: was already removed, no need to care
-          for_ (desktops V.!? deskOld) $ \DeskItemHandle{addRmWinItem} -> do
-            addRmWinItem winView WinRemove
-          -- For now, let's not care about out of bounds from new windows.
-          -- That is likely a sync issue, so it needs proper logging later.
-          for_ (desktops V.!? deskNew) $ \DeskItemHandle{addRmWinItem} -> do
-            addRmWinItem winView WinAdd
-
-data DeskWinMod = WinRemove | WinAdd
-data DeskItemHandle = DeskItemHandle
-  { updateDeskItem :: DesktopStat -> IO ()
-  , addRmWinItem :: View.WindowItemView -> DeskWinMod -> IO ()
-  , reorderWinItems :: IO ()
-  }
-
-deskItemMake :: MonadIO m => DesktopSetup -> DesktopStat -> View.DesktopItemView -> m DeskItemHandle
-deskItemMake DesktopSetup{..} initStat view = liftIO $ do
-  creates <$> newIORef initStat <*> newIORef 0
-  where
-    creates statRef numWindows = DeskItemHandle{..}
-      where
-        updateDeskItem deskStat@DesktopStat{..} = do
-          View.desktopSetLabel view (desktopLabeling desktopName)
-          View.desktopSetState view (viewState desktopState)
-          writeIORef statRef deskStat
-          updateVisible
-
-        addRmWinItem winView = \case
-          WinRemove -> do
-            View.removeWindow view winView
-            modifyIORef' numWindows pred
-            updateVisible
-          WinAdd -> do
-            View.insertWindow view winView
-            modifyIORef' numWindows succ
-            updateVisible
-
-        reorderWinItems = View.reflectPriority view
-
-        updateVisible = do
-          deskStat <- readIORef statRef
-          numWindows <- readIORef numWindows
-          View.desktopSetVisible view (showDesktop deskStat numWindows)
-
-        viewState = \case
-          DeskActive -> View.DesktopActive
-          DeskVisible -> View.DesktopVisible
-          DeskHidden -> View.DesktopHidden
-
-data WinItemHandle = WinItemHandle
-  { itemWindowView :: View.WindowItemView -- As window can move around, its view should be separately owned.
-  , itemWindowDestroy :: IO ()
-  }
-
-winItemMake ::
-  (MonadUnliftIO m, MonadLog m) =>
-  WindowSetup ->
-  AppInfoCol ->
-  GetXIcon ->
-  (View.WindowItemView -> Int -> Int -> IO ()) ->
-  PerWinRcvs ->
-  View.WindowItemView ->
-  m WinItemHandle
-winItemMake WindowSetup{..} appCol getXIcon onSwitch PerWinRcvs{..} view = withRunInIO $ \unlift -> do
-  -- (-1) is never a valid desktop (means the window is omnipresent)
-  act <- registers <$> newIORef (-1) <*> newIORef 0
-  unlift act
-  where
-    imgIcon winInfo = appInfoImgSetter appCol winInfo <|> mapMaybeT liftIO (windowImgIcon winInfo)
-
-    registers curDeskRef lastUpRef = withRunInIO $ \unlift -> do
-      killChDesk <- Gtk.uiTask winDesktop changeDesktop
-      killInfo <- Gtk.uiTask winInfo (unlift . updateWindow)
-      -- Reference will only be dropped when the parent widget gets destroyed.
-      -- In that case, program close should take care of resource reclaim.
-      pure WinItemHandle{itemWindowView = view, itemWindowDestroy = destroyWindow (killChDesk >> killInfo)}
-      where
-        destroyWindow freeAct = do
-          freeAct -- Stop receiving updates
-          changeDesktop (-1) -- Frees from desktops
-          -- Release the object (replacing widgetDestroy)
-          Glib.releaseObject view
-
-        changeDesktop newDesk = do
-          oldDesk <- atomicModifyIORef' curDeskRef (newDesk,)
-          when (newDesk /= oldDesk) $ onSwitch view oldDesk newDesk
-
-        updateWindow winInfo@WindowInfo{..} = withRunInIO $ \unlift -> do
-          -- Limites update to once per second
-          updTime <- getPOSIXTime
-          diff <- atomicModifyIORef' lastUpRef $ \oldTime -> (updTime, updTime - oldTime)
-          when (diff > 1) $ do
-            Gtk.widgetSetTooltipText view (Just windowTitle)
-            -- TODO When the icon is decided by X property,
-            -- receive updates solely from that property (Forgot, does it mean getXIcon?)
-            (unlift . runMaybeT) (imgIcon winInfo) >>= \case
-              Just gicon -> View.windowSetGIcon view gicon
-              Nothing -> do
-                rawIcons <-
-                  getXIcon >>= \case
-                    Left err -> unlift $ do
-                      -- MAYBE Window id?
-                      [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
-                    Right icons -> pure icons
-                View.windowSetRawIcons view rawIcons
-            View.windowSetStates view (map viewState $ S.toList windowState)
-
-        viewState = \case
-          WinHidden -> View.WindowHidden
-          WinDemandAttention -> View.WindowDemanding
 -}
 
 {-------------------------------------------------------------------
                           Application Info
 --------------------------------------------------------------------}
 
+-- MAYBE Perhaps consulting for process id is better
+-- libwnck application.c and window.c might have relevant logic
+--
+-- ..apparently it uses _NET_WM_ICON as a better choice. (Even uses WM_HINTS)
+--
+-- PID does not provide info of corresponding desktop file, so the part does need heuristics.
 appInfoImgSetter :: (MonadUnliftIO m, MonadLog m) => AppInfoCol -> V.Vector T.Text -> MaybeT m Gio.Icon
 appInfoImgSetter appCol classes = do
   allDat <- liftIO $ getAppInfos appCol

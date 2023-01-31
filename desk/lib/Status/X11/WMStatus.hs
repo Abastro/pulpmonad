@@ -295,6 +295,6 @@ instance XPropType CLong [Gtk.RawIcon] where
     _ -> throwError $ T.pack "Cannot read width, height"
 
 -- | Get the window icon.
--- Since reading it takes time, it is not advised to listen to the property.
+-- Do consider that reading the icon takes time.
 getWindowIcon :: XPQuery [Gtk.RawIcon]
 getWindowIcon = queryProp @[Gtk.RawIcon] "_NET_WM_ICON"

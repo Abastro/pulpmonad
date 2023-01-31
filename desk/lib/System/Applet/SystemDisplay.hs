@@ -45,6 +45,8 @@ tempClass = \case
   T100 -> T.pack "temp-100"
   T120 -> T.pack "temp-120"
 
+-- TODO Use internal-child field for ImageBar's image (consult GtkBuilder docs).
+
 {-------------------------------------------------------------------
                             Battery
 --------------------------------------------------------------------}
