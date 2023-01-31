@@ -260,6 +260,7 @@ data WindowInfo = WindowInfo
   , windowClasses :: !(V.Vector T.Text)
   , windowState :: !(S.Set WMStateEx)
   }
+  deriving (Eq)
 
 -- | Window information. Only fails when WM_CLASS property is missing.
 -- When name(title) is missing, this gives the empty title.
@@ -295,6 +296,9 @@ instance XPropType CLong [Gtk.RawIcon] where
     _ -> throwError $ T.pack "Cannot read width, height"
 
 -- | Get the window icon.
--- Do consider that reading the icon takes time.
+-- Do consider that reading the icon takes much time.
 getWindowIcon :: XPQuery [Gtk.RawIcon]
 getWindowIcon = queryProp @[Gtk.RawIcon] "_NET_WM_ICON"
+
+-- TODO Version which does not hold icon?
+-- Furthermore, some applications might set icon too frequently

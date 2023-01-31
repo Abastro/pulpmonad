@@ -10,7 +10,6 @@ import Control.Applicative
 import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Event.State
-import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Unlift
 import Control.Monad.Trans.Maybe
@@ -56,7 +55,7 @@ data DesktopSetup = DesktopSetup
 newtype WindowSetup = WindowSetup
   { windowImgIcon :: WindowInfo -> MaybeT IO Gio.Icon
   -- ^ With which icon the window is going to set to.
-  -- Due to implementation concerns, icon would not be updated on title changes.
+  -- Due to implementation concerns, only class change would allow custom to start acting for icon set.
   }
 
 deskVisualizer ::
@@ -66,10 +65,13 @@ deskVisualizer ::
   m Gtk.Widget
 deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   DeskVisRcvs{..} <- unlift $ runXHand deskVisInitiate
+  appInfoCol <- trackAppInfo
   mainView <- Glib.new View.DesktopVisual []
 
-  let updateDesk = updateDesktop deskSetup (Glib.new View.DesktopItemView [])
-      updateWin = updateWindow (Glib.new View.WindowItemView []) trackWinInfo
+  let getRawIcon = unlift . wrapGetRaw . winGetIcon
+      specifyIcon = fmap unlift . specifyWindowIcon winSetup appInfoCol
+      updateDesk = updateDesktop deskSetup (Glib.new View.DesktopItemView [])
+      updateWin = updateWindow (Glib.new View.WindowItemView []) trackWinInfo getRawIcon specifyIcon
 
   compile $ do
     eDesktopList <- liftIO (taskToSource desktopStats) >>= sourceEvent
@@ -81,6 +83,8 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     bActiveWindow <- stepper Nothing eActiveWindow
     let bDeskViews = V.map desktopView <$> bDesktops
         bWinViews = M.map windowView <$> bWindows
+        -- Can change when window list changes, for window list change could lag behind. This is intended.
+        bActiveView = (\views win -> (views M.!?) =<< win) <$> bWinViews <*> bActiveWindow
 
     -- Behavior updates at next step of eWindows, in sync with bWinView
     winDeskPairs <- switchB (pure S.empty) (asWinDeskPairs <$> eWindows)
@@ -92,16 +96,21 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> deskDiffs
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> pairDiffs
 
-    -- Window list update changes window order.
+    -- Sync with activated window.
+    activeDiffs <- updateEvent Diffs bActiveView bActiveView
+    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyActiveWindow) <$> activeDiffs
+
+    -- Window list update changes window order. We do not care of desktop changes.
     reactimate $ Gtk.uiSingleRun <$> (applyWindowPriority <$> bDesktops <@> eWindows)
 
     -- Visibility depends on both desktop state and window count.
     let deskWithWinCnt = pairDeskCnt <$> winDeskPairs <*> bDesktops
     syncBehavior deskWithWinCnt (Gtk.uiSingleRun . traverse_ (uncurry $ applyDesktopVisible deskSetup))
 
-    eDesktopClicks <- switchE never (desktopClicks <$> eDesktops)
-    reactimate $ Gtk.uiSingleRun . traverse_ reqToDesktop <$> eDesktopClicks
-    pure ()
+    eDesktopActivate <- switchE never (desktopActivates <$> eDesktops)
+    eWindowActivate <- switchE never (windowActivates <$> eWindows)
+    reactimate $ Gtk.uiSingleRun . traverse_ reqToDesktop <$> eDesktopActivate
+    reactimate $ Gtk.uiSingleRun . traverse_ reqActivate <$> eWindowActivate
 
   Gtk.toWidget mainView
   where
@@ -144,10 +153,13 @@ asViewPairMap desktops windows = M.mapMaybe pairToView . M.fromSet id
     pairToView (win, desk) = (windows M.! win,) <$> (desktops V.!? desk)
 
 -- Uses list since not so many events occur simultaneously
-desktopClicks :: V.Vector DeskItem -> Event [Int]
-desktopClicks desktops = fold (V.imap eWithIdx desktops)
+desktopActivates :: V.Vector DeskItem -> Event [Int]
+desktopActivates = fold . V.imap eWithIdx
   where
     eWithIdx idx DeskItem{eDesktopClick} = [idx] <$ eDesktopClick
+
+windowActivates :: M.Map Window WinItem -> Event [Window]
+windowActivates = M.foldMapWithKey $ \win WinItem{eWindowClick} -> [win] <$ eWindowClick
 
 -- Problem: Looks generalizable, while presence IO action complicates the matter.
 -- Remove first and Add in order, this part might need to be considered.
@@ -157,7 +169,6 @@ applyDeskDiff main Diffs{..} = do
   traverse_ (View.removeDesktop main) removed
   traverse_ (View.addDesktop main) added
 
--- MAYBE Log these occurrences
 applyPairDiff :: Diffs (M.Map k ViewPair) -> IO ()
 applyPairDiff Diffs{..} = do
   traverse_ (uncurry . flip $ View.removeWindow) removed
@@ -200,10 +211,12 @@ windowMap update eList = do
 updateWindow ::
   IO View.WindowItemView ->
   (Window -> IO (Maybe PerWinRcvs)) ->
+  (Window -> IO [Gtk.RawIcon]) ->
+  ((Bool, WindowInfo) -> (Bool, IconSpecify) -> IO (Bool, IconSpecify)) ->
   Maybe WinItem ->
   (Window, Int) ->
   MomentIO (Maybe WinItem)
-updateWindow mkView trackInfo old (windowId, winIndex) = runMaybeT $ updated <|> createWindow
+updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) = runMaybeT $ updated <|> createWindow
   where
     createWindow = do
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
@@ -213,13 +226,21 @@ updateWindow mkView trackInfo old (windowId, winIndex) = runMaybeT $ updated <|>
         eWinInfo <- liftIO (taskToSource winInfo) >>= sourceEvent
         eWindowClick <- sourceEvent (View.windowClickSource windowView)
 
+        -- Specify the window icon
+        eClChWithInfo <- accumE (False, undefined) (addClassChange <$> eWinInfo)
+        (eSpecify, _) <- exeAccumD (False, FromEWMH) (fmap liftIO . updateSpecify <$> eClChWithInfo)
+        -- MAYBE Filtering is not ideal
+        let eSpecifyCh = snd <$> filterE fst eSpecify
+
         -- Apply the received information on the window
         reactimate (applyWindowState windowView <$> eWinInfo)
-        -- TODO Apply Icon - how?
+        reactimate (applySpecifiedIcon (winGetRaw windowId) windowView <$> eSpecifyCh)
 
         pure WinItem{..}
     updated = MaybeT $ pure (setIndex <$> old)
     setIndex window = window{winIndex}
+
+    addClassChange newInfo (_, oldInfo) = (windowClasses newInfo /= windowClasses oldInfo, oldInfo)
 
 -- | Update priority of windows, then reflect the priority.
 applyWindowPriority :: V.Vector DeskItem -> M.Map k WinItem -> IO ()
@@ -228,6 +249,12 @@ applyWindowPriority desktops windows = do
   -- Perhaps, all the widgets can be read from single file
   for_ windows $ \WinItem{..} -> View.setPriority windowView winIndex
   for_ desktops $ \DeskItem{desktopView} -> View.reflectPriority desktopView
+
+-- Diffs only used to represent both old & new
+applyActiveWindow :: Diffs (Maybe View.WindowItemView) -> IO ()
+applyActiveWindow Diffs{..} = do
+  for_ removed $ \window -> View.windowSetActivate window False
+  for_ added $ \window -> View.windowSetActivate window True
 
 applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
 applyDesktopState DesktopSetup{..} DeskItem{desktopStat = DesktopStat{..}, ..} = do
@@ -252,62 +279,57 @@ applyWindowState view WindowInfo{..} = do
       WinHidden -> View.WindowHidden
       WinDemandAttention -> View.WindowDemanding
 
-data SpecifyIcon
-  = AppIconFrom !(V.Vector T.Text)
-  | CustomFrom !WindowInfo
-  | NoIcon
+-- From EWMH is the default
+data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !Gio.Icon | FromEWMH
 
-applyWindowIcon ::
+specifyWindowIcon ::
   (MonadUnliftIO m, MonadLog m) =>
   WindowSetup ->
   AppInfoCol ->
-  GetXIcon ->
-  View.WindowItemView ->
-  WindowInfo ->
-  m ()
-applyWindowIcon WindowSetup{..} appCol getXIcon view winInfo = withRunInIO $ \unlift -> do
-  -- TODO Prevent unnecessary updates
-  -- AppInfo case: Update when classes change
-  -- Other case: Update when classes or states change
-  -- Icons could be watched, which adds another layer..
-  -- Perhaps: Only classes change invoke different specifier.
-  (unlift . runMaybeT) imgIcon >>= \case
-    Just gicon -> View.windowSetGIcon view gicon
-    Nothing -> do
-      rawIcons <- getXIcon >>= unlift . handleError
-      View.windowSetRawIcons view rawIcons
+  (Bool, WindowInfo) ->
+  (Bool, IconSpecify) ->
+  m (Bool, IconSpecify)
+specifyWindowIcon WindowSetup{..} appCol (classChanged, winInfo) (_, oldSpecify) = withRunInIO $ \unlift -> do
+  fromMaybe (wasEWMH, FromEWMH) <$> runMaybeT (mapMaybeT unlift setWithApp <|> setWithCustom)
   where
     WindowInfo{windowClasses} = winInfo
-    imgIcon = appInfoImgSetter appCol windowClasses <|> mapMaybeT liftIO (windowImgIcon winInfo)
-    handleError = \case
-      Left err -> [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
-      Right icons -> pure icons
+    -- Class change: All re-evaluates from front to back.
+    -- Class no change: Only responds to the corresponding ones.
+    setWithApp = case (oldSpecify, classChanged) of
+      (_, True) -> (True,) . FromAppIcon <$> appInfoImgSetter appCol windowClasses
+      -- Should not change when class did not change.
+      (FromAppIcon _, False) -> pure (False, oldSpecify)
+      (_, False) -> empty
+    setWithCustom = case (oldSpecify, classChanged) of
+      (_, True) -> (True,) . FromCustom <$> windowImgIcon winInfo
+      -- Actively updates to the window info changes.
+      (FromCustom _, False) -> (True,) . FromCustom <$> windowImgIcon winInfo
+      (_, False) -> empty
+    wasEWMH = case oldSpecify of
+      -- Never updates.
+      FromEWMH -> False
+      _ -> True
+
+applySpecifiedIcon ::
+  IO [Gtk.RawIcon] ->
+  View.WindowItemView ->
+  IconSpecify ->
+  IO ()
+applySpecifiedIcon getRaw view = \case
+  FromAppIcon icon -> View.windowSetGIcon view icon
+  FromCustom icon -> View.windowSetGIcon view icon
+  FromEWMH -> View.windowSetRawIcons view =<< getRaw
+
+-- Wraps the raw icon getter so that exception is cared for.
+wrapGetRaw :: (MonadUnliftIO m, MonadLog m) => GetXIcon -> m [Gtk.RawIcon]
+wrapGetRaw getXIcon =
+  liftIO getXIcon >>= \case
+    Left err -> [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
+    Right icons -> pure icons
 
 {-
-Window click: reqActivate window
-Desktop click: reqToDesktop desktop
-
-changeActivate :: (MonadUnliftIO m, MonadLog m) => Maybe Window -> m ()
-changeActivate nextActive = withRunInIO $ \_unlift -> do
-  windows <- readIORef winsRef
-  prevActive <- atomicModifyIORef' activeRef (nextActive,)
-  for_ (prevActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
-    View.windowSetActivate itemWindowView False
-  for_ (nextActive >>= (windows M.!?)) $ \WinItemHandle{itemWindowView} -> do
-    View.windowSetActivate itemWindowView True
-
-winSwitch :: (MonadUnliftIO m, MonadLog m) => Window -> View.WindowItemView -> Int -> Int -> m ()
-winSwitch windowId winView deskOld deskNew = withRunInIO $ \unlift -> do
+  TODO Consider: Log desktop changes?
   unlift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "[$1] desktop $2 -> $3" windowId deskOld deskNew
-  desktops <- readIORef desksRef
-  -- Out of bounds: was already removed, no need to care
-  for_ (desktops V.!? deskOld) $ \DeskItemHandle{addRmWinItem} -> do
-    addRmWinItem winView WinRemove
-  -- For now, let's not care about out of bounds from new windows.
-  -- That is likely a sync issue, so it needs proper logging later.
-  for_ (desktops V.!? deskNew) $ \DeskItemHandle{addRmWinItem} -> do
-    addRmWinItem winView WinAdd
-
 -}
 
 {-------------------------------------------------------------------
