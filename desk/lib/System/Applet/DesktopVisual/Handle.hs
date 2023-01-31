@@ -91,13 +91,13 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     let winDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> winDeskPairs
 
     -- Compute and apply container differences.
-    deskDiffs <- updateEvent computeDiffs bDeskViews bDeskViews
-    pairDiffs <- updateEvent computeDiffs winDeskPairMap winDeskPairMap
+    deskDiffs <- diffEvent computeDiffs bDeskViews
+    pairDiffs <- diffEvent computeDiffs winDeskPairMap
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> deskDiffs
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> pairDiffs
 
     -- Sync with activated window.
-    activeDiffs <- updateEvent Diffs bActiveView bActiveView
+    activeDiffs <- diffEvent Diffs bActiveView
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyActiveWindow) <$> activeDiffs
 
     -- Window list update changes window order. We do not care of desktop changes.

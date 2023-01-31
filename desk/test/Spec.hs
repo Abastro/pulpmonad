@@ -23,7 +23,7 @@ networkDiffEvent :: a -> Event a -> MomentIO (Event (a, a))
 networkDiffEvent x0 ex = do
   bx  <- stepper x0 ex
   -- No need to check arbitrary function due to parametricity, I believe
-  asPlain =<< updateEvent (,) bx bx
+  asPlain =<< diffEvent (,) bx
 
 main :: IO ()
 main = hspec $ do

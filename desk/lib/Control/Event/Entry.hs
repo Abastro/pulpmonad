@@ -7,7 +7,7 @@ module Control.Event.Entry (
   sourceSink,
   sourceEvent,
   sourceBehavior,
-  updateEvent,
+  diffEvent,
   syncBehavior,
   taskToSource,
   taskToBehavior,
@@ -52,17 +52,14 @@ sourceEvent = fromAddHandler
 sourceBehavior :: a -> Source a -> MomentIO (Behavior a)
 sourceBehavior = fromChanges
 
--- | Compute update using old value of a behaviors and new value of another behavior.
-updateEvent ::
-  (a -> b -> c) ->
-  -- | Uses older value of this behavior
+-- | Compute difference between old and new value of a behaviors on each change.
+diffEvent ::
+  (a -> a -> b) ->
   Behavior a ->
-  -- | Uses newer value of this behavior
-  Behavior b ->
-  MomentIO (Event (Future c))
-updateEvent compute bOld bNew = do
-  eNew <- changes bNew
-  pure $ liftedCompute <$> bOld <@> eNew
+  MomentIO (Event (Future b))
+diffEvent compute bOrigin = do
+  eChange <- changes bOrigin
+  pure $ liftedCompute <$> bOrigin <@> eChange
   where
     liftedCompute old = fmap (compute old)
 
