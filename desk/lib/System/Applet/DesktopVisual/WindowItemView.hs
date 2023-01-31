@@ -10,7 +10,6 @@ module System.Applet.DesktopVisual.WindowItemView (
   windowSetGIcon,
   windowSetRawIcons,
   windowSetActivate,
-  WindowState (..),
   windowSetStates,
   windowClickSource,
 ) where
@@ -33,6 +32,7 @@ import Gtk.Pixbufs qualified as Gtk
 import Gtk.Reactive qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import System.Pulp.PulpPath
+import Status.X11.WMStatus
 
 -- MAYBE Use image internal to the button
 -- Essentially, a button with priority. Select in CSS by "button.windowitem".
@@ -126,16 +126,13 @@ windowSetActivate window flag = do
   ctxt <- #getStyleContext window
   (if flag then #addClass else #removeClass) ctxt (T.pack "active")
 
-data WindowState = WindowHidden | WindowDemanding
-  deriving (Enum, Bounded)
-
-windowSetStates :: WindowItemView -> [WindowState] -> IO ()
+windowSetStates :: WindowItemView -> [WMStateEx] -> IO ()
 windowSetStates window states = do
   #getStyleContext window >>= Gtk.updateCssClass asClass states
   where
     asClass = \case
-      WindowHidden -> T.pack "hidden"
-      WindowDemanding -> T.pack "demanding"
+      WinHidden -> T.pack "hidden"
+      WinDemandAttention -> T.pack "demanding"
 
 windowClickSource :: WindowItemView -> Source ()
 windowClickSource window =

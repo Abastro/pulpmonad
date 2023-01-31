@@ -36,6 +36,7 @@ import Gtk.Reactive qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import System.Applet.DesktopVisual.WindowItemView
 import System.Pulp.PulpPath
+import Status.X11.WMStatus
 
 -- Desktop item which has windows sorted via priority
 newtype DesktopItemView = DesktopItemView (ManagedPtr DesktopItemView)
@@ -140,17 +141,14 @@ desktopSetVisible desktop = \case
   True -> #showAll desktop
   False -> #hide desktop
 
-data DesktopState = DesktopActive | DesktopVisible | DesktopHidden
-  deriving (Enum, Bounded)
-
 desktopSetState :: DesktopItemView -> DesktopState -> IO ()
 desktopSetState desktop state = do
   #getStyleContext desktop >>= Gtk.updateCssClass asClass [state]
   where
     asClass = \case
-      DesktopActive -> T.pack "active"
-      DesktopVisible -> T.pack "visible"
-      DesktopHidden -> T.pack "hidden"
+      DeskActive -> T.pack "active"
+      DeskVisible -> T.pack "visible"
+      DeskHidden -> T.pack "hidden"
 
 desktopClickSource :: DesktopItemView -> Source ()
 desktopClickSource desktop =

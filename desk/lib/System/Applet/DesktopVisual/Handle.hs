@@ -259,12 +259,7 @@ applyActiveWindow Diffs{..} = do
 applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
 applyDesktopState DesktopSetup{..} DeskItem{desktopStat = DesktopStat{..}, ..} = do
   View.desktopSetLabel desktopView (desktopLabeling desktopName)
-  View.desktopSetState desktopView (viewState desktopState)
-  where
-    viewState = \case
-      DeskActive -> View.DesktopActive
-      DeskVisible -> View.DesktopVisible
-      DeskHidden -> View.DesktopHidden
+  View.desktopSetState desktopView desktopState
 
 applyDesktopVisible :: DesktopSetup -> NumWindows -> DeskItem -> IO ()
 applyDesktopVisible DesktopSetup{..} numWin DeskItem{..} = do
@@ -273,11 +268,7 @@ applyDesktopVisible DesktopSetup{..} numWin DeskItem{..} = do
 applyWindowState :: View.WindowItemView -> WindowInfo -> IO ()
 applyWindowState view WindowInfo{..} = do
   Gtk.widgetSetTooltipText view (Just windowTitle)
-  View.windowSetStates view (map viewState $ S.toList windowState)
-  where
-    viewState = \case
-      WinHidden -> View.WindowHidden
-      WinDemandAttention -> View.WindowDemanding
+  View.windowSetStates view (S.toList windowState)
 
 -- From EWMH is the default
 data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !Gio.Icon | FromEWMH
@@ -306,7 +297,7 @@ specifyWindowIcon WindowSetup{..} appCol (classChanged, winInfo) (_, oldSpecify)
       (FromCustom _, False) -> (True,) . FromCustom <$> windowImgIcon winInfo
       (_, False) -> empty
     wasEWMH = case oldSpecify of
-      -- Never updates.
+      -- Never updates. Currently do not support animation by EWMH.
       FromEWMH -> False
       _ -> True
 
