@@ -29,6 +29,8 @@ type Source a = AddHandler a
 type Sink a = Handler a
 
 -- | Source with capability of unregistering handlers.
+--
+-- Returned action is supposed to unregister the handler.
 sourceWithUnreg :: (Handler a -> IO (IO ())) -> Source a
 sourceWithUnreg = AddHandler
 

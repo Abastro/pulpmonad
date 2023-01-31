@@ -12,15 +12,15 @@ module System.Applet.DesktopVisual.WindowItemView (
   windowSetActivate,
   WindowState (..),
   windowSetStates,
-  windowClickAct,
+  windowClickSource,
 ) where
 
+import Control.Event.Entry
 import Data.GI.Base.Attributes
 import Data.GI.Base.BasicTypes
 import Data.GI.Base.GObject
 import Data.GI.Base.GParamSpec
 import Data.GI.Base.Overloading
-import Data.GI.Base.Signals
 import Data.Text qualified as T
 import GHC.OverloadedLabels
 import GI.Gio.Interfaces.File qualified as Gio
@@ -30,6 +30,7 @@ import GI.Gtk.Objects.Image qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
+import Gtk.Reactive qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import System.Pulp.PulpPath
 
@@ -136,7 +137,7 @@ windowSetStates window states = do
       WindowHidden -> T.pack "hidden"
       WindowDemanding -> T.pack "demanding"
 
-windowClickAct :: WindowItemView -> IO () -> IO ()
-windowClickAct window act = do
-  on (window `asA` Gtk.Button) #clicked act
-  pure ()
+windowClickSource :: WindowItemView -> Source ()
+windowClickSource window =
+  Gtk.onSource (window `asA` Gtk.Button) #clicked $ \handler -> do
+    handler ()

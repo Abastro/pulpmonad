@@ -12,16 +12,16 @@ module System.Applet.DesktopVisual.DesktopItemView (
   desktopSetVisible,
   DesktopState (..),
   desktopSetState,
-  desktopClickAct,
+  desktopClickSource,
 ) where
 
+import Control.Event.Entry
 import Data.GI.Base.Attributes
 import Data.GI.Base.BasicTypes
 import Data.GI.Base.Constructible
 import Data.GI.Base.GObject
 import Data.GI.Base.ManagedPtr
 import Data.GI.Base.Overloading
-import Data.GI.Base.Signals
 import Data.Int
 import Data.Text qualified as T
 import GHC.OverloadedLabels
@@ -32,6 +32,7 @@ import GI.Gtk.Objects.FlowBoxChild qualified as Gtk
 import GI.Gtk.Objects.Label qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
+import Gtk.Reactive qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import System.Applet.DesktopVisual.WindowItemView
 import System.Pulp.PulpPath
@@ -151,10 +152,9 @@ desktopSetState desktop state = do
       DesktopVisible -> T.pack "visible"
       DesktopHidden -> T.pack "hidden"
 
-desktopClickAct :: DesktopItemView -> IO () -> IO ()
-desktopClickAct desktop act = do
-  on (desktop `asA` Gtk.Widget) #buttonReleaseEvent $ \btn -> do
+desktopClickSource :: DesktopItemView -> Source ()
+desktopClickSource desktop =
+  Gtk.onSource (desktop `asA` Gtk.Widget) #buttonReleaseEvent $ \handler btn -> do
     get btn #button >>= \case
-      1 -> True <$ act
+      1 -> True <$ handler ()
       _ -> pure False
-  pure ()

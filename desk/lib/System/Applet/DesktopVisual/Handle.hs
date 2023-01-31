@@ -70,13 +70,16 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   DeskVisRcvs{..} <- unlift $ runXHand deskVisInitiate
   mainView <- Glib.new View.DesktopVisual []
 
+  let updateDesk = updateDesktop deskSetup (Glib.new View.DesktopItemView [])
+      updateWin = updateWindow (Glib.new View.WindowItemView []) trackWinInfo
+
   compile $ do
     eDesktopList <- liftIO (taskToSource desktopStats) >>= sourceEvent
     eWindowList <- liftIO (taskToSource windowsList) >>= sourceEvent
     eActiveWindow <- liftIO (taskToSource windowActive) >>= sourceEvent
 
-    bDesktops <- desktopList (updateDesktop deskSetup (Glib.new View.DesktopItemView [])) eDesktopList
-    (eWindows, bWinWithDesk) <- windowMap (updateWindow (Glib.new View.WindowItemView []) trackWinInfo) eWindowList
+    (eDesktops, bDesktops) <- desktopList updateDesk eDesktopList
+    (eWindows, bWinWithDesk) <- windowMap updateWin eWindowList
     bActiveWindow <- stepper Nothing eActiveWindow
     let deskViews = V.map desktopView <$> bDesktops
         winDeskPairs = windowDesktopPairs <$> bDesktops <*> bWinWithDesk
@@ -87,12 +90,16 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> deskDiffs
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> pairDiffs
 
-    -- Consequence of window list update.
+    -- Window list update changes window order.
     reactimate $ Gtk.uiSingleRun <$> (applyWindowPriority <$> bDesktops <@> eWindows)
 
     -- Visibility depends on both desktop state and window count.
     let deskWithWinCnt = pairDeskCnt <$> winDeskPairs <*> bDesktops
     syncBehavior deskWithWinCnt (Gtk.uiSingleRun . traverse_ (uncurry $ applyDesktopVisible deskSetup))
+
+    eDesktopClicks <- switchE never (desktopClicks <$> eDesktops)
+    reactimate $ Gtk.uiSingleRun . traverse_ reqToDesktop <$> eDesktopClicks
+    pure ()
 
   Gtk.toWidget mainView
   where
@@ -103,7 +110,8 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
 
 data DeskItem = DeskItem
   { desktopView :: !View.DesktopItemView
-  , deskItemStat :: !DesktopStat
+  , desktopStat :: !DesktopStat
+  , eDesktopClick :: !(Event ())
   }
 
 data WinItemOf a = WinItem
@@ -136,6 +144,12 @@ windowDesktopPairs desktops windows = M.mapMaybe pairToView . M.fromSet id $ pai
     pairSet = S.fromList . map winHandleToPair . M.toList $ windows
     winHandleToPair (window, WinItem{winItemExtra}) = (window, winItemExtra)
 
+-- Uses list since not so many events occur simultaneously
+desktopClicks :: V.Vector DeskItem -> Event [Int]
+desktopClicks desktops = fold (V.imap eWithIdx desktops)
+  where
+    eWithIdx idx DeskItem{eDesktopClick} = [idx] <$ eDesktopClick
+
 -- Problem: Looks generalizable, while presence IO action complicates the matter.
 -- Remove first and Add in order, this part might need to be considered.
 applyDeskDiff :: View.DesktopVisual -> Diffs (V.Vector View.DesktopItemView) -> IO ()
@@ -154,10 +168,8 @@ applyPairDiff Diffs{..} = do
 desktopList ::
   (Maybe DeskItem -> DesktopStat -> MomentIO DeskItem) ->
   Event (V.Vector DesktopStat) ->
-  MomentIO (Behavior (V.Vector DeskItem))
-desktopList update eStat = do
-  (_, bList) <- exeAccumD V.empty (flip (zipToRightM update) <$> eStat)
-  pure bList
+  MomentIO (Discrete (V.Vector DeskItem))
+desktopList update eStat = exeAccumD V.empty (flip (zipToRightM update) <$> eStat)
 
 updateDesktop ::
   DesktopSetup ->
@@ -165,14 +177,17 @@ updateDesktop ::
   Maybe DeskItem ->
   DesktopStat ->
   MomentIO DeskItem
-updateDesktop setup mkView old deskItemStat = do
-  desktop <- maybe createDesktop pure old
+updateDesktop setup mkView old desktopStat = do
+  desktop <- maybe createDesktop (pure . updated) old
   liftIO $ applyDesktopState setup desktop
   pure desktop
   where
     createDesktop = do
       desktopView <- liftIO mkView
+      eDesktopClick <- sourceEvent (View.desktopClickSource desktopView)
       pure DeskItem{..}
+
+    updated desktop = desktop{desktopStat}
 
 windowMap ::
   (Maybe WinItemFull -> (Window, Int) -> MomentIO (Maybe WinItemFull)) ->
@@ -201,9 +216,11 @@ updateWindow mkView trackInfo old (windowId, winIndex) = runMaybeT $ updated <|>
       windowView <- liftIO mkView
       lift $ do
         winItemExtra <- taskToBehavior winDesktop
-        winItemInfo <- taskToBehavior winInfo
-        -- Apply the received information
-        syncBehavior winItemInfo (applyWindowState windowView)
+        eWinInfo <- liftIO (taskToSource winInfo) >>= sourceEvent
+        eWindowClick <- sourceEvent (View.windowClickSource windowView)
+
+        -- Apply the received information on the window
+        reactimate (applyWindowState windowView <$> eWinInfo)
         -- TODO Apply Icon - how?
 
         pure WinItem{..}
@@ -219,9 +236,9 @@ applyWindowPriority desktops windows = do
   for_ desktops $ \DeskItem{desktopView} -> View.reflectPriority desktopView
 
 applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
-applyDesktopState DesktopSetup{..} (DeskItem desktop DesktopStat{..}) = do
-  View.desktopSetLabel desktop (desktopLabeling desktopName)
-  View.desktopSetState desktop (viewState desktopState)
+applyDesktopState DesktopSetup{..} DeskItem{desktopStat = DesktopStat{..}, ..} = do
+  View.desktopSetLabel desktopView (desktopLabeling desktopName)
+  View.desktopSetState desktopView (viewState desktopState)
   where
     viewState = \case
       DeskActive -> View.DesktopActive
@@ -229,8 +246,8 @@ applyDesktopState DesktopSetup{..} (DeskItem desktop DesktopStat{..}) = do
       DeskHidden -> View.DesktopHidden
 
 applyDesktopVisible :: DesktopSetup -> NumWindows -> DeskItem -> IO ()
-applyDesktopVisible DesktopSetup{..} numWin (DeskItem desktop stat) = do
-  View.desktopSetVisible desktop (showDesktop stat numWin)
+applyDesktopVisible DesktopSetup{..} numWin DeskItem{..} = do
+  View.desktopSetVisible desktopView (showDesktop desktopStat numWin)
 
 applyWindowState :: View.WindowItemView -> WindowInfo -> IO ()
 applyWindowState view WindowInfo{..} = do
