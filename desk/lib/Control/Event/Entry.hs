@@ -1,6 +1,7 @@
 module Control.Event.Entry (
   Source,
   Sink,
+  Discrete,
   sourceSimple,
   sourceWithUnreg,
   sourceSink,
@@ -12,7 +13,7 @@ module Control.Event.Entry (
   taskToBehavior,
   periodicSource,
   pollingBehavior,
-  pollingBehaviorWithEvent,
+  pollingDiscrete,
 ) where
 
 import Control.Concurrent
@@ -27,6 +28,9 @@ type Source a = AddHandler a
 
 -- | Sink is, effectively, a callback.
 type Sink a = Handler a
+
+-- | Discrete behavior paired with its own update event.
+type Discrete a = (Event a, Behavior a)
 
 -- | Source with capability of unregistering handlers.
 --
@@ -104,11 +108,11 @@ periodicSource period = loopSource (threadDelay $ period * 1000) (pure ())
 
 -- | Polling behavior which updates at each event.
 pollingBehavior :: IO a -> Event b -> MomentIO (Behavior a)
-pollingBehavior act evt = snd <$> pollingBehaviorWithEvent act evt
+pollingBehavior act evt = snd <$> pollingDiscrete act evt
 
--- | Polling behavior with event for the updates of the behavior.
-pollingBehaviorWithEvent :: IO a -> Event b -> MomentIO (Event a, Behavior a)
-pollingBehaviorWithEvent act evt = do
+-- | Polling discrete behavior which updates at each event.
+pollingDiscrete :: IO a -> Event b -> MomentIO (Discrete a)
+pollingDiscrete act evt = do
   first <- liftIO act
   updates <- mapEventIO (const act) evt
   behav <- stepper first updates

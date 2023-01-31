@@ -18,9 +18,7 @@ import Data.Set qualified as S
 import Data.Vector qualified as V
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
-
--- | Discrete behavior paired with its own update event.
-type Discrete a = (Event a, Behavior a)
+import Control.Event.Entry
 
 -- | mapAccum which accumulates by executing momentous action.
 exeMapAccum :: acc -> Event (acc -> MomentIO (sig, acc)) -> MomentIO (Event sig, Behavior acc)

@@ -115,7 +115,7 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
     cpuTicker <- liftIO (periodicSource 100) >>= sourceEvent
     memory <- pollingBehavior getMemory memTicker
     cpuTemp <- pollingBehavior getCPUTemp cpuTicker
-    (evtCPUStat, cpuStat) <- pollingBehaviorWithEvent getCPUStat cpuTicker
+    (evtCPUStat, cpuStat) <- pollingDiscrete getCPUStat cpuTicker
     -- Usage is determined as time spent (difference of spot time)
     cpuUsage <- stepper (Right cpuZero) $ liftA2 diff <$> cpuStat <@> evtCPUStat
     let cpu = combineCPU <$> cpuUsage <*> cpuTemp
