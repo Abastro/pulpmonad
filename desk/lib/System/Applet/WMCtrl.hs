@@ -34,12 +34,11 @@ import Control.Monad.IO.Unlift
 wmCtrlBtn :: (MonadUnliftIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
 wmCtrlBtn parent = withRunInIO $ \unlift -> do
   watch <- unlift $ runXHand wmCtrlListen
-  callSrc <- taskToSource watch
   uiFile <- dataPath ("ui" </> "wmctl.ui")
   View{..} <- view (T.pack uiFile) parent
 
   network <- compile $ do
-    callEvent <- sourceEvent callSrc
+    callEvent <- sourceEvent (taskToSource watch)
     buildEvent <- sourceEvent toBuild
     refreshEvent <- sourceEvent toRefresh
 
@@ -136,8 +135,9 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
         -- Scroll to the end.
         -- Scrolling is off, likely due to text size not being directly applied.
         -- Maybe switching to TextView would fix this.
-        -- On the other hand, current form is not the final go-to visual.
-        -- So entire scroll could be removed.
+        --
+        -- On the other hand, current form is not the final go-to visual,
+        -- so entire scroll could be removed.
         adj <- get buildScr #vadjustment
         upper <- get adj #upper
         pageSize <- get adj #pageSize

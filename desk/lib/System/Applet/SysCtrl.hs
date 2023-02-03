@@ -27,12 +27,11 @@ import Control.Monad.IO.Unlift
 sysCtrlBtn :: (MonadUnliftIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
 sysCtrlBtn parent = withRunInIO $ \unlift -> do
   watch <- unlift $ runXHand sysCtrlListen
-  callSrc <- taskToSource watch
   uiFile <- dataPath ("ui" </> "sysctl.ui")
   View{..} <- view (T.pack uiFile) parent
 
   network <- compile $ do
-    callEvent <- sourceEvent callSrc
+    callEvent <- sourceEvent (taskToSource watch)
     actEvent <- sourceEvent toAct
 
     -- Problem: Calling "openWindow" somehow does not grab focus correctly.

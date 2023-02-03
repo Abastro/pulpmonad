@@ -74,9 +74,9 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
       updateWin = updateWindow (Glib.new View.WindowItemView []) trackWinInfo getRawIcon specifyIcon
 
   compile $ do
-    eDesktopList <- liftIO (taskToSource desktopStats) >>= sourceEvent
-    eWindowList <- liftIO (taskToSource windowsList) >>= sourceEvent
-    eActiveWindow <- liftIO (taskToSource windowActive) >>= sourceEvent
+    eDesktopList <- sourceEvent (taskToSource desktopStats)
+    eWindowList <- sourceEvent (taskToSource windowsList)
+    eActiveWindow <- sourceEvent (taskToSource windowActive)
 
     (eDesktops, bDesktops) <- desktopList updateDesk eDesktopList
     (eWindows, bWindows) <- windowMap updateWin eWindowList
@@ -225,7 +225,7 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
         -- TODO These sources need to be removed on widget remove.
         -- Accumulate together, or add to finalizer?
         bWindowDesktop <- taskToBehavior winDesktop
-        eWinInfo <- liftIO (taskToSource winInfo) >>= sourceEvent
+        eWinInfo <- sourceEvent (taskToSource winInfo)
         eWindowClick <- sourceEvent (View.windowClickSource windowView)
 
         -- Specify the window icon

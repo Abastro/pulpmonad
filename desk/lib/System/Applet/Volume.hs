@@ -47,7 +47,7 @@ volumeDisplay mixerName controlName = liftIO $ do
   View{..} <- view (T.pack uiFile)
 
   network <- compile $ do
-    ticker <- liftIO (periodicSource 200) >>= sourceEvent
+    ticker <- sourceEvent (periodicSource 200)
     clickEvent <- sourceEvent clicks
     scrollEvent <- sourceEvent scrolls
     switchEvent <- sourceEvent switches

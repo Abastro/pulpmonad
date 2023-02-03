@@ -34,7 +34,7 @@ networkSyncBehavior out x0 ex = do
 
 networkLoopSource :: IO a -> IO () -> Event () -> MomentIO (Event a)
 networkLoopSource act cleanup eFinish = do
-  eLoop <- liftIO (loopSource act cleanup) >>= sourceEvent
+  eLoop <- sourceEvent (loopSource act cleanup)
   switchE eLoop (never <$ eFinish)
 
 reactiveSpec :: Spec
@@ -61,20 +61,12 @@ reactiveSpec = do
     describe "loopSource" $ do
       prop "repeatedly gives signal until terminated" . withMaxSuccess 5 $
         \x -> monadicIO $ do
-          run $ putStrLn "Begin test"
           (srcFinish, finish) <- run sourceSink
           out <- run $ newIORef []
-          -- interpretFrameworks does not work with additional event source.
-          -- Problem: Deadlock occurs somewhere..
           network <- run . compile $ do
             eFinish <- sourceEvent srcFinish
-            liftIO $ putStrLn "Pre-Mk-Result"
-            -- Often stuck here - WHY? Why deadlock?
-            eResult <- networkLoopSource @Int (pure x) (putStrLn "Finalized") eFinish
-            liftIO $ putStrLn "Post-Mk-Result"
+            eResult <- networkLoopSource @Int (pure x) (putStrLn "Finished") eFinish
             reactimate $ appendRef out <$> eResult
-          run $ actuate network *> finish () *> putStrLn "Finished"
+          run $ actuate network <> finish ()
           actual <- run $ readIORef out
           assert (all (== x) actual)
-          run $ putStrLn "End test"
-          -- Stuck here after "finalized" - Likely because finalizer is recursively attached.

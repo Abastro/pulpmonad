@@ -57,7 +57,7 @@ batDisplay _iconSize = withRunInIO $ \unlift -> do
   BatView{..} <- batView (T.pack uiFile)
 
   network <- compile $ do
-    ticker <- liftIO (periodicSource 500) >>= sourceEvent
+    ticker <- sourceEvent (periodicSource 500)
     clicks <- sourceEvent batClicks
     battery <- pollingBehavior getBattery ticker
 
@@ -111,8 +111,8 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
 
   network <- compile $ do
     clicks <- sourceEvent mainClicks
-    memTicker <- liftIO (periodicSource 500) >>= sourceEvent
-    cpuTicker <- liftIO (periodicSource 100) >>= sourceEvent
+    memTicker <- sourceEvent (periodicSource 500)
+    cpuTicker <- sourceEvent (periodicSource 100)
     memory <- pollingBehavior getMemory memTicker
     cpuTemp <- pollingBehavior getCPUTemp cpuTicker
     (evtCPUStat, cpuStat) <- pollingDiscrete getCPUStat cpuTicker

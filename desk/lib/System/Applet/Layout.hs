@@ -26,14 +26,13 @@ newtype LayoutArg = LayoutArg
 layout :: (MonadUnliftIO m, MonadXHand m) => LayoutArg -> m Gtk.Widget
 layout LayoutArg{..} = withRunInIO $ \unlift -> do
   LayoutComm{..} <- unlift $ runXHand layoutInitiate
-  layoutSrc <- taskToSource curLayout
   uiFile <- dataPath ("ui" </> "layout.ui")
   View{..} <- view (T.pack uiFile)
   let onLayout layout = setLabel (layoutPrettyName layout)
 
   network <- compile $ do
     clickEvent <- sourceEvent clicks
-    layoutEvent <- sourceEvent layoutSrc
+    layoutEvent <- sourceEvent (taskToSource curLayout)
 
     reactimate (reqToLayout . clickReq <$> clickEvent)
     reactimate (Gtk.uiSingleRun . onLayout <$> layoutEvent)

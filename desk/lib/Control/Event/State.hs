@@ -13,6 +13,7 @@ module Control.Event.State (
 ) where
 
 import Control.Event.Entry
+import Data.Foldable
 import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
@@ -41,7 +42,7 @@ exeAccumD initial eFn = do
 
 -- TODO Attach delete action?
 
--- Pads left list to fit right. (Sadly, SemiAlign is focused on union)
+-- Pads left list to fit right. (In contrast, SemiAlign acts like union)
 class (Functor t, Foldable t) => ZipToRight t where
   zipToRightM :: Monad m => (Maybe a -> b -> m c) -> t a -> t b -> m (t c)
 
@@ -52,6 +53,13 @@ class (Functor t, Foldable t) => FilterZipToRight t where
 instance ZipToRight V.Vector where
   zipToRightM :: Monad m => (Maybe a -> b -> m c) -> V.Vector a -> V.Vector b -> m (V.Vector c)
   zipToRightM fn left = V.imapM $ \idx -> fn (left V.!? idx)
+
+instance Ord k => ZipToRight (M.Map k) where
+  zipToRightM :: (Ord k, Monad m) => (Maybe a -> b -> m c) -> M.Map k a -> M.Map k b -> m (M.Map k c)
+  zipToRightM fn = M.mergeA M.dropMissing onlyRight both
+    where
+      onlyRight = M.traverseMissing $ \_key -> fn Nothing
+      both = M.zipWithAMatched $ \_key l -> fn (Just l)
 
 instance Ord k => FilterZipToRight (M.Map k) where
   filterZipToRightM :: (Ord k, Monad m) => (Maybe a -> b -> m (Maybe c)) -> M.Map k a -> M.Map k b -> m (M.Map k c)
@@ -109,6 +117,13 @@ instance Ord k => SetLike (M.Map k a) where
 
   (\\) :: Ord k => M.Map k a -> M.Map k a -> M.Map k a
   (\\) = M.difference
+
+_withOnRemove :: (Monad m, Foldable t, SetLike (t a)) => (a -> m ()) -> (t a -> m (t a)) -> (t a -> m (t a))
+_withOnRemove delete update old = do
+  new <- update old
+  let removed = old \\ new
+  traverse_ delete removed
+  pure new
 
 -- | Difference of a container, represented by pair of removed and added stuffs.
 data Diffs a = Diffs {removed :: a, added :: a}

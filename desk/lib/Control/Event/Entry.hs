@@ -51,6 +51,7 @@ sourceSink :: IO (Source a, Sink a)
 sourceSink = newAddHandler
 
 -- FIXME Reactive-banana does not call "unregister" of AddHandler on GC.
+-- Unregistering action by finalizer might not be reliable..
 sourceEvent :: Source a -> MomentIO (Event a)
 sourceEvent src = do
   rec let handledSrc = AddHandler $ \handler -> do
@@ -84,34 +85,29 @@ syncBehavior behav sink = do
   chEvent <- changes behav
   reactimate' (fmap sink <$> chEvent)
 
--- FIXME Removing entire Source from `unregister` is just wrong.
 -- | Looping source from performing action with cleanup.
-loopSource :: IO a -> IO () -> IO (Source a)
-loopSource act cleanup = do
-  (source, sink) <- sourceSink
-  tid <- forkIO . forever $ act >>= sink
-  -- Modifies source to include the cleanup.
-  pure . AddHandler $ \handler -> do
-    kill <- register source handler
-    pure (kill <* cleanup <* killThread tid)
+-- Forks a thread on each register call, so each handler would receive calls separately.
+loopSource :: IO a -> IO () -> Source a
+loopSource act cleanup = AddHandler $ \handler -> do
+  tid <- forkIO . forever $ act >>= handler
+  pure (cleanup <> killThread tid)
 
 -- | Temporary solution before phasing out Task.
-taskToSource :: Task a -> IO (Source a)
+taskToSource :: Task a -> Source a
 taskToSource task = loopSource (taskNextWait task) (taskStop task)
 
--- | Waits for first task to finish, so that we get behavior
+-- | Waits for first task to finish, so that we get a behavior.
 taskToBehavior :: Task a -> MomentIO (Behavior a)
 taskToBehavior task = do
   init <- liftIO (taskNextWait task)
-  src <- liftIO (taskToSource task)
-  sourceBehavior init src
+  sourceBehavior init (taskToSource task)
 
 -- Potential Problem: The looping source have to use time for calling callbacks.
 -- This might lead to delay issues.
 -- Reactimates might better run tasks on other threads.
 
 -- | Simple periodic source with given period (in millisecond).
-periodicSource :: Int -> IO (Source ())
+periodicSource :: Int -> Source ()
 periodicSource period = loopSource (threadDelay $ period * 1000) (pure ())
 
 -- | Polling behavior which updates at each event.

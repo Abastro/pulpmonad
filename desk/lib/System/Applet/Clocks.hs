@@ -26,7 +26,7 @@ textClock format = liftIO $ do
 
   -- To update right away
   network <- compile $ do
-    ticker <- liftIO (periodicSource 1000) >>= sourceEvent
+    ticker <- sourceEvent (periodicSource 1000)
     time <- pollingBehavior getZonedTime ticker
     syncBehavior time (Gtk.uiSingleRun . setClock . formatted)
   actuate network
