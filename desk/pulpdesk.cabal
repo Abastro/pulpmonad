@@ -118,6 +118,9 @@ test-suite test-pulpdesk
       pulpdesk
     , QuickCheck >=2.14
     , hspec ^>=2.10
+  other-modules:
+    Control.ReactiveSpec
+    Status.HWSpec
 
 executable pulp-taskbar
   import:             pulp-gtk

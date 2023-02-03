@@ -1,3 +1,5 @@
+{-# LANGUAGE RecursiveDo #-}
+
 module Control.Event.Entry (
   Source,
   Sink,
@@ -9,6 +11,7 @@ module Control.Event.Entry (
   sourceBehavior,
   diffEvent,
   syncBehavior,
+  loopSource,
   taskToSource,
   taskToBehavior,
   periodicSource,
@@ -22,6 +25,7 @@ import Control.Event.Handler
 import Control.Monad
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
+import System.Mem.Weak (addFinalizer)
 
 -- | Source receives a callback, and send the data to callback when signal occurs.
 type Source a = AddHandler a
@@ -46,8 +50,16 @@ sourceSimple src = sourceWithUnreg $ \handler -> pure () <$ src handler
 sourceSink :: IO (Source a, Sink a)
 sourceSink = newAddHandler
 
+-- FIXME Reactive-banana does not call "unregister" of AddHandler on GC.
 sourceEvent :: Source a -> MomentIO (Event a)
-sourceEvent = fromAddHandler
+sourceEvent src = do
+  rec let handledSrc = AddHandler $ \handler -> do
+            unregister <- register src handler
+            -- Here, since unregister action is never called.
+            addFinalizer event unregister
+            pure unregister
+      event <- fromAddHandler handledSrc
+  pure event
 
 sourceBehavior :: a -> Source a -> MomentIO (Behavior a)
 sourceBehavior = fromChanges
@@ -72,6 +84,7 @@ syncBehavior behav sink = do
   chEvent <- changes behav
   reactimate' (fmap sink <$> chEvent)
 
+-- FIXME Removing entire Source from `unregister` is just wrong.
 -- | Looping source from performing action with cleanup.
 loopSource :: IO a -> IO () -> IO (Source a)
 loopSource act cleanup = do
@@ -85,8 +98,6 @@ loopSource act cleanup = do
 -- | Temporary solution before phasing out Task.
 taskToSource :: Task a -> IO (Source a)
 taskToSource task = loopSource (taskNextWait task) (taskStop task)
-
--- Do we need taskToBehavior?
 
 -- | Waits for first task to finish, so that we get behavior
 taskToBehavior :: Task a -> MomentIO (Behavior a)

@@ -222,6 +222,8 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
       windowView <- liftIO mkView
       lift $ do
+        -- TODO These sources need to be removed on widget remove.
+        -- Accumulate together, or add to finalizer?
         bWindowDesktop <- taskToBehavior winDesktop
         eWinInfo <- liftIO (taskToSource winInfo) >>= sourceEvent
         eWindowClick <- sourceEvent (View.windowClickSource windowView)
@@ -233,8 +235,8 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
         let eSpecifyCh = snd <$> filterE fst eSpecify
 
         -- Apply the received information on the window
-        reactimate (applyWindowState windowView <$> eWinInfo)
-        reactimate (applySpecifiedIcon (winGetRaw windowId) windowView <$> eSpecifyCh)
+        reactimate (Gtk.uiSingleRun . applyWindowState windowView <$> eWinInfo)
+        reactimate (Gtk.uiSingleRun . applySpecifiedIcon (winGetRaw windowId) windowView <$> eSpecifyCh)
 
         pure WinItem{..}
     updated = MaybeT $ pure (setIndex <$> old)

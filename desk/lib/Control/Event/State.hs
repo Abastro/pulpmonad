@@ -12,13 +12,13 @@ module Control.Event.State (
   computeDiffs,
 ) where
 
+import Control.Event.Entry
 import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Data.Vector qualified as V
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
-import Control.Event.Entry
 
 -- | mapAccum which accumulates by executing momentous action.
 exeMapAccum :: acc -> Event (acc -> MomentIO (sig, acc)) -> MomentIO (Event sig, Behavior acc)
@@ -39,9 +39,13 @@ exeAccumD initial eFn = do
     both x = (x, x)
     withSig fn = fmap both . fn
 
+-- TODO Attach delete action?
+
+-- Pads left list to fit right. (Sadly, SemiAlign is focused on union)
 class (Functor t, Foldable t) => ZipToRight t where
   zipToRightM :: Monad m => (Maybe a -> b -> m c) -> t a -> t b -> m (t c)
 
+-- Problem: Does too much
 class (Functor t, Foldable t) => FilterZipToRight t where
   filterZipToRightM :: Monad m => (Maybe a -> b -> m (Maybe c)) -> t a -> t b -> m (t c)
 
