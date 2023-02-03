@@ -32,6 +32,12 @@ networkSyncBehavior out x0 ex = do
   syncBehavior bx $ appendRef out
   pure never
 
+networkPollingDiscrete :: [a] -> Event b -> MomentIO (Event a)
+networkPollingDiscrete vals eInp = do
+  ref <- liftIO $ newIORef vals
+  (eRes, _) <- pollingDiscrete (atomicModifyIORef' ref $ \(x : xs) -> (xs, x)) eInp
+  pure eRes
+
 reactiveSpec :: Spec
 reactiveSpec = do
   describe "Event.Entry" $ do
@@ -52,3 +58,19 @@ reactiveSpec = do
         actual <- run $ readIORef out
         let expected = x : catMaybes mayXs
         expectVsActual expected actual
+
+    describe "pollingDescrete" $ do
+      -- TODO Test behavior as well
+      -- Also ignore delays
+      prop "runs action and emit its result on each input event" $ \(InfiniteList xs _) mayEs -> monadicIO $ do
+        mayRs <- run $ interpretFrameworks (networkPollingDiscrete @Int @Int xs) mayEs
+        let _ : later = xs
+            expected = take (length $ catMaybes mayEs) later
+            actual = catMaybes mayRs
+        expectVsActual expected actual
+
+  describe "Entry.State" $ do
+    describe "ZipToRight" $ do
+      describe "Vector" $ do
+        undefined
+    undefined

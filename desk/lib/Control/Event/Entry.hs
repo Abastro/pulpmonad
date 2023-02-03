@@ -126,6 +126,7 @@ pollingBehavior :: IO a -> Event b -> MomentIO (Behavior a)
 pollingBehavior act evt = snd <$> pollingDiscrete act evt
 
 -- | Polling discrete behavior which updates at each event.
+-- It is not guaranteed that result event is simultaneous with input event.
 pollingDiscrete :: IO a -> Event b -> MomentIO (Discrete a)
 pollingDiscrete act evt = do
   first <- liftIO act

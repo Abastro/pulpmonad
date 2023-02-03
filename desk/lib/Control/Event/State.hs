@@ -42,7 +42,7 @@ exeAccumD initial eFn = do
 
 -- TODO Attach delete action?
 
--- Pads left list to fit right. (In contrast, SemiAlign acts like union)
+-- | Aligns and zips to fit the right collection, padding left ones with Nothing. (c.f. SemiAlign acts like union)
 class (Functor t, Foldable t) => ZipToRight t where
   zipToRightM :: Monad m => (Maybe a -> b -> m c) -> t a -> t b -> m (t c)
 
