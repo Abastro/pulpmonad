@@ -32,11 +32,6 @@ networkSyncBehavior out x0 ex = do
   syncBehavior bx $ appendRef out
   pure never
 
-networkLoopSource :: IO a -> IO () -> Event () -> MomentIO (Event a)
-networkLoopSource act cleanup eFinish = do
-  eLoop <- sourceEvent (loopSource act cleanup)
-  switchE eLoop (never <$ eFinish)
-
 reactiveSpec :: Spec
 reactiveSpec = do
   describe "Event.Entry" $ do
@@ -57,16 +52,3 @@ reactiveSpec = do
         actual <- run $ readIORef out
         let expected = x : catMaybes mayXs
         expectVsActual expected actual
-
-    describe "loopSource" $ do
-      prop "repeatedly gives signal until terminated" . withMaxSuccess 5 $
-        \x -> monadicIO $ do
-          (srcFinish, finish) <- run sourceSink
-          out <- run $ newIORef []
-          network <- run . compile $ do
-            eFinish <- sourceEvent srcFinish
-            eResult <- networkLoopSource @Int (pure x) (putStrLn "Finished") eFinish
-            reactimate $ appendRef out <$> eResult
-          run $ actuate network <> finish ()
-          actual <- run $ readIORef out
-          assert (all (== x) actual)

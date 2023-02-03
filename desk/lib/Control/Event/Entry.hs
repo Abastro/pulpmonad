@@ -1,5 +1,3 @@
-{-# LANGUAGE RecursiveDo #-}
-
 module Control.Event.Entry (
   Source,
   Sink,
@@ -8,12 +6,13 @@ module Control.Event.Entry (
   sourceWithUnreg,
   sourceSink,
   sourceEvent,
-  sourceBehavior,
+  sourceEventWA,
   diffEvent,
   syncBehavior,
   loopSource,
   taskToSource,
   taskToBehavior,
+  taskToBehaviorWA,
   periodicSource,
   pollingBehavior,
   pollingDiscrete,
@@ -25,7 +24,7 @@ import Control.Event.Handler
 import Control.Monad
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
-import System.Mem.Weak (addFinalizer)
+import Data.IORef
 
 -- | Source receives a callback, and send the data to callback when signal occurs.
 type Source a = AddHandler a
@@ -51,19 +50,24 @@ sourceSink :: IO (Source a, Sink a)
 sourceSink = newAddHandler
 
 -- FIXME Reactive-banana does not call "unregister" of AddHandler on GC.
--- Unregistering action by finalizer might not be reliable..
-sourceEvent :: Source a -> MomentIO (Event a)
-sourceEvent src = do
-  rec let handledSrc = AddHandler $ \handler -> do
-            unregister <- register src handler
-            -- Here, since unregister action is never called.
-            addFinalizer event unregister
-            pure unregister
-      event <- fromAddHandler handledSrc
-  pure event
+-- Unregistering action by finalizer is not reliable.
 
-sourceBehavior :: a -> Source a -> MomentIO (Behavior a)
-sourceBehavior = fromChanges
+sourceEvent :: Source a -> MomentIO (Event a)
+sourceEvent = fromAddHandler
+
+-- | Workaround for sourceEvent to unregister handler properly.
+sourceEventWA :: Source a -> MomentIO (Event a, IO ())
+sourceEventWA src = do
+  ref <- liftIO . newIORef $ pure ()
+  event <- sourceEvent (wrappedSource ref)
+  pure (event, join $ readIORef ref)
+  where
+    wrappedSource ref = AddHandler $ \handler -> do
+      unregister <- register src handler
+      modifyIORef' ref (<> unregister)
+      pure $ pure ()
+
+-- We do not need sourceBehavior, easy enough to create Behavior
 
 -- | Compute difference between old and new value of a behaviors on each change.
 diffEvent ::
@@ -100,7 +104,14 @@ taskToSource task = loopSource (taskNextWait task) (taskStop task)
 taskToBehavior :: Task a -> MomentIO (Behavior a)
 taskToBehavior task = do
   init <- liftIO (taskNextWait task)
-  sourceBehavior init (taskToSource task)
+  eTask <- sourceEvent (taskToSource task)
+  stepper init eTask
+
+taskToBehaviorWA :: Task a -> MomentIO (Behavior a, IO ())
+taskToBehaviorWA task = do
+  init <- liftIO (taskNextWait task)
+  (eTask, unreg) <- sourceEventWA (taskToSource task)
+  (, unreg) <$> stepper init eTask
 
 -- Potential Problem: The looping source have to use time for calling callbacks.
 -- This might lead to delay issues.

@@ -6,9 +6,9 @@ module Control.Event.State (
   exeMapAccum,
   exeAccumD,
   ZipToRight (..),
-  FilterZipToRight (..),
   Diffs (..),
   SetLike (..),
+  withOnRemove,
   computeDiffs,
 ) where
 
@@ -46,10 +46,6 @@ exeAccumD initial eFn = do
 class (Functor t, Foldable t) => ZipToRight t where
   zipToRightM :: Monad m => (Maybe a -> b -> m c) -> t a -> t b -> m (t c)
 
--- Problem: Does too much
-class (Functor t, Foldable t) => FilterZipToRight t where
-  filterZipToRightM :: Monad m => (Maybe a -> b -> m (Maybe c)) -> t a -> t b -> m (t c)
-
 instance ZipToRight V.Vector where
   zipToRightM :: Monad m => (Maybe a -> b -> m c) -> V.Vector a -> V.Vector b -> m (V.Vector c)
   zipToRightM fn left = V.imapM $ \idx -> fn (left V.!? idx)
@@ -61,12 +57,9 @@ instance Ord k => ZipToRight (M.Map k) where
       onlyRight = M.traverseMissing $ \_key -> fn Nothing
       both = M.zipWithAMatched $ \_key l -> fn (Just l)
 
-instance Ord k => FilterZipToRight (M.Map k) where
-  filterZipToRightM :: (Ord k, Monad m) => (Maybe a -> b -> m (Maybe c)) -> M.Map k a -> M.Map k b -> m (M.Map k c)
-  filterZipToRightM fn = M.mergeA M.dropMissing onlyRight both
-    where
-      onlyRight = M.traverseMaybeMissing $ \_key -> fn Nothing
-      both = M.zipWithMaybeAMatched $ \_key l -> fn (Just l)
+-- | Difference of a container, represented by pair of removed and added stuffs.
+data Diffs a = Diffs {removed :: a, added :: a}
+  deriving (Show, Functor)
 
 -- | Collection with union(\/), intersection(/\) and difference(\\).
 --
@@ -118,16 +111,11 @@ instance Ord k => SetLike (M.Map k a) where
   (\\) :: Ord k => M.Map k a -> M.Map k a -> M.Map k a
   (\\) = M.difference
 
-_withOnRemove :: (Monad m, Foldable t, SetLike (t a)) => (a -> m ()) -> (t a -> m (t a)) -> (t a -> m (t a))
-_withOnRemove delete update old = do
+-- | Attach removal action to update function.
+withOnRemove :: (Monad m, Foldable t, SetLike (t a)) => (a -> m ()) -> (t a -> m (t a)) -> (t a -> m (t a))
+withOnRemove delete update old = do
   new <- update old
-  let removed = old \\ new
-  traverse_ delete removed
-  pure new
-
--- | Difference of a container, represented by pair of removed and added stuffs.
-data Diffs a = Diffs {removed :: a, added :: a}
-  deriving (Show, Functor)
+  new <$ traverse_ delete (old \\ new)
 
 -- | Compute differences.
 -- When parameters are @x@ and @y@, this requires @x /\ y = y /\ x@.

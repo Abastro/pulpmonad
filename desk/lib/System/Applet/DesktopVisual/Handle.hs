@@ -128,6 +128,7 @@ data DeskItem = DeskItem
   { desktopView :: !View.DesktopItemView
   , desktopStat :: !DesktopStat
   , eDesktopClick :: !(Event ())
+  , deskDelete :: !(IO ())
   }
 
 data WinItem = WinItem
@@ -136,6 +137,7 @@ data WinItem = WinItem
   -- ^ Index in the window list.
   , bWindowDesktop :: !(Behavior Int)
   , eWindowClick :: !(Event ())
+  , winDelete :: !(IO ())
   }
 
 mapToPairs :: (Ord a, Ord b) => M.Map a b -> S.Set (a, b)
@@ -179,7 +181,10 @@ desktopList ::
   (Maybe DeskItem -> DesktopStat -> MomentIO DeskItem) ->
   Event (V.Vector DesktopStat) ->
   MomentIO (Discrete (V.Vector DeskItem))
-desktopList update eStat = exeAccumD V.empty (flip (zipToRightM update) <$> eStat)
+desktopList update eStat = exeAccumD V.empty (updateFn <$> eStat)
+  where
+    updateFn stats = withOnRemove (liftIO . deskDelete) $ \olds ->
+      zipToRightM update olds stats
 
 updateDesktop ::
   DesktopSetup ->
@@ -194,7 +199,8 @@ updateDesktop setup mkView old desktopStat = do
   where
     createDesktop = do
       desktopView <- liftIO mkView
-      eDesktopClick <- sourceEvent (View.desktopClickSource desktopView)
+      (eDesktopClick, free1) <- sourceEventWA (View.desktopClickSource desktopView)
+      let deskDelete = free1
       pure DeskItem{..}
     updated desktop = desktop{desktopStat}
 
@@ -204,9 +210,11 @@ windowMap ::
   MomentIO (Discrete (M.Map Window WinItem))
 windowMap update eList = do
   let eWinIdx = asMapWithIdx <$> eList
-  exeAccumD M.empty (flip (filterZipToRightM update) <$> eWinIdx)
+  exeAccumD M.empty (updateFn <$> eWinIdx)
   where
     asMapWithIdx list = M.mapWithKey (,) . M.fromList $ zip (V.toList list) [0 ..]
+    updateFn winIdxs = withOnRemove (liftIO . winDelete) $ \olds ->
+      M.mapMaybe id <$> zipToRightM update olds winIdxs
 
 updateWindow ::
   IO View.WindowItemView ->
@@ -224,12 +232,13 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
       lift $ do
         -- TODO These sources need to be removed on widget remove.
         -- Accumulate together, or add to finalizer?
-        bWindowDesktop <- taskToBehavior winDesktop
-        eWinInfo <- sourceEvent (taskToSource winInfo)
-        eWindowClick <- sourceEvent (View.windowClickSource windowView)
+        (bWindowDesktop, free1) <- taskToBehaviorWA winDesktop
+        (eWinInfo, free2) <- sourceEventWA (taskToSource winInfo)
+        (eWindowClick, free3) <- sourceEventWA (View.windowClickSource windowView)
+        let winDelete = free1 <> free2 <> free3
 
         -- Specify the window icon
-        eClChWithInfo <- accumE (False, undefined) (addClassChange <$> eWinInfo)
+        eClChWithInfo <- accumE (False, error "no init") (addClassChange <$> eWinInfo)
         (eSpecify, _) <- exeAccumD (False, FromEWMH) (fmap liftIO . updateSpecify <$> eClChWithInfo)
         -- MAYBE Filtering is not ideal
         let eSpecifyCh = snd <$> filterE fst eSpecify
