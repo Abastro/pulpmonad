@@ -6,6 +6,7 @@ module Control.Event.State (
   exeMapAccum,
   exeAccumD,
   ZipToRight (..),
+  zipToRightM,
   Diffs (..),
   SetLike (..),
   withOnRemove,
@@ -40,26 +41,82 @@ exeAccumD initial eFn = do
     both x = (x, x)
     withSig fn = fmap both . fn
 
--- TODO Attach delete action?
-
 -- | Aligns and zips to fit the right collection, padding left ones with Nothing. (c.f. SemiAlign acts like union)
+--
+-- [Idempotency] @zipToRight (,) x x = (\t -> (Just t, t)) <$> x@
+-- [Alignedness] @toList y = toList (zipToRight (const id) x y)@
+-- [Functor Composition] @zipToRight (,) (f <$> x) (g <$> y) = bimap (fmap f) g <$> zipToRight (,) x y@
+--
+-- Parametricity will enforce the following property.
+--
+-- [With] @zipToRight f x y = uncurry f <$> zipToRight (,) x y@
 class (Functor t, Foldable t) => ZipToRight t where
-  zipToRightM :: Monad m => (Maybe a -> b -> m c) -> t a -> t b -> m (t c)
+  zipToRight :: (Maybe a -> b -> c) -> t a -> t b -> t c
 
 instance ZipToRight V.Vector where
-  zipToRightM :: Monad m => (Maybe a -> b -> m c) -> V.Vector a -> V.Vector b -> m (V.Vector c)
-  zipToRightM fn left = V.imapM $ \idx -> fn (left V.!? idx)
+  zipToRight :: (Maybe a -> b -> c) -> V.Vector a -> V.Vector b -> V.Vector c
+  zipToRight fn left = V.imap $ \idx -> fn (left V.!? idx)
 
 instance Ord k => ZipToRight (M.Map k) where
-  zipToRightM :: (Ord k, Monad m) => (Maybe a -> b -> m c) -> M.Map k a -> M.Map k b -> m (M.Map k c)
-  zipToRightM fn = M.mergeA M.dropMissing onlyRight both
+  zipToRight :: Ord k => (Maybe a -> b -> c) -> M.Map k a -> M.Map k b -> M.Map k c
+  zipToRight fn = M.merge M.dropMissing onlyRight both
     where
-      onlyRight = M.traverseMissing $ \_key -> fn Nothing
-      both = M.zipWithAMatched $ \_key l -> fn (Just l)
+      onlyRight = M.mapMissing $ \_key -> fn Nothing
+      both = M.zipWithMatched $ \_key l -> fn (Just l)
+
+-- | Zip to right with an applicative.
+zipToRightM :: (Applicative f, Traversable t, ZipToRight t) => (Maybe a -> b -> f c) -> t a -> t b -> f (t c)
+zipToRightM fn l r = sequenceA (zipToRight fn l r)
 
 -- | Difference of a container, represented by pair of removed and added stuffs.
 data Diffs a = Diffs {removed :: a, added :: a}
   deriving (Show, Functor)
+
+-- | Patching action on the target type.
+--
+-- Inspired by torsor, generalized to apply when the acting type is not closed on the group operator.
+--
+-- The acting type should have a closure with a proper group structure,
+-- which acts transitively onto the target type.
+--
+-- Uniqueness of patching action is not needed, you simply need to pick any.
+--
+-- [Transitivity] @(y <-- x) <: x = y@
+class Patch g a where
+  -- Performs action.
+  (<:) :: g -> a -> a
+
+  -- Patching action transforming specific values.
+  (<--) :: a -> a -> g
+
+  infixr 5 <:
+  infix 7 <--
+
+-- | Cache vector, where each element only depends on position.
+newtype CacheVec a = MkCacheVec (V.Vector a)
+
+-- | Positional action on cache vector.
+data CacheVecPatch a = Appends !(V.Vector a) | Deducts !(V.Vector a)
+  deriving (Show)
+
+instance Eq a => Eq (CacheVecPatch a) where
+  (==) :: Eq a => CacheVecPatch a -> CacheVecPatch a -> Bool
+  Appends v == Appends w = v == w
+  -- Special treatment needed for empty append/deduct
+  Appends v == Deducts w = null v && null w
+  Deducts v == Appends w = null v && null w
+  Deducts v == Deducts w = v == w
+
+instance Patch (CacheVecPatch a) (V.Vector a) where
+  (<:) :: CacheVecPatch a -> V.Vector a -> V.Vector a
+  Appends v <: old = old <> v
+  Deducts v <: old = V.take (V.length old - V.length v) old
+
+  (<--) :: V.Vector a -> V.Vector a -> CacheVecPatch a
+  new <-- old = case V.length old `compare` V.length new of
+    LT -> Appends (V.drop (V.length old) new)
+    EQ -> Appends V.empty
+    GT -> Deducts (V.drop (V.length new) old)
 
 -- | Collection with union(\/), intersection(/\) and difference(\\).
 --
@@ -88,6 +145,8 @@ instance SetLike (V.Vector a) where
   (/\) :: V.Vector a -> V.Vector a -> V.Vector a
   x /\ y = V.take (V.length y) x
 
+  -- FIXME Double negation falsified, alternative approach needed to generalize.
+  -- Namely, '\\' violates the positional contracts.
   (\\) :: V.Vector a -> V.Vector a -> V.Vector a
   x \\ y = V.drop (V.length y) x
 
@@ -118,6 +177,6 @@ withOnRemove delete update old = do
   new <$ traverse_ delete (old \\ new)
 
 -- | Compute differences.
--- When parameters are @x@ and @y@, this requires @x /\ y = y /\ x@.
+-- When parameters are @x@ and @y@, this requires @x /\ y = y /\ x@ for recovery using this diffs.
 computeDiffs :: SetLike m => m -> m -> Diffs m
 computeDiffs old new = Diffs{removed = old \\ new, added = new \\ old}
