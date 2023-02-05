@@ -1,3 +1,4 @@
+{-# LANGUAGE RecursiveDo #-}
 module Control.Event.Entry (
   Source,
   Sink,
@@ -8,6 +9,8 @@ module Control.Event.Entry (
   sourceEvent,
   sourceEventWA,
   diffEvent,
+  exeMapAccum,
+  exeAccumD,
   syncBehavior,
   loopSource,
   taskToSource,
@@ -79,6 +82,25 @@ diffEvent compute bOrigin = do
   pure $ liftedCompute <$> bOrigin <@> eChange
   where
     liftedCompute old = fmap (compute old)
+
+-- | mapAccum which accumulates by executing momentous action.
+exeMapAccum :: acc -> Event (acc -> MomentIO (sig, acc)) -> MomentIO (Event sig, Behavior acc)
+exeMapAccum initial eFn = do
+  rec bAcc <- stepper initial eAcc
+      eSigAcc <- execute (newSigAcc <$> bAcc <@> eFn)
+      let eSig = fst <$> eSigAcc
+          eAcc = snd <$> eSigAcc
+  pure (eSig, bAcc)
+  where
+    newSigAcc acc update = acc `seq` update acc
+
+-- | Discrete behavior which accumulates by executing momentous action.
+exeAccumD :: a -> Event (a -> MomentIO a) -> MomentIO (Discrete a)
+exeAccumD initial eFn = do
+  exeMapAccum initial (withSig <$> eFn)
+  where
+    both x = (x, x)
+    withSig fn = fmap both . fn
 
 -- | Sync with behavior using given sink.
 syncBehavior :: Behavior a -> Sink a -> MomentIO ()

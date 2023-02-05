@@ -1,4 +1,3 @@
-{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Control.Event.State (
@@ -19,27 +18,6 @@ import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Data.Vector qualified as V
-import Reactive.Banana.Combinators
-import Reactive.Banana.Frameworks
-
--- | mapAccum which accumulates by executing momentous action.
-exeMapAccum :: acc -> Event (acc -> MomentIO (sig, acc)) -> MomentIO (Event sig, Behavior acc)
-exeMapAccum initial eFn = do
-  rec bAcc <- stepper initial eAcc
-      eSigAcc <- execute (newSigAcc <$> bAcc <@> eFn)
-      let eSig = fst <$> eSigAcc
-          eAcc = snd <$> eSigAcc
-  pure (eSig, bAcc)
-  where
-    newSigAcc acc update = acc `seq` update acc
-
--- | Discrete behavior which accumulates by executing momentous action.
-exeAccumD :: a -> Event (a -> MomentIO a) -> MomentIO (Discrete a)
-exeAccumD initial eFn = do
-  exeMapAccum initial (withSig <$> eFn)
-  where
-    both x = (x, x)
-    withSig fn = fmap both . fn
 
 -- | Aligns and zips to fit the right collection, padding left ones with Nothing. (c.f. SemiAlign acts like union)
 --
