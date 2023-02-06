@@ -88,16 +88,16 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
 
     -- Behavior updates at next step of eWindows, in sync with bWinView
     winDeskPairs <- switchB (pure S.empty) (asWinDeskPairs <$> eWindows)
-    let winDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> winDeskPairs
+    let bWinDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> winDeskPairs
 
     -- Compute and apply container differences.
-    deskDiffs <- diffEvent computeDiffs bDeskViews
-    pairDiffs <- diffEvent computeDiffs winDeskPairMap
-    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> deskDiffs
-    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> pairDiffs
+    eDeskDiffs <- diffEvent (<--) (AsCacheVec <$> bDeskViews)
+    ePairDiffs <- diffEvent (<--) bWinDeskPairMap
+    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> eDeskDiffs
+    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff . mapPatchCached) <$> ePairDiffs
 
     -- Sync with activated window.
-    activeDiffs <- diffEvent Diffs bActiveView
+    activeDiffs <- diffEvent undefined bActiveView
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyActiveWindow) <$> activeDiffs
 
     -- Window list update changes window order. We do not care of desktop changes.
@@ -149,8 +149,8 @@ asViewPairMap ::
   V.Vector View.DesktopItemView ->
   M.Map Window View.WindowItemView ->
   S.Set (Window, Int) ->
-  M.Map (Window, Int) ViewPair
-asViewPairMap desktops windows = M.mapMaybe pairToView . M.fromSet id
+  CacheMap (Window, Int) ViewPair
+asViewPairMap desktops windows = AsCacheMap . M.mapMaybe pairToView . M.fromSet id
   where
     pairToView (win, desk) = (windows M.! win,) <$> (desktops V.!? desk)
 
@@ -163,18 +163,15 @@ desktopActivates = fold . V.imap eWithIdx
 windowActivates :: M.Map Window WinItem -> Event [Window]
 windowActivates = M.foldMapWithKey $ \win WinItem{eWindowClick} -> [win] <$ eWindowClick
 
--- Problem: Looks generalizable, while presence IO action complicates the matter.
--- Remove first and Add in order, this part might need to be considered.
-applyDeskDiff :: View.DesktopVisual -> Diffs (V.Vector View.DesktopItemView) -> IO ()
-applyDeskDiff main Diffs{..} = do
-  -- Remove first, then add "in order".
-  traverse_ (View.removeDesktop main) removed
-  traverse_ (View.addDesktop main) added
+applyDeskDiff :: View.DesktopVisual -> ColPatch View.DesktopItemView -> IO ()
+applyDeskDiff main = applyImpure $ \case
+  AddEl desktop -> View.addDesktop main desktop
+  RemoveEl desktop -> View.removeDesktop main desktop
 
-applyPairDiff :: Diffs (M.Map k ViewPair) -> IO ()
-applyPairDiff Diffs{..} = do
-  traverse_ (uncurry . flip $ View.removeWindow) removed
-  traverse_ (uncurry . flip $ View.insertWindow) added
+applyPairDiff :: ColPatch ViewPair -> IO ()
+applyPairDiff = applyImpure $ \case
+  AddEl (window, desktop) -> View.insertWindow desktop window
+  RemoveEl (window, desktop) -> View.removeWindow desktop window
 
 -- TODO Need a test that same ID points towards the same View. Likely require restructure.
 desktopList ::
@@ -183,7 +180,7 @@ desktopList ::
   MomentIO (Discrete (V.Vector DeskItem))
 desktopList update eStat = exeAccumD V.empty (updateFn <$> eStat)
   where
-    updateFn stats = withOnRemove (liftIO . deskDelete) $ \olds ->
+    updateFn stats = withOnRemove AsCacheVec (liftIO . deskDelete) $ \olds ->
       zipToRightM update olds stats
 
 updateDesktop ::
@@ -213,7 +210,7 @@ windowMap update eList = do
   exeAccumD M.empty (updateFn <$> eWinIdx)
   where
     asMapWithIdx list = M.mapWithKey (,) . M.fromList $ zip (V.toList list) [0 ..]
-    updateFn winIdxs = withOnRemove (liftIO . winDelete) $ \olds ->
+    updateFn winIdxs = withOnRemove AsCacheMap (liftIO . winDelete . snd) $ \olds ->
       M.mapMaybe id <$> zipToRightM update olds winIdxs
 
 updateWindow ::
@@ -259,11 +256,11 @@ applyWindowPriority desktops windows = do
   for_ windows $ \WinItem{..} -> View.setPriority windowView winIndex
   for_ desktops $ \DeskItem{desktopView} -> View.reflectPriority desktopView
 
--- Diffs only used to represent both old & new
-applyActiveWindow :: Diffs (Maybe View.WindowItemView) -> IO ()
-applyActiveWindow Diffs{..} = do
-  for_ removed $ \window -> View.windowSetActivate window False
-  for_ added $ \window -> View.windowSetActivate window True
+-- Patch only used to represent both old & new
+applyActiveWindow :: ColPatch View.WindowItemView -> IO ()
+applyActiveWindow = applyImpure $ \case
+  AddEl window -> View.windowSetActivate window True
+  RemoveEl window -> View.windowSetActivate window False
 
 applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
 applyDesktopState DesktopSetup{..} DeskItem{desktopStat = DesktopStat{..}, ..} = do

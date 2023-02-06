@@ -1,3 +1,4 @@
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Control.Event.State (
@@ -6,13 +7,21 @@ module Control.Event.State (
   exeAccumD,
   ZipToRight (..),
   zipToRightM,
-  Diffs (..),
-  SetLike (..),
+  Act (..),
+  Patch (..),
+  ColPatchEl (..),
+  ColPatch (..),
+  applyImpure,
+  CacheVec (..),
+  vecGetCached,
+  CacheMap (..),
+  mapGetCached,
+  mapPatchCached,
   withOnRemove,
-  computeDiffs,
 ) where
 
 import Control.Event.Entry
+import Data.Coerce
 import Data.Foldable
 import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
@@ -46,9 +55,22 @@ instance Ord k => ZipToRight (M.Map k) where
 zipToRightM :: (Applicative f, Traversable t, ZipToRight t) => (Maybe a -> b -> f c) -> t a -> t b -> f (t c)
 zipToRightM fn l r = sequenceA (zipToRight fn l r)
 
--- | Difference of a container, represented by pair of removed and added stuffs.
-data Diffs a = Diffs {removed :: a, added :: a}
-  deriving (Show, Functor)
+-- | Action on the target type.
+--
+-- It should be a monoid action, but the acting type might not be closed on the monoid operator.
+--
+-- When acting type is a semigroup, it should satisfy
+--
+-- [Composition] @g <: (h <: x) = (g <> h) <: x@
+--
+-- When acting type is a monoid, it should satisfy
+--
+-- [Identity] @mempty <: x = x@
+class Act g a where
+  -- | Performs action.
+  (<:) :: g -> a -> a
+
+  infixr 5 <:
 
 -- | Patching action on the target type.
 --
@@ -60,101 +82,102 @@ data Diffs a = Diffs {removed :: a, added :: a}
 -- Uniqueness of patching action is not needed, you simply need to pick any.
 --
 -- [Transitivity] @(y <-- x) <: x = y@
-class Patch g a where
-  -- Performs action.
-  (<:) :: g -> a -> a
-
-  -- Patching action transforming specific values.
+class Act g a => Patch g a | a -> g where
+  -- | Patching action transforming specific values.
   (<--) :: a -> a -> g
 
-  infixr 5 <:
   infix 7 <--
 
--- | Cache vector, where each element only depends on position.
-newtype CacheVec a = MkCacheVec (V.Vector a)
+data ColPatchEl a = AddEl !a | RemoveEl !a
+  deriving (Eq, Show, Functor)
 
--- | Positional action on cache vector.
-data CacheVecPatch a = Appends !(V.Vector a) | Deducts !(V.Vector a)
-  deriving (Show)
-
-instance Eq a => Eq (CacheVecPatch a) where
-  (==) :: Eq a => CacheVecPatch a -> CacheVecPatch a -> Bool
-  Appends v == Appends w = v == w
-  -- Special treatment needed for empty append/deduct
-  Appends v == Deducts w = null v && null w
-  Deducts v == Appends w = null v && null w
-  Deducts v == Deducts w = v == w
-
-instance Patch (CacheVecPatch a) (V.Vector a) where
-  (<:) :: CacheVecPatch a -> V.Vector a -> V.Vector a
-  Appends v <: old = old <> v
-  Deducts v <: old = V.take (V.length old - V.length v) old
-
-  (<--) :: V.Vector a -> V.Vector a -> CacheVecPatch a
-  new <-- old = case V.length old `compare` V.length new of
-    LT -> Appends (V.drop (V.length old) new)
-    EQ -> Appends V.empty
-    GT -> Deducts (V.drop (V.length new) old)
-
--- | Collection with union(\/), intersection(/\) and difference(\\).
+-- | Patch for collections. This is to apply collection patches onto the view.
 --
--- This does not imply that there should be unique value involved.
+-- Patch is applied from left to right.
+newtype ColPatch a = ColPatch (V.Vector (ColPatchEl a))
+  deriving (Eq, Show)
+
+-- TODO Consider adding Monoid
+
+applyPatches :: (ColPatchEl a -> m -> m) -> (ColPatch a -> m -> m)
+applyPatches apply (ColPatch ops) x = foldl' (flip apply) x ops
+
+applyImpure :: Applicative m => (ColPatchEl a -> m ()) -> (ColPatch a -> m ())
+applyImpure asAct (ColPatch x) = traverse_ asAct x
+
+instance Eq a => Act (ColPatch a) (V.Vector a) where
+  (<:) :: Eq a => ColPatch a -> V.Vector a -> V.Vector a
+  (<:) = applyPatches $ \case
+    AddEl x -> (`V.snoc` x)
+    RemoveEl x -> V.filter (/= x)
+
+instance Ord a => Act (ColPatch a) (S.Set a) where
+  (<:) :: Ord a => ColPatch a -> S.Set a -> S.Set a
+  (<:) = applyPatches $ \case
+    AddEl x -> S.insert x
+    RemoveEl x -> S.delete x
+
+-- | Cache vector, where each element is uniquely determined by position.
 --
--- Operation also need not be commutative.
---
--- [Associativity] @x '\/' (y '\/' z) = (x '\/' y) '\/' z@, @x '/\' (y '/\' z) = (x '/\' y) '/\' z@
--- [Partition] @(x '/\' y) '\/' (x '\\' y) = x@
--- [Double negation] @x '\\' (x '\\' y) = x '/\' y@
-class SetLike m where
-  (\/) :: m -> m -> m
-  (/\) :: m -> m -> m
-  (\\) :: m -> m -> m
+-- Action on cache vector only operates from the right side.
+newtype CacheVec a = AsCacheVec (V.Vector a)
+  deriving (Eq, Show)
 
-  infixl 5 \/
-  infixl 6 /\
-  infixl 9 \\
+instance Act (ColPatch a) (CacheVec a) where
+  (<:) :: ColPatch a -> CacheVec a -> CacheVec a
+  (<:) = applyPatches $ (coerce .) $ \case
+    AddEl x -> (`V.snoc` x)
+    RemoveEl _ -> V.init
 
--- MAYBE there are more laws
+instance Patch (ColPatch a) (CacheVec a) where
+  (<--) :: CacheVec a -> CacheVec a -> ColPatch a
+  AsCacheVec new <-- AsCacheVec old = ColPatch $
+    case V.length old `compare` V.length new of
+      LT -> AddEl <$> vecSubtract new old
+      EQ -> V.empty
+      -- Reverses because it removes from back to front
+      GT -> RemoveEl <$> V.reverse (vecSubtract old new)
+    where
+      vecSubtract v w = V.drop (V.length w) v
 
-instance SetLike (V.Vector a) where
-  (\/) :: V.Vector a -> V.Vector a -> V.Vector a
-  x \/ y = x <> y
+-- | Gets the cached.
+vecGetCached :: CacheVec a -> V.Vector a
+vecGetCached = coerce
 
-  (/\) :: V.Vector a -> V.Vector a -> V.Vector a
-  x /\ y = V.take (V.length y) x
+-- | Cache map, where each element is uniquely determined by position.
+newtype CacheMap k v = AsCacheMap (M.Map k v)
+  deriving (Eq, Show)
 
-  -- FIXME Double negation falsified, alternative approach needed to generalize.
-  -- Namely, '\\' violates the positional contracts.
-  (\\) :: V.Vector a -> V.Vector a -> V.Vector a
-  x \\ y = V.drop (V.length y) x
+-- Reuses ColPatch simply for saving amount of code.
+instance Ord k => Act (ColPatch (k, v)) (CacheMap k v) where
+  (<:) :: ColPatch (k, v) -> CacheMap k v -> CacheMap k v
+  (<:) =
+    applyPatches $
+      coerce . \case
+        AddEl (k, v) -> M.insert k v
+        RemoveEl (k, _) -> M.delete k
 
-instance Ord k => SetLike (S.Set k) where
-  (\/) :: Ord k => S.Set k -> S.Set k -> S.Set k
-  (\/) = S.union
+instance Ord k => Patch (ColPatch (k, v)) (CacheMap k v) where
+  (<--) :: Ord k => CacheMap k v -> CacheMap k v -> ColPatch (k, v)
+  AsCacheMap new <-- AsCacheMap old = ColPatch . V.fromList $ (AddEl <$> inserted) <> (RemoveEl <$> deleted)
+    where
+      inserted = M.toList $ new M.\\ old
+      deleted = M.toList $ old M.\\ new
 
-  (/\) :: Ord k => S.Set k -> S.Set k -> S.Set k
-  (/\) = S.intersection
+-- Bag should be more appropriate, but it requires more implementations.
+mapGetCached :: Ord v => CacheMap k v -> S.Set v
+mapGetCached = S.fromList . M.elems . coerce
 
-  (\\) :: Ord k => S.Set k -> S.Set k -> S.Set k
-  (\\) = S.difference
-
-instance Ord k => SetLike (M.Map k a) where
-  (\/) :: Ord k => M.Map k a -> M.Map k a -> M.Map k a
-  (\/) = M.union
-
-  (/\) :: Ord k => M.Map k a -> M.Map k a -> M.Map k a
-  (/\) = M.intersection
-
-  (\\) :: Ord k => M.Map k a -> M.Map k a -> M.Map k a
-  (\\) = M.difference
+mapPatchCached :: ColPatch (k, v) -> ColPatch v
+mapPatchCached (ColPatch ops) = ColPatch (V.map (fmap snd) ops)
 
 -- | Attach removal action to update function.
-withOnRemove :: (Monad m, Foldable t, SetLike (t a)) => (a -> m ()) -> (t a -> m (t a)) -> (t a -> m (t a))
-withOnRemove delete update old = do
+withOnRemove ::
+  (Monad m, Patch (ColPatch a) s) => (t -> s) -> (a -> m ()) -> (t -> m t) -> (t -> m t)
+-- TODO This is kind of a hack, look for a better way.
+withOnRemove asPatched delete update old = do
   new <- update old
-  new <$ traverse_ delete (old \\ new)
-
--- | Compute differences.
--- When parameters are @x@ and @y@, this requires @x /\ y = y /\ x@ for recovery using this diffs.
-computeDiffs :: SetLike m => m -> m -> Diffs m
-computeDiffs old new = Diffs{removed = old \\ new, added = new \\ old}
+  new <$ applyImpure actOn (asPatched new <-- asPatched old)
+  where
+    actOn (AddEl _) = pure ()
+    actOn (RemoveEl x) = delete x

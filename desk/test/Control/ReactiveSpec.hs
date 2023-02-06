@@ -16,7 +16,6 @@ import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
-import qualified Data.Set as S
 
 appendRef :: IORef [a] -> Sink a
 appendRef ref x = modifyIORef' ref (<> [x])
@@ -60,13 +59,6 @@ zipToRightSpec _ = do
   prop "is idempotent" $ \(x :: t Integer) -> zipToRight (,) x x == ((\t -> (Just t, t)) <$> x)
   prop "is aligned" $ \(x :: t Integer) (y :: t Integer) -> toList y == toList (zipToRight (const id) x y)
 
-setLikeSpec :: forall m. (Eq m, Show m, SetLike m, Arbitrary m) => Proxy m -> Spec
-setLikeSpec _ = do
-  prop "is associative in union" $ \(x :: m) (y :: m) (z :: m) -> x \/ (y \/ z) == (x \/ y) \/ z
-  prop "is associative in intersection" $ \(x :: m) (y :: m) (z :: m) -> x /\ (y /\ z) == (x /\ y) /\ z
-  prop "admits partition" $ \(x :: m) (y :: m) -> (x /\ y) \/ (x \\ y) == x
-  prop "has double negation elimination" $ \(x :: m) (y :: m) -> x \\ (x \\ y) == x /\ y
-
 reactiveSpec :: Spec
 reactiveSpec = do
   describe "Event.Entry" $ do
@@ -102,8 +94,3 @@ reactiveSpec = do
     describe "ZipToRight" $ do
       describe "Vector" $ zipToRightSpec (Proxy @V.Vector)
       describe "Map.Strict" $ zipToRightSpec (Proxy @(M.Map Integer))
-
-    describe "SetLike" $ do
-      describe "Vector" $ setLikeSpec (Proxy @(V.Vector Integer))
-      describe "Set" $ setLikeSpec (Proxy @(S.Set Integer))
-      describe "Map.Strict" $ setLikeSpec (Proxy @(M.Map Integer Integer))
