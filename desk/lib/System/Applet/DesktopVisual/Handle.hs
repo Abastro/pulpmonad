@@ -97,7 +97,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff . mapPatchCached) <$> ePairDiffs
 
     -- Sync with activated window.
-    activeDiffs <- diffEvent undefined bActiveView
+    activeDiffs <- diffEvent (error "TODO") bActiveView
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyActiveWindow) <$> activeDiffs
 
     -- Window list update changes window order. We do not care of desktop changes.
@@ -210,7 +210,7 @@ windowMap update eList = do
   exeAccumD M.empty (updateFn <$> eWinIdx)
   where
     asMapWithIdx list = M.mapWithKey (,) . M.fromList $ zip (V.toList list) [0 ..]
-    updateFn winIdxs = withOnRemove AsCacheMap (liftIO . winDelete . snd) $ \olds ->
+    updateFn winIdxs = withOnRemove AsCacheMap (liftIO . winDelete . pairValue) $ \olds ->
       M.mapMaybe id <$> zipToRightM update olds winIdxs
 
 updateWindow ::

@@ -15,6 +15,8 @@ module Control.Event.State (
   CacheVec (..),
   vecGetCached,
   CacheMap (..),
+  CachePair (..),
+  pairValue,
   mapGetCached,
   mapPatchCached,
   withOnRemove,
@@ -97,7 +99,7 @@ data ColPatchEl a = AddEl !a | RemoveEl !a
 newtype ColPatch a = ColPatch (V.Vector (ColPatchEl a))
   deriving (Eq, Show)
 
--- TODO Consider adding Monoid
+-- TODO Consider adding Monoid ColPatch
 
 applyPatches :: (ColPatchEl a -> m -> m) -> (ColPatch a -> m -> m)
 applyPatches apply (ColPatch ops) x = foldl' (flip apply) x ops
@@ -117,17 +119,23 @@ instance Ord a => Act (ColPatch a) (S.Set a) where
     AddEl x -> S.insert x
     RemoveEl x -> S.delete x
 
+
 -- | Cache vector, where each element is uniquely determined by position.
 --
 -- Action on cache vector only operates from the right side.
 newtype CacheVec a = AsCacheVec (V.Vector a)
   deriving (Eq, Show)
 
+-- FIXME Arbitrary patch cannot operate on cache vector.
+-- Such vector simply does not preserve the invariant. Alternatives?
+-- Especially, removal cannot contain value to be a credible action.
+
 instance Act (ColPatch a) (CacheVec a) where
   (<:) :: ColPatch a -> CacheVec a -> CacheVec a
   (<:) = applyPatches $ (coerce .) $ \case
     AddEl x -> (`V.snoc` x)
-    RemoveEl _ -> V.init
+    -- Empty vector is left alone
+    RemoveEl _ -> \v -> V.take (pred $ V.length v) v
 
 instance Patch (ColPatch a) (CacheVec a) where
   (<--) :: CacheVec a -> CacheVec a -> ColPatch a
@@ -140,7 +148,8 @@ instance Patch (ColPatch a) (CacheVec a) where
     where
       vecSubtract v w = V.drop (V.length w) v
 
--- | Gets the cached.
+-- | Gets the cached vector.
+-- Ideally, this should be group action homomorphism.
 vecGetCached :: CacheVec a -> V.Vector a
 vecGetCached = coerce
 
@@ -148,28 +157,33 @@ vecGetCached = coerce
 newtype CacheMap k v = AsCacheMap (M.Map k v)
   deriving (Eq, Show)
 
--- Reuses ColPatch simply for saving amount of code.
-instance Ord k => Act (ColPatch (k, v)) (CacheMap k v) where
-  (<:) :: ColPatch (k, v) -> CacheMap k v -> CacheMap k v
-  (<:) =
-    applyPatches $
-      coerce . \case
-        AddEl (k, v) -> M.insert k v
-        RemoveEl (k, _) -> M.delete k
+data CachePair k v = CachePair !k !v
+  deriving (Eq, Show)
 
-instance Ord k => Patch (ColPatch (k, v)) (CacheMap k v) where
-  (<--) :: Ord k => CacheMap k v -> CacheMap k v -> ColPatch (k, v)
+pairValue :: CachePair k v -> v
+pairValue (CachePair _ v) = v
+
+-- Reuses ColPatch simply for saving amount of code.
+instance Ord k => Act (ColPatch (CachePair k v)) (CacheMap k v) where
+  (<:) :: Ord k => ColPatch (CachePair k v) -> CacheMap k v -> CacheMap k v
+  (<:) = applyPatches $ (coerce .) $ \case
+    AddEl (CachePair k v) -> M.insert k v
+    RemoveEl (CachePair k _) -> M.delete k
+
+instance Ord k => Patch (ColPatch (CachePair k v)) (CacheMap k v) where
+  (<--) :: Ord k => CacheMap k v -> CacheMap k v -> ColPatch (CachePair k v)
   AsCacheMap new <-- AsCacheMap old = ColPatch . V.fromList $ (AddEl <$> inserted) <> (RemoveEl <$> deleted)
     where
-      inserted = M.toList $ new M.\\ old
-      deleted = M.toList $ old M.\\ new
+      mapToCPair = map (uncurry CachePair) . M.toList
+      inserted = mapToCPair $ new M.\\ old
+      deleted = mapToCPair $ old M.\\ new
 
 -- Bag should be more appropriate, but it requires more implementations.
 mapGetCached :: Ord v => CacheMap k v -> S.Set v
 mapGetCached = S.fromList . M.elems . coerce
 
-mapPatchCached :: ColPatch (k, v) -> ColPatch v
-mapPatchCached (ColPatch ops) = ColPatch (V.map (fmap snd) ops)
+mapPatchCached :: ColPatch (CachePair k v) -> ColPatch v
+mapPatchCached (ColPatch ops) = ColPatch (V.map (fmap pairValue) ops)
 
 -- | Attach removal action to update function.
 withOnRemove ::
