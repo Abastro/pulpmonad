@@ -166,9 +166,8 @@ windowActivates = M.foldMapWithKey $ \win WinItem{eWindowClick} -> [win] <$ eWin
 
 applyDeskDiff :: View.DesktopVisual -> PatchOf (StackOp View.DesktopItemView) -> IO ()
 applyDeskDiff main = applyImpure $ \case
-  Push desktop -> View.addDesktop main desktop
-  -- TODO To be implemented in view.
-  Pop -> View.removeDesktop main (error "")
+  Push desktop -> View.pushDesktop main desktop
+  Pop -> View.popDesktop main
 
 applyPairDiff :: PatchOf (SetOp ViewPair) -> IO ()
 applyPairDiff = applyImpure $ \case

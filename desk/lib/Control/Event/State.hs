@@ -168,7 +168,8 @@ data CachePair k v = MkCachePair !k !v
 -- | Structure operation on cache map is isomorphic to operation on pair set.
 type CacheMapOp k v = SetOp (CachePair k v)
 
--- TODO Multiset-based approach should have been more natural.
+-- TODO Values being multiset might have been more natural.
+-- That said, static function is still needed.
 
 instance Ord k => Act (PatchOf (CacheMapOp k v)) (CacheMap k v) where
   (<:) :: Ord k => PatchOf (CacheMapOp k v) -> CacheMap k v -> CacheMap k v
