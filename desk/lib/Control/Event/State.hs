@@ -144,6 +144,18 @@ instance Patch (PatchOf (StackOp a)) (CacheStack a) where
 data SetOp a = SetInsert !a | SetDelete !a
   deriving (Eq, Show, Functor)
 
+-- One which replaces existing element instead of insertion.
+-- Strictly speaking, deletion part is wrong here. Still, it should work.
+instance Act (PatchOf (SetOp a)) (Maybe a) where
+  (<:) :: PatchOf (SetOp a) -> Maybe a -> Maybe a
+  (<:) = applyPatches $ \case
+    SetInsert x -> const (Just x)
+    SetDelete _ -> const Nothing
+
+instance Patch (PatchOf (SetOp a)) (Maybe a) where
+  (<--) :: Maybe a -> Maybe a -> PatchOf (SetOp a)
+  new <-- old = MkPatchOf . V.fromList $ (SetDelete <$> toList old) <> (SetInsert <$> toList new)
+
 instance Ord a => Act (PatchOf (SetOp a)) (S.Set a) where
   (<:) :: Ord a => PatchOf (SetOp a) -> S.Set a -> S.Set a
   (<:) = applyPatches $ \case
@@ -152,7 +164,7 @@ instance Ord a => Act (PatchOf (SetOp a)) (S.Set a) where
 
 instance Ord a => Patch (PatchOf (SetOp a)) (S.Set a) where
   (<--) :: Ord a => S.Set a -> S.Set a -> PatchOf (SetOp a)
-  new <-- old = MkPatchOf . V.fromList $ (SetInsert <$> inserted) <> (SetDelete <$> deleted)
+  new <-- old = MkPatchOf . V.fromList $ (SetDelete <$> deleted) <> (SetInsert <$> inserted)
     where
       inserted = S.toList $ new S.\\ old
       deleted = S.toList $ old S.\\ new

@@ -83,7 +83,8 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     bActiveWindow <- stepper Nothing eActiveWindow
     let bDeskViews = V.map desktopView <$> bDesktops
         bWinViews = M.map windowView <$> bWindows
-        -- Can change when window list changes, for window list change could lag behind. This is intended.
+        -- Can change when window list changes, for window list change could lag behind.
+        -- The Maybe-bind is intended.
         bActiveView = (\views win -> (views M.!?) =<< win) <$> bWinViews <*> bActiveWindow
 
     -- Behavior updates at next step of eWindows, in sync with bWinView
@@ -97,7 +98,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff . mapCachePatch) <$> ePairDiffs
 
     -- Sync with activated window.
-    activeDiffs <- diffEvent (error "TODO") bActiveView
+    activeDiffs <- diffEvent (<--) bActiveView
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyActiveWindow) <$> activeDiffs
 
     -- Window list update changes window order. We do not care of desktop changes.

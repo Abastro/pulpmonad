@@ -64,7 +64,7 @@ patchSpec :: forall a g. (Patch g a, Eq a, Show a, Show g, Arbitrary a) => Proxy
 patchSpec _ = do
   prop "has transitive action" $ \(x :: a) (y :: a) ->
     let patch = y <-- x
-     in counterexample ("with patch " <> show patch) $ (y <-- x) <: x == y
+     in counterexample ("with patch " <> show patch <> " which gives " <> show (patch <: x)) $ patch <: x == y
 
 actMorphSpec :: (Act g a, Act h b, Eq b, Show a, Show g, Arbitrary g, Arbitrary a) => (a -> b) -> (g -> h) -> Spec
 actMorphSpec fn homo = do
@@ -131,6 +131,7 @@ reactiveSpec = do
 
     describe "Patch" $ do
       describe "CacheStack" $ patchSpec (Proxy @(CacheStack Int))
+      describe "Maybe" $ patchSpec (Proxy @(Maybe Integer))
       describe "Set" $ patchSpec (Proxy @(S.Set Integer))
       describe "CacheMap" $ patchSpec (Proxy @(CacheMap Integer Integer))
 
