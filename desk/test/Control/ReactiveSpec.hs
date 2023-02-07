@@ -74,6 +74,11 @@ instance Arbitrary op => Arbitrary (PatchOf op) where
   arbitrary :: Arbitrary op => Gen (PatchOf op)
   arbitrary = MkPatchOf <$> arbitrary
 
+-- Since this one should be uniform across calls.
+instance Arbitrary (CacheStack Int) where
+  arbitrary :: Gen (CacheStack Int)
+  arbitrary = AsCacheStack . V.imap (\i () -> i) <$> arbitrary
+
 instance Arbitrary a => Arbitrary (SetOp a) where
   arbitrary :: Arbitrary a => Gen (SetOp a)
   arbitrary = oneof [SetInsert <$> arbitrary, SetDelete <$> arbitrary]
@@ -125,7 +130,7 @@ reactiveSpec = do
       describe "Map.Strict" $ zipToRightSpec (Proxy @(M.Map Integer))
 
     describe "Patch" $ do
-      describe "Vector" $ patchSpec (Proxy @(V.Vector Int))
+      describe "CacheStack" $ patchSpec (Proxy @(CacheStack Int))
       describe "Set" $ patchSpec (Proxy @(S.Set Integer))
       describe "CacheMap" $ patchSpec (Proxy @(CacheMap Integer Integer))
 

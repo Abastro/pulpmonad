@@ -91,7 +91,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     let bWinDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> winDeskPairs
 
     -- Compute and apply container differences.
-    eDeskDiffs <- diffEvent (<--) bDeskViews
+    eDeskDiffs <- diffEvent (<--) (AsCacheStack <$> bDeskViews)
     ePairDiffs <- diffEvent (<--) bWinDeskPairMap
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> eDeskDiffs
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff . mapCachePatch) <$> ePairDiffs
@@ -164,11 +164,11 @@ desktopActivates = fold . V.imap eWithIdx
 windowActivates :: M.Map Window WinItem -> Event [Window]
 windowActivates = M.foldMapWithKey $ \win WinItem{eWindowClick} -> [win] <$ eWindowClick
 
-applyDeskDiff :: View.DesktopVisual -> PatchOf (VecStackOp View.DesktopItemView) -> IO ()
+applyDeskDiff :: View.DesktopVisual -> PatchOf (StackOp View.DesktopItemView) -> IO ()
 applyDeskDiff main = applyImpure $ \case
-  VecPush desktop -> View.addDesktop main desktop
+  Push desktop -> View.addDesktop main desktop
   -- TODO To be implemented in view.
-  VecPop -> View.removeDesktop main (error "")
+  Pop -> View.removeDesktop main (error "")
 
 applyPairDiff :: PatchOf (SetOp ViewPair) -> IO ()
 applyPairDiff = applyImpure $ \case

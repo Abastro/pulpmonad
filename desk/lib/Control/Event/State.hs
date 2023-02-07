@@ -14,7 +14,8 @@ module Control.Event.State (
   PatchOf (..),
   applyPatches,
   applyImpure,
-  VecStackOp (..),
+  CacheStack (..),
+  StackOp (..),
   SetOp (..),
   CacheMap (..),
   CachePair (..),
@@ -115,24 +116,29 @@ applyPatches apply (MkPatchOf ops) x = foldl' (flip apply) x ops
 applyImpure :: Applicative m => (op -> m ()) -> (PatchOf op -> m ())
 applyImpure asAct (MkPatchOf ops) = traverse_ asAct ops
 
+-- | Cache stack, where each element depends on its position.
+-- Right side is the top.
+newtype CacheStack a = AsCacheStack (V.Vector a)
+  deriving (Eq, Show)
+
 -- | Structure operation on a vector from the right(latter) side.
-data VecStackOp a = VecPush !a | VecPop
+data StackOp a = Push !a | Pop
   deriving (Eq, Show, Functor)
 
 -- Need to consider if stack operation is proper as default action.
-instance Act (PatchOf (VecStackOp a)) (V.Vector a) where
-  (<:) :: PatchOf (VecStackOp a) -> V.Vector a -> V.Vector a
-  (<:) = applyPatches $ \case
-    VecPush x -> (`V.snoc` x)
-    VecPop -> \v -> V.take (pred $ V.length v) v
+instance Act (PatchOf (StackOp a)) (CacheStack a) where
+  (<:) :: PatchOf (StackOp a) -> CacheStack a -> CacheStack a
+  (<:) = applyPatches . (coerce .) $ \case
+    Push x -> (`V.snoc` x)
+    Pop -> \v -> V.take (pred $ V.length v) v
 
-instance Patch (PatchOf (VecStackOp a)) (V.Vector a) where
-  (<--) :: V.Vector a -> V.Vector a -> PatchOf (VecStackOp a)
-  new <-- old = MkPatchOf $
+instance Patch (PatchOf (StackOp a)) (CacheStack a) where
+  (<--) :: CacheStack a -> CacheStack a -> PatchOf (StackOp a)
+  AsCacheStack new <-- AsCacheStack old = MkPatchOf $
     case V.length old `compare` V.length new of
-      LT -> VecPush <$> V.drop (V.length old) new
+      LT -> Push <$> V.drop (V.length old) new
       EQ -> V.empty
-      GT -> VecPop <$ V.drop (V.length new) old
+      GT -> Pop <$ V.drop (V.length new) old
 
 -- | Structure operation on a set.
 data SetOp a = SetInsert !a | SetDelete !a
