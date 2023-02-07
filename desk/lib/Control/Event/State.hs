@@ -20,7 +20,7 @@ module Control.Event.State (
   CachePair (..),
   CacheMapOp,
   mapGetCached,
-  cacheValueOp,
+  mapCachePatch,
 ) where
 
 import Control.Event.Entry
@@ -156,7 +156,7 @@ newtype CacheMap k v = AsCacheMap (M.Map k v)
   deriving (Eq, Show)
 
 -- | Pair of key and corresponding value to cache.
-data CachePair k v = CachePair !k !v
+data CachePair k v = MkCachePair !k !v
   deriving (Eq, Show)
 
 -- | Structure operation on cache map is isomorphic to operation on pair set.
@@ -167,14 +167,14 @@ type CacheMapOp k v = SetOp (CachePair k v)
 instance Ord k => Act (PatchOf (CacheMapOp k v)) (CacheMap k v) where
   (<:) :: Ord k => PatchOf (CacheMapOp k v) -> CacheMap k v -> CacheMap k v
   (<:) = applyPatches $ (coerce .) $ \case
-    SetInsert (CachePair k v) -> M.insert k v
-    SetDelete (CachePair k _) -> M.delete k
+    SetInsert (MkCachePair k v) -> M.insert k v
+    SetDelete (MkCachePair k _) -> M.delete k
 
 instance Ord k => Patch (PatchOf (CacheMapOp k v)) (CacheMap k v) where
   (<--) :: Ord k => CacheMap k v -> CacheMap k v -> PatchOf (CacheMapOp k v)
   AsCacheMap new <-- AsCacheMap old = MkPatchOf . V.fromList $ (SetInsert <$> inserted) <> (SetDelete <$> deleted)
     where
-      mapToCPair = map (uncurry CachePair) . M.toList
+      mapToCPair = map (uncurry MkCachePair) . M.toList
       inserted = mapToCPair $ new M.\\ old
       deleted = mapToCPair $ old M.\\ new
 
@@ -182,5 +182,6 @@ instance Ord k => Patch (PatchOf (CacheMapOp k v)) (CacheMap k v) where
 mapGetCached :: Ord v => CacheMap k v -> S.Set v
 mapGetCached = S.fromList . M.elems . coerce
 
-cacheValueOp :: CacheMapOp k v -> SetOp v
-cacheValueOp = fmap $ \(CachePair _ v) -> v
+-- | Maps CacheMap patch along with 'mapGetCached'.
+mapCachePatch :: PatchOf (CacheMapOp k v) -> PatchOf (SetOp v)
+mapCachePatch = fmap . fmap $ \(MkCachePair _ v) -> v

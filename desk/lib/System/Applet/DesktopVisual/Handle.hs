@@ -94,7 +94,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     eDeskDiffs <- diffEvent (<--) bDeskViews
     ePairDiffs <- diffEvent (<--) bWinDeskPairMap
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> eDeskDiffs
-    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff . fmap cacheValueOp) <$> ePairDiffs
+    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff . mapCachePatch) <$> ePairDiffs
 
     -- Sync with activated window.
     activeDiffs <- diffEvent (error "TODO") bActiveView
@@ -107,6 +107,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     let deskWithWinCnt = pairDeskCnt <$> winDeskPairs <*> bDesktops
     syncBehavior deskWithWinCnt (Gtk.uiSingleRun . traverse_ (uncurry $ applyDesktopVisible deskSetup))
 
+    -- Activations.
     eDesktopActivate <- switchE never (desktopActivates <$> eDesktops)
     eWindowActivate <- switchE never (windowActivates <$> eWindows)
     reactimate $ Gtk.uiSingleRun . traverse_ reqToDesktop <$> eDesktopActivate
