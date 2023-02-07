@@ -7,19 +7,20 @@ module Control.Event.State (
   exeAccumD,
   ZipToRight (..),
   zipToRightM,
+  remainderRight,
+  onRemainderRight,
   Act (..),
   Patch (..),
-  ColPatchEl (..),
-  ColPatch (..),
+  PatchOf (..),
+  applyPatches,
   applyImpure,
-  CacheVec (..),
-  vecGetCached,
+  VecStackOp (..),
+  SetOp (..),
   CacheMap (..),
   CachePair (..),
-  pairValue,
+  CacheMapOp,
   mapGetCached,
-  mapPatchCached,
-  withOnRemove,
+  cacheValueOp,
 ) where
 
 import Control.Event.Entry
@@ -57,6 +58,20 @@ instance Ord k => ZipToRight (M.Map k) where
 zipToRightM :: (Applicative f, Traversable t, ZipToRight t) => (Maybe a -> b -> f c) -> t a -> t b -> f (t c)
 zipToRightM fn l r = sequenceA (zipToRight fn l r)
 
+-- | Remainder of right ones which does not match with left.
+remainderRight :: ZipToRight t => t a -> t b -> t (Maybe b)
+remainderRight = zipToRight $ \case
+  Just _ -> const Nothing
+  Nothing -> Just
+
+-- TODO onRemainder could be confusing on parameter order.
+
+-- | Act on the remainder of right ones not matching with left.
+onRemainderRight :: (Applicative f, ZipToRight t) => (b -> f ()) -> t a -> t b -> f ()
+onRemainderRight act = fmap (traverse_ fn) . remainderRight
+  where
+    fn = maybe (pure ()) act
+
 -- | Action on the target type.
 --
 -- It should be a monoid action, but the acting type might not be closed on the monoid operator.
@@ -90,108 +105,82 @@ class Act g a => Patch g a | a -> g where
 
   infix 7 <--
 
-data ColPatchEl a = AddEl !a | RemoveEl !a
+-- | Patch by list of operations, applied from front to back.
+newtype PatchOf op = MkPatchOf (V.Vector op)
   deriving (Eq, Show, Functor)
 
--- | Patch for collections. This is to apply collection patches onto the view.
---
--- Patch is applied from left to right.
-newtype ColPatch a = ColPatch (V.Vector (ColPatchEl a))
-  deriving (Eq, Show)
+applyPatches :: (op -> m -> m) -> (PatchOf op -> m -> m)
+applyPatches apply (MkPatchOf ops) x = foldl' (flip apply) x ops
 
--- TODO Consider adding Monoid ColPatch
+applyImpure :: Applicative m => (op -> m ()) -> (PatchOf op -> m ())
+applyImpure asAct (MkPatchOf ops) = traverse_ asAct ops
 
-applyPatches :: (ColPatchEl a -> m -> m) -> (ColPatch a -> m -> m)
-applyPatches apply (ColPatch ops) x = foldl' (flip apply) x ops
+-- | Structure operation on a vector from the right(latter) side.
+data VecStackOp a = VecPush !a | VecPop
+  deriving (Eq, Show, Functor)
 
-applyImpure :: Applicative m => (ColPatchEl a -> m ()) -> (ColPatch a -> m ())
-applyImpure asAct (ColPatch x) = traverse_ asAct x
-
-instance Eq a => Act (ColPatch a) (V.Vector a) where
-  (<:) :: Eq a => ColPatch a -> V.Vector a -> V.Vector a
+-- Need to consider if stack operation is proper as default action.
+instance Act (PatchOf (VecStackOp a)) (V.Vector a) where
+  (<:) :: PatchOf (VecStackOp a) -> V.Vector a -> V.Vector a
   (<:) = applyPatches $ \case
-    AddEl x -> (`V.snoc` x)
-    RemoveEl x -> V.filter (/= x)
+    VecPush x -> (`V.snoc` x)
+    VecPop -> \v -> V.take (pred $ V.length v) v
 
-instance Ord a => Act (ColPatch a) (S.Set a) where
-  (<:) :: Ord a => ColPatch a -> S.Set a -> S.Set a
-  (<:) = applyPatches $ \case
-    AddEl x -> S.insert x
-    RemoveEl x -> S.delete x
-
-
--- | Cache vector, where each element is uniquely determined by position.
---
--- Action on cache vector only operates from the right side.
-newtype CacheVec a = AsCacheVec (V.Vector a)
-  deriving (Eq, Show)
-
--- FIXME Arbitrary patch cannot operate on cache vector.
--- Such vector simply does not preserve the invariant. Alternatives?
--- Especially, removal cannot contain value to be a credible action.
-
-instance Act (ColPatch a) (CacheVec a) where
-  (<:) :: ColPatch a -> CacheVec a -> CacheVec a
-  (<:) = applyPatches $ (coerce .) $ \case
-    AddEl x -> (`V.snoc` x)
-    -- Empty vector is left alone
-    RemoveEl _ -> \v -> V.take (pred $ V.length v) v
-
-instance Patch (ColPatch a) (CacheVec a) where
-  (<--) :: CacheVec a -> CacheVec a -> ColPatch a
-  AsCacheVec new <-- AsCacheVec old = ColPatch $
+instance Patch (PatchOf (VecStackOp a)) (V.Vector a) where
+  (<--) :: V.Vector a -> V.Vector a -> PatchOf (VecStackOp a)
+  new <-- old = MkPatchOf $
     case V.length old `compare` V.length new of
-      LT -> AddEl <$> vecSubtract new old
+      LT -> VecPush <$> V.drop (V.length old) new
       EQ -> V.empty
-      -- Reverses because it removes from back to front
-      GT -> RemoveEl <$> V.reverse (vecSubtract old new)
+      GT -> VecPop <$ V.drop (V.length new) old
+
+-- | Structure operation on a set.
+data SetOp a = SetInsert !a | SetDelete !a
+  deriving (Eq, Show, Functor)
+
+instance Ord a => Act (PatchOf (SetOp a)) (S.Set a) where
+  (<:) :: Ord a => PatchOf (SetOp a) -> S.Set a -> S.Set a
+  (<:) = applyPatches $ \case
+    SetInsert x -> S.insert x
+    SetDelete x -> S.delete x
+
+instance Ord a => Patch (PatchOf (SetOp a)) (S.Set a) where
+  (<--) :: Ord a => S.Set a -> S.Set a -> PatchOf (SetOp a)
+  new <-- old = MkPatchOf . V.fromList $ (SetInsert <$> inserted) <> (SetDelete <$> deleted)
     where
-      vecSubtract v w = V.drop (V.length w) v
+      inserted = S.toList $ new S.\\ old
+      deleted = S.toList $ old S.\\ new
 
--- | Gets the cached vector.
--- Ideally, this should be group action homomorphism.
-vecGetCached :: CacheVec a -> V.Vector a
-vecGetCached = coerce
-
--- | Cache map, where each element is uniquely determined by position.
+-- | Cache map, where each element is uniquely determined by the key.
 newtype CacheMap k v = AsCacheMap (M.Map k v)
   deriving (Eq, Show)
 
+-- | Pair of key and corresponding value to cache.
 data CachePair k v = CachePair !k !v
   deriving (Eq, Show)
 
-pairValue :: CachePair k v -> v
-pairValue (CachePair _ v) = v
+-- | Structure operation on cache map is isomorphic to operation on pair set.
+type CacheMapOp k v = SetOp (CachePair k v)
 
--- Reuses ColPatch simply for saving amount of code.
-instance Ord k => Act (ColPatch (CachePair k v)) (CacheMap k v) where
-  (<:) :: Ord k => ColPatch (CachePair k v) -> CacheMap k v -> CacheMap k v
+-- TODO Multiset-based approach should have been more natural.
+
+instance Ord k => Act (PatchOf (CacheMapOp k v)) (CacheMap k v) where
+  (<:) :: Ord k => PatchOf (CacheMapOp k v) -> CacheMap k v -> CacheMap k v
   (<:) = applyPatches $ (coerce .) $ \case
-    AddEl (CachePair k v) -> M.insert k v
-    RemoveEl (CachePair k _) -> M.delete k
+    SetInsert (CachePair k v) -> M.insert k v
+    SetDelete (CachePair k _) -> M.delete k
 
-instance Ord k => Patch (ColPatch (CachePair k v)) (CacheMap k v) where
-  (<--) :: Ord k => CacheMap k v -> CacheMap k v -> ColPatch (CachePair k v)
-  AsCacheMap new <-- AsCacheMap old = ColPatch . V.fromList $ (AddEl <$> inserted) <> (RemoveEl <$> deleted)
+instance Ord k => Patch (PatchOf (CacheMapOp k v)) (CacheMap k v) where
+  (<--) :: Ord k => CacheMap k v -> CacheMap k v -> PatchOf (CacheMapOp k v)
+  AsCacheMap new <-- AsCacheMap old = MkPatchOf . V.fromList $ (SetInsert <$> inserted) <> (SetDelete <$> deleted)
     where
       mapToCPair = map (uncurry CachePair) . M.toList
       inserted = mapToCPair $ new M.\\ old
       deleted = mapToCPair $ old M.\\ new
 
--- Bag should be more appropriate, but it requires more implementations.
+-- | All values in the cache map.
 mapGetCached :: Ord v => CacheMap k v -> S.Set v
 mapGetCached = S.fromList . M.elems . coerce
 
-mapPatchCached :: ColPatch (CachePair k v) -> ColPatch v
-mapPatchCached (ColPatch ops) = ColPatch (V.map (fmap pairValue) ops)
-
--- | Attach removal action to update function.
-withOnRemove ::
-  (Monad m, Patch (ColPatch a) s) => (t -> s) -> (a -> m ()) -> (t -> m t) -> (t -> m t)
--- TODO This is kind of a hack, look for a better way.
-withOnRemove asPatched delete update old = do
-  new <- update old
-  new <$ applyImpure actOn (asPatched new <-- asPatched old)
-  where
-    actOn (AddEl _) = pure ()
-    actOn (RemoveEl x) = delete x
+cacheValueOp :: CacheMapOp k v -> SetOp v
+cacheValueOp = fmap $ \(CachePair _ v) -> v
