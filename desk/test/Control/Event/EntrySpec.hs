@@ -32,6 +32,20 @@ networkSyncBehavior out x0 ex = do
   syncBehavior bx $ appendRef out
   pure never
 
+-- Tests using pure function, comparing with mapAccum.
+networkExeMapAccum :: IORef [acc] -> acc -> Event (acc -> (sig, acc)) -> MomentIO (Event sig)
+networkExeMapAccum out acc eUpdate = do
+  (eSig, bAcc) <- exeMapAccum acc $ (pure .) <$> eUpdate
+  -- TODO Better tracking of behavior
+  syncBehavior bAcc $ appendRef out
+  pure eSig
+
+networkMapAccum :: IORef [acc] -> acc -> Event (acc -> (sig, acc)) -> MomentIO (Event sig)
+networkMapAccum out acc eUpdate = do
+  (eSig, bAcc) <- mapAccum acc eUpdate
+  syncBehavior bAcc $ appendRef out
+  pure eSig
+
 networkPollingDiscrete :: [a] -> Event b -> MomentIO (Event a)
 networkPollingDiscrete vals eInp = do
   ref <- liftIO $ newIORef vals
@@ -50,8 +64,6 @@ entrySpec = do
           expected = zip (x : xs) xs
       expectVsActual expected actual
 
-  -- TODO exeAccumD testing
-
   -- MAYBE Test loopSource?
 
   describe "syncBehavior" $ do
@@ -60,6 +72,20 @@ entrySpec = do
       run $ interpretFrameworks (networkSyncBehavior @Integer out x) mayXs
       actual <- run $ readIORef out
       let expected = x : catMaybes mayXs
+      expectVsActual expected actual
+
+  describe "exeMapAccum" $ do
+    -- We generate update function once, which maps event stream from list.
+    prop "matches mapAccum for pure updates" $ \update x mayYs -> monadicIO $ do
+      let inE = map (fmap @Maybe @Integer $ applyFun2 update) mayYs
+      outB1 <- run $ newIORef []
+      outE1 <- run $ interpretFrameworks (networkMapAccum @Integer @Integer outB1 x) inE
+      expected <- run $ (outE1,) <$> readIORef outB1
+
+      outB2 <- run $ newIORef []
+      outE2 <- run $ interpretFrameworks (networkExeMapAccum outB2 x) inE
+      actual <- run $ (outE2,) <$> readIORef outB2
+
       expectVsActual expected actual
 
   describe "pollingDescrete" $ do
