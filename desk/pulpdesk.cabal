@@ -119,7 +119,8 @@ test-suite test-pulpdesk
     , QuickCheck >=2.14
     , hspec ^>=2.10
   other-modules:
-    Control.ReactiveSpec
+    Control.Event.EntrySpec
+    Control.Event.StateSpec
     Status.HWSpec
 
 executable pulp-taskbar

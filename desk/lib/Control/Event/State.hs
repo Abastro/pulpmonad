@@ -125,7 +125,10 @@ newtype CacheStack a = AsCacheStack (V.Vector a)
 data StackOp a = Push !a | Pop
   deriving (Eq, Show, Functor)
 
--- Need to consider if stack operation is proper as default action.
+-- NOTE: This operation could result in invalid cache stack.
+-- We cannot use general stack, because transitive stack operation is longer than desired.
+-- This is a case where `Patch` could be optimized for restricted case.
+-- Maybe better abstraction is required.
 instance Act (PatchOf (StackOp a)) (CacheStack a) where
   (<:) :: PatchOf (StackOp a) -> CacheStack a -> CacheStack a
   (<:) = applyPatches . (coerce .) $ \case
@@ -145,7 +148,8 @@ data SetOp a = SetInsert !a | SetDelete !a
   deriving (Eq, Show, Functor)
 
 -- One which replaces existing element instead of insertion.
--- Strictly speaking, deletion part is wrong here. Still, it should work.
+-- Strictly speaking, deletion part is wrong here.
+-- Still, it should work.
 instance Act (PatchOf (SetOp a)) (Maybe a) where
   (<:) :: PatchOf (SetOp a) -> Maybe a -> Maybe a
   (<:) = applyPatches $ \case
