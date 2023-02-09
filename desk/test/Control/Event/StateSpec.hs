@@ -31,32 +31,27 @@ patchSpec _ = do
     let patch = y <-- x
      in counterexample ("with patch " <> show patch <> " which gives " <> show (patch <: x)) $ patch <: x == y
 
-actMorphSpec :: (Act g a, Act h b, Eq b, Show a, Show g, Arbitrary g, Arbitrary a) => (a -> b) -> (g -> h) -> Spec
-actMorphSpec fn homo = do
-  prop "is an action morphism" $ \g x -> fn (g <: x) == homo g <: fn x
+diffPatchingSpec :: forall g a b. (DiffPatching g a b, Eq b, Show a, Arbitrary a) => Proxy a -> Proxy b -> Spec
+diffPatchingSpec _ _ = do
+  prop "can recover patch from difference" $ \(x :: a) (y :: a) ->
+    (directMap y :: b) == (y <-- x) <: directMap x
 
 instance Arbitrary op => Arbitrary (PatchOf op) where
   arbitrary :: Arbitrary op => Gen (PatchOf op)
   arbitrary = MkPatchOf <$> arbitrary
+
+instance Arbitrary a => Arbitrary (ColOp a) where
+  arbitrary :: Arbitrary a => Gen (ColOp a)
+  arbitrary = oneof [Insert <$> arbitrary, Delete <$> arbitrary]
 
 -- Since this one should be uniform across calls.
 instance Arbitrary (CacheStack Int) where
   arbitrary :: Gen (CacheStack Int)
   arbitrary = AsCacheStack . V.imap (\i () -> i) <$> arbitrary
 
-instance Arbitrary a => Arbitrary (SetOp a) where
-  arbitrary :: Arbitrary a => Gen (SetOp a)
-  arbitrary = oneof [SetInsert <$> arbitrary, SetDelete <$> arbitrary]
-
 instance (Ord k, Arbitrary k) => Arbitrary (CacheMap k k) where
   arbitrary :: (Ord k, Arbitrary k) => Gen (CacheMap k k)
   arbitrary = AsCacheMap . M.fromSet id <$> arbitrary
-
-instance Arbitrary k => Arbitrary (CachePair k k) where
-  arbitrary :: Arbitrary k => Gen (CachePair k k)
-  arbitrary = cachePair <$> arbitrary
-    where
-      cachePair k = MkCachePair k k
 
 stateSpec :: Spec
 stateSpec = do
@@ -66,10 +61,10 @@ stateSpec = do
       describe "Map.Strict" $ zipToRightSpec (Proxy @(M.Map Integer))
 
     describe "Patch" $ do
-      describe "CacheStack" $ patchSpec (Proxy @(CacheStack Int))
-      describe "Maybe" $ patchSpec (Proxy @(Maybe Integer))
       describe "Set" $ patchSpec (Proxy @(S.Set Integer))
-      describe "CacheMap" $ patchSpec (Proxy @(CacheMap Integer Integer))
+      describe "Vector" $ patchSpec (Proxy @(V.Vector Integer))
 
-    describe "Act Morphism" $ do
-      describe "CacheMap->Set" $ actMorphSpec (mapGetCached @Integer @Integer) (mapCachePatch @Integer @Integer)
+    describe "DiffPatching" $ do
+      describe "Maybe->Set" $ diffPatchingSpec (Proxy @(Maybe Integer)) (Proxy @(S.Set Integer))
+      describe "Vector->Set" $ diffPatchingSpec (Proxy @(CacheStack Int)) (Proxy @(V.Vector Int))
+      describe "CacheMap->Set" $ diffPatchingSpec (Proxy @(CacheMap Integer Integer)) (Proxy @(S.Set Integer))

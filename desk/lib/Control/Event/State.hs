@@ -10,18 +10,15 @@ module Control.Event.State (
   remainderRight,
   onRemainderRight,
   Act (..),
-  Patch (..),
+  Diff (..),
+  Patch,
+  DiffPatching (..),
   PatchOf (..),
   applyPatches,
   applyImpure,
   CacheStack (..),
-  StackOp (..),
-  SetOp (..),
+  ColOp (..),
   CacheMap (..),
-  CachePair (..),
-  CacheMapOp,
-  mapGetCached,
-  mapCachePatch,
 ) where
 
 import Control.Event.Entry
@@ -73,6 +70,8 @@ onRemainderRight act = fmap (traverse_ fn) . remainderRight
   where
     fn = maybe (pure ()) act
 
+-- TODO "Act" better be Monoid action.
+
 -- | Action on the target type.
 --
 -- It should be a monoid action, but the acting type might not be closed on the monoid operator.
@@ -90,7 +89,18 @@ class Act g a where
 
   infixr 5 <:
 
--- | Patching action on the target type.
+-- MAYBE Diff class is a horrible idea.
+
+-- | A difference type of the target type.
+--
+-- This typeclass exists for overloading, so it has no laws.
+class Diff g a | a -> g where
+  -- | Computes difference.
+  (<--) :: a -> a -> g
+
+  infix 7 <--
+
+-- | Patching action on the target type, where difference gives the patching action.
 --
 -- Inspired by torsor, generalized to apply when the acting type is not closed on the group operator.
 --
@@ -100,13 +110,21 @@ class Act g a where
 -- Uniqueness of patching action is not needed, you simply need to pick any.
 --
 -- [Transitivity] @(y <-- x) <: x = y@
-class Act g a => Patch g a | a -> g where
-  -- | Patching action transforming specific values.
-  (<--) :: a -> a -> g
+class (Act g a, Diff g a) => Patch g a | a -> g
 
-  infix 7 <--
+-- | Patching where source type difference translates to target type patching action.
+--
+-- Useful for updating a large data structure by parts to match other large data.
+--
+-- The patching action of target type is not guaranteed to be the same as the difference of source type,
+--
+-- i.e. given @x@ and @y@, @directMap y <-- directMap x@ may not be @y <-- x@.
+--
+-- [Recovery] @directMap y = (y <-- x) <: directMap x@
+class (Diff g a, Patch g b) => DiffPatching g a b | a -> g, b -> g where
+  directMap :: a -> b
 
--- | Patch by list of operations, applied from front to back.
+-- | Patch by list of operations, applied from front to back (left to right).
 newtype PatchOf op = MkPatchOf (V.Vector op)
   deriving (Eq, Show, Functor)
 
@@ -116,95 +134,84 @@ applyPatches apply (MkPatchOf ops) x = foldl' (flip apply) x ops
 applyImpure :: Applicative m => (op -> m ()) -> (PatchOf op -> m ())
 applyImpure asAct (MkPatchOf ops) = traverse_ asAct ops
 
+-- | Basic collection operations.
+data ColOp a = Insert !a | Delete !a
+  deriving (Eq, Show, Functor)
+
+type PatchCol a = PatchOf (ColOp a)
+
+instance Ord a => Act (PatchCol a) (S.Set a) where
+  (<:) :: Ord a => PatchCol a -> S.Set a -> S.Set a
+  (<:) = applyPatches $ \case
+    Insert x -> S.insert x
+    Delete x -> S.delete x
+
+instance Ord a => Diff (PatchCol a) (S.Set a) where
+  (<--) :: Ord a => S.Set a -> S.Set a -> PatchCol a
+  new <-- old = MkPatchOf . V.fromList $ (Delete <$> deleted) <> (Insert <$> inserted)
+    where
+      inserted = S.toList $ new S.\\ old
+      deleted = S.toList $ old S.\\ new
+
+instance Ord a => Patch (PatchCol a) (S.Set a)
+
+-- Inserts at last, Deletes from anywhere.
+instance Eq a => Act (PatchCol a) (V.Vector a) where
+  (<:) :: Eq a => PatchCol a -> V.Vector a -> V.Vector a
+  (<:) = applyPatches $ \case
+    Insert x -> (`V.snoc` x)
+    Delete x -> V.filter (/= x)
+
+-- Rudimentary difference evaluation.
+instance Eq a => Diff (PatchCol a) (V.Vector a) where
+  (<--) :: Eq a => V.Vector a -> V.Vector a -> PatchCol a
+  new <-- old = MkPatchOf $ (Delete <$> deleted) <> (Insert <$> inserted)
+    where
+      -- Deleting order does not matter
+      deleted = V.drop sameLen old
+      inserted = V.drop sameLen new
+      sameLen = length . takeWhile id $ zipWith (==) (V.toList old) (V.toList new)
+
+instance Eq a => Patch (PatchCol a) (V.Vector a)
+
+-- Maybe can be mapped to Set.
+instance Diff (PatchCol a) (Maybe a) where
+  (<--) :: Maybe a -> Maybe a -> PatchCol a
+  new <-- old = MkPatchOf . V.fromList $ (Delete <$> toList old) <> (Insert <$> toList new)
+
+instance Ord a => DiffPatching (PatchCol a) (Maybe a) (S.Set a) where
+  directMap :: Maybe a -> S.Set a
+  directMap = S.fromAscList . toList
+
 -- | Cache stack, where each element depends on its position.
 -- Right side is the top.
 newtype CacheStack a = AsCacheStack (V.Vector a)
   deriving (Eq, Show)
 
--- | Structure operation on a vector from the right(latter) side.
-data StackOp a = Push !a | Pop
-  deriving (Eq, Show, Functor)
-
--- NOTE: This operation could result in invalid cache stack.
--- We cannot use general stack, because transitive stack operation is longer than desired.
--- This is a case where `Patch` could be optimized for restricted case.
--- Maybe better abstraction is required.
-instance Act (PatchOf (StackOp a)) (CacheStack a) where
-  (<:) :: PatchOf (StackOp a) -> CacheStack a -> CacheStack a
-  (<:) = applyPatches . (coerce .) $ \case
-    Push x -> (`V.snoc` x)
-    Pop -> \v -> V.take (pred $ V.length v) v
-
-instance Patch (PatchOf (StackOp a)) (CacheStack a) where
-  (<--) :: CacheStack a -> CacheStack a -> PatchOf (StackOp a)
+instance Diff (PatchCol a) (CacheStack a) where
+  (<--) :: CacheStack a -> CacheStack a -> PatchCol a
   AsCacheStack new <-- AsCacheStack old = MkPatchOf $
     case V.length old `compare` V.length new of
-      LT -> Push <$> V.drop (V.length old) new
+      LT -> Insert <$> V.drop (V.length old) new
       EQ -> V.empty
-      GT -> Pop <$ V.drop (V.length new) old
+      GT -> Delete <$> V.drop (V.length new) old
 
--- | Structure operation on a set.
-data SetOp a = SetInsert !a | SetDelete !a
-  deriving (Eq, Show, Functor)
-
--- One which replaces existing element instead of insertion.
--- Strictly speaking, deletion part is wrong here.
--- Still, it should work.
-instance Act (PatchOf (SetOp a)) (Maybe a) where
-  (<:) :: PatchOf (SetOp a) -> Maybe a -> Maybe a
-  (<:) = applyPatches $ \case
-    SetInsert x -> const (Just x)
-    SetDelete _ -> const Nothing
-
-instance Patch (PatchOf (SetOp a)) (Maybe a) where
-  (<--) :: Maybe a -> Maybe a -> PatchOf (SetOp a)
-  new <-- old = MkPatchOf . V.fromList $ (SetDelete <$> toList old) <> (SetInsert <$> toList new)
-
-instance Ord a => Act (PatchOf (SetOp a)) (S.Set a) where
-  (<:) :: Ord a => PatchOf (SetOp a) -> S.Set a -> S.Set a
-  (<:) = applyPatches $ \case
-    SetInsert x -> S.insert x
-    SetDelete x -> S.delete x
-
-instance Ord a => Patch (PatchOf (SetOp a)) (S.Set a) where
-  (<--) :: Ord a => S.Set a -> S.Set a -> PatchOf (SetOp a)
-  new <-- old = MkPatchOf . V.fromList $ (SetDelete <$> deleted) <> (SetInsert <$> inserted)
-    where
-      inserted = S.toList $ new S.\\ old
-      deleted = S.toList $ old S.\\ new
+instance Eq a => DiffPatching (PatchCol a) (CacheStack a) (V.Vector a) where
+  directMap :: CacheStack a -> V.Vector a
+  directMap = coerce
 
 -- | Cache map, where each element is uniquely determined by the key.
 newtype CacheMap k v = AsCacheMap (M.Map k v)
   deriving (Eq, Show)
 
--- | Pair of key and corresponding value to cache.
-data CachePair k v = MkCachePair !k !v
-  deriving (Eq, Show)
-
--- | Structure operation on cache map is isomorphic to operation on pair set.
-type CacheMapOp k v = SetOp (CachePair k v)
-
--- TODO Values being multiset might have been more natural.
--- That said, static function is still needed.
-
-instance Ord k => Act (PatchOf (CacheMapOp k v)) (CacheMap k v) where
-  (<:) :: Ord k => PatchOf (CacheMapOp k v) -> CacheMap k v -> CacheMap k v
-  (<:) = applyPatches $ (coerce .) $ \case
-    SetInsert (MkCachePair k v) -> M.insert k v
-    SetDelete (MkCachePair k _) -> M.delete k
-
-instance Ord k => Patch (PatchOf (CacheMapOp k v)) (CacheMap k v) where
-  (<--) :: Ord k => CacheMap k v -> CacheMap k v -> PatchOf (CacheMapOp k v)
-  AsCacheMap new <-- AsCacheMap old = MkPatchOf . V.fromList $ (SetInsert <$> inserted) <> (SetDelete <$> deleted)
+-- CacheMap is mapped into the value set. It is what I use.
+instance Ord k => Diff (PatchCol v) (CacheMap k v) where
+  (<--) :: Ord k => CacheMap k v -> CacheMap k v -> PatchCol v
+  AsCacheMap new <-- AsCacheMap old = MkPatchOf . V.fromList $ (Delete <$> deleted) <> (Insert <$> inserted)
     where
-      mapToCPair = map (uncurry MkCachePair) . M.toList
-      inserted = mapToCPair $ new M.\\ old
-      deleted = mapToCPair $ old M.\\ new
+      inserted = M.elems $ new M.\\ old
+      deleted = M.elems $ old M.\\ new
 
--- | All values in the cache map.
-mapGetCached :: Ord v => CacheMap k v -> S.Set v
-mapGetCached = S.fromList . M.elems . coerce
-
--- | Maps CacheMap patch along with 'mapGetCached'.
-mapCachePatch :: PatchOf (CacheMapOp k v) -> PatchOf (SetOp v)
-mapCachePatch = fmap . fmap $ \(MkCachePair _ v) -> v
+instance (Ord k, Ord v) => DiffPatching (PatchCol v) (CacheMap k v) (S.Set v) where
+  directMap :: Ord k => CacheMap k v -> S.Set v
+  directMap = coerce (S.fromList . M.elems)

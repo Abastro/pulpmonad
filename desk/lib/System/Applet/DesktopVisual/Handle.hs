@@ -95,7 +95,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     eDeskDiffs <- diffEvent (<--) (AsCacheStack <$> bDeskViews)
     ePairDiffs <- diffEvent (<--) bWinDeskPairMap
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> eDeskDiffs
-    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff . mapCachePatch) <$> ePairDiffs
+    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> ePairDiffs
 
     -- Sync with activated window.
     activeDiffs <- diffEvent (<--) bActiveView
@@ -165,15 +165,15 @@ desktopActivates = fold . V.imap eWithIdx
 windowActivates :: M.Map Window WinItem -> Event [Window]
 windowActivates = M.foldMapWithKey $ \win WinItem{eWindowClick} -> [win] <$ eWindowClick
 
-applyDeskDiff :: View.DesktopVisual -> PatchOf (StackOp View.DesktopItemView) -> IO ()
+applyDeskDiff :: View.DesktopVisual -> PatchOf (ColOp View.DesktopItemView) -> IO ()
 applyDeskDiff main = applyImpure $ \case
-  Push desktop -> View.pushDesktop main desktop
-  Pop -> View.popDesktop main
+  Insert desktop -> View.pushDesktop main desktop
+  Delete _ -> View.popDesktop main
 
-applyPairDiff :: PatchOf (SetOp ViewPair) -> IO ()
+applyPairDiff :: PatchOf (ColOp ViewPair) -> IO ()
 applyPairDiff = applyImpure $ \case
-  SetInsert (window, desktop) -> View.insertWindow desktop window
-  SetDelete (window, desktop) -> View.removeWindow desktop window
+  Insert (window, desktop) -> View.insertWindow desktop window
+  Delete (window, desktop) -> View.removeWindow desktop window
 
 -- TODO Need a test that same ID points towards the same View. Likely require restructure.
 desktopList ::
@@ -261,10 +261,10 @@ applyWindowPriority desktops windows = do
   for_ desktops $ \DeskItem{desktopView} -> View.reflectPriority desktopView
 
 -- Patch only used to represent both old & new
-applyActiveWindow :: PatchOf (SetOp View.WindowItemView) -> IO ()
+applyActiveWindow :: PatchOf (ColOp View.WindowItemView) -> IO ()
 applyActiveWindow = applyImpure $ \case
-  SetInsert window -> View.windowSetActivate window True
-  SetDelete window -> View.windowSetActivate window False
+  Insert window -> View.windowSetActivate window True
+  Delete window -> View.windowSetActivate window False
 
 applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
 applyDesktopState DesktopSetup{..} DeskItem{desktopStat = DesktopStat{..}, ..} = do
