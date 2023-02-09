@@ -12,6 +12,7 @@ module Control.Event.Entry (
   exeMapAccum,
   exeAccumD,
   syncBehavior,
+  reactEvent,
   loopSource,
   taskToSource,
   taskToBehavior,
@@ -110,6 +111,26 @@ syncBehavior behav sink = do
   liftIOLater $ sink initial
   chEvent <- changes behav
   reactimate' (fmap sink <$> chEvent)
+
+-- | React based on event, returning freeing action.
+--
+-- Freeing does not remove the reactimate itself,
+-- but allows the action itself to be discarded with event.
+reactEvent :: Event (IO ()) -> MomentIO (IO ())
+reactEvent event = do
+  (eFree, free) <- do
+    freeRef <- liftIO . newIORef $ pure ()
+    eFree <- sourceEvent (freeSource freeRef)
+    free <- liftIO $ readIORef freeRef
+    pure (eFree, free)
+  -- Hopefully this allows eFree to be freed.
+  eFreeOnce <- once eFree
+  eLimited <- switchE event (never <$ eFreeOnce)
+  reactimate eLimited
+  pure free
+  where
+    -- Without unregister call, as unregister could be problematic.
+    freeSource freeRef = sourceSimple $ \handler -> writeIORef freeRef $ handler ()
 
 -- | Looping source from performing action with cleanup.
 -- Forks a thread on each register call, so each handler would receive calls separately.

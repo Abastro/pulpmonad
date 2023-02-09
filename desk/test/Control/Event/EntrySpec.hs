@@ -1,13 +1,18 @@
 module Control.Event.EntrySpec (entrySpec) where
 
+import Control.Concurrent
 import Control.Event.Entry
+import Control.Exception (evaluate)
+import Control.Monad (void)
 import Data.IORef
 import Data.Maybe
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
+import System.Mem
+import System.Mem.Weak
 import Test.Hspec
 import Test.Hspec.QuickCheck
-import Test.QuickCheck
+import Test.QuickCheck hiding (once)
 import Test.QuickCheck.Monadic
 
 appendRef :: IORef [a] -> Sink a
@@ -51,6 +56,27 @@ networkPollingDiscrete vals eInp = do
   ref <- liftIO $ newIORef vals
   (eRes, _) <- pollingDiscrete (atomicModifyIORef' ref $ \(x : xs) -> (xs, x)) eInp
   pure eRes
+
+data ReactGC = Signal | Finish | Detect deriving (Eq)
+
+networkReactEvent :: Event ReactGC -> MomentIO (Event Bool)
+networkReactEvent event = do
+  let eSignal = filterE (== Signal) event
+      eFinish = filterE (== Finish) event
+      eDetect = filterE (== Detect) event
+  -- Enclose key inside.
+  (det, finish) <-
+    liftIO (show <$> getNumCapabilities) >>= \key -> do
+      let eAct = void (evaluate key) <$ eSignal
+      finish <- reactEvent eAct
+      det <- liftIO $ mkWeakPtr key Nothing -- Make weak refs to detect precense.
+      pure (det, finish)
+  reactimate $ finish <$ eFinish -- React to finish action outside.
+  mapEventIO (const $ detectUnreachable det) eDetect -- Detect if it is freed.
+  where
+    detectUnreachable det = do
+      performMajorGC
+      isNothing <$> deRefWeak det
 
 entrySpec :: Spec
 entrySpec = do
@@ -97,3 +123,15 @@ entrySpec = do
           expected = take (length $ catMaybes mayEs) later
           actual = catMaybes mayRs
       expectVsActual expected actual
+
+  -- Test if reactimate is GC-ed on event GC.
+  describe "reactEvent" $ do
+    prop "correctly frees react content when free is called" . withMaxSuccess 20 $ \fstE sndE ->
+      monadicIO $ do
+        let withSignal = map . fmap $ \() -> Signal
+            inE = withSignal fstE <> [Just Finish] <> withSignal sndE <> [Just Detect]
+        outE <- run $ interpretFrameworks networkReactEvent inE
+        let actual = head $ catMaybes outE
+        expectVsActual True actual
+
+-- NOTE: Sadly, simple reactimate is not GC-ed.

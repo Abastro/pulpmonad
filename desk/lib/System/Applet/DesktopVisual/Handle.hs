@@ -234,17 +234,17 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
         (bWindowDesktop, free1) <- taskToBehaviorWA winDesktop
         (eWinInfo, free2) <- sourceEventWA (taskToSource winInfo)
         (eWindowClick, free3) <- sourceEventWA (View.windowClickSource windowView)
-        let winDelete = free1 <> free2 <> free3
 
         -- Specify the window icon
-        eClChWithInfo <- accumE (False, error "no init") (addClassChange <$> eWinInfo)
-        (eSpecify, _) <- exeAccumD (False, FromEWMH) (fmap liftIO . updateSpecify <$> eClChWithInfo)
+        eClassChangeWithInfo <- accumE (False, error "no init") (addClassChange <$> eWinInfo)
+        (eSpecify, _) <- exeAccumD (False, FromEWMH) (fmap liftIO . updateSpecify <$> eClassChangeWithInfo)
         -- MAYBE Filtering is not ideal
         let eSpecifyCh = snd <$> filterE fst eSpecify
 
         -- Apply the received information on the window
-        reactimate (Gtk.uiSingleRun . applyWindowState windowView <$> eWinInfo)
-        reactimate (Gtk.uiSingleRun . applySpecifiedIcon (winGetRaw windowId) windowView <$> eSpecifyCh)
+        free4 <- reactEvent (Gtk.uiSingleRun . applyWindowState windowView <$> eWinInfo)
+        free5 <- reactEvent (Gtk.uiSingleRun . applySpecifiedIcon (winGetRaw windowId) windowView <$> eSpecifyCh)
+        let winDelete = free1 <> free2 <> free3 <> free4 <> free5
 
         pure WinItem{..}
     updated = MaybeT $ pure (setIndex <$> old)
