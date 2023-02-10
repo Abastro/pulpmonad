@@ -252,7 +252,7 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
     updated = MaybeT $ pure (setIndex <$> old)
     setIndex window = window{winIndex}
 
-    addClassChange newInfo (_, oldInfo) = (windowClasses newInfo /= windowClasses oldInfo, oldInfo)
+    addClassChange newInfo (_, oldInfo) = (windowClasses newInfo /= windowClasses oldInfo, newInfo)
 
 -- | Update priority of windows, then reflect the priority.
 applyWindowPriority :: V.Vector DeskItem -> M.Map k WinItem -> IO ()
