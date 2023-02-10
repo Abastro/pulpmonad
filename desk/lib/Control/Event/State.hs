@@ -11,6 +11,7 @@ module Control.Event.State (
   onRemainderRight,
   Act (..),
   Diff (..),
+  (-->),
   Patch,
   DiffPatching (..),
   PatchOf (..),
@@ -99,6 +100,10 @@ class Diff g a | a -> g where
   (<--) :: a -> a -> g
 
   infix 7 <--
+
+(-->) :: Diff g a => a -> a -> g
+(-->) = flip (<--)
+infix 7 -->
 
 -- | Patching action on the target type, where difference gives the patching action.
 --

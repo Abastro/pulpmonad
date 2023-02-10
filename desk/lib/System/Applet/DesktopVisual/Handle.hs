@@ -73,10 +73,14 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
       updateDesk = updateDesktop deskSetup (Glib.new View.DesktopItemView [])
       updateWin = updateWindow (Glib.new View.WindowItemView []) trackWinInfo getRawIcon specifyIcon
 
-  compile $ do
+  network <- compile $ do
+    -- FIXME Apparently, the event values invoked before `actuate` call are discarded...
     eDesktopList <- sourceEvent (taskToSource desktopStats)
     eWindowList <- sourceEvent (taskToSource windowsList)
     eActiveWindow <- sourceEvent (taskToSource windowActive)
+
+    let myLog ws = unlift $ logS (T.pack "DeskVis") LevelDebug (logStrf "Window List: $1" (show ws))
+    reactimate $ myLog <$> eWindowList
 
     (eDesktops, bDesktops) <- desktopList updateDesk eDesktopList
     (eWindows, bWindows) <- windowMap updateWin eWindowList
@@ -92,13 +96,13 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     let bWinDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> winDeskPairs
 
     -- Compute and apply container differences.
-    eDeskDiffs <- diffEvent (<--) (AsCacheStack <$> bDeskViews)
-    ePairDiffs <- diffEvent (<--) bWinDeskPairMap
+    eDeskDiffs <- diffEvent (-->) (AsCacheStack <$> bDeskViews)
+    ePairDiffs <- diffEvent (-->) bWinDeskPairMap
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> eDeskDiffs
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> ePairDiffs
 
     -- Sync with activated window.
-    activeDiffs <- diffEvent (<--) bActiveView
+    activeDiffs <- diffEvent (-->) bActiveView
     reactimate' $ fmap @Future (Gtk.uiSingleRun . applyActiveWindow) <$> activeDiffs
 
     -- Window list update changes window order. We do not care of desktop changes.
@@ -114,6 +118,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     reactimate $ Gtk.uiSingleRun . traverse_ reqToDesktop <$> eDesktopActivate
     reactimate $ Gtk.uiSingleRun . traverse_ reqActivate <$> eWindowActivate
 
+  actuate network
   Gtk.toWidget mainView
   where
     asWinDeskPairs :: M.Map Window WinItem -> Behavior (S.Set (Window, Int))
@@ -280,6 +285,7 @@ applyWindowState view WindowInfo{..} = do
 -- From EWMH is the default
 data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !Gio.Icon | FromEWMH
 
+-- Gives change flag with specify.
 specifyWindowIcon ::
   (MonadUnliftIO m, MonadLog m) =>
   WindowSetup ->

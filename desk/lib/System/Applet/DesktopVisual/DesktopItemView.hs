@@ -118,6 +118,7 @@ removeWindow :: DesktopItemView -> WindowItemView -> IO ()
 removeWindow desktop window = do
   DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
   -- Gets the parent, FlowBoxChild
+  -- FIXME Apparently have no parent - what?
   Just winChild <- #getParent window
   #remove desktopContainer winChild
   #hide winChild
