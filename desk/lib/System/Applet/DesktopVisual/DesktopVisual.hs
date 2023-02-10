@@ -5,14 +5,13 @@
 
 module System.Applet.DesktopVisual.DesktopVisual (
   DesktopVisual (..),
-  pushDesktop,
-  popDesktop,
+  insertDesktop,
+  removeDesktop,
 ) where
 
 import Data.GI.Base.BasicTypes
 import Data.GI.Base.GObject
 import Data.GI.Base.Overloading
-import Data.List.NonEmpty qualified as NE
 import Data.Text qualified as T
 import GHC.OverloadedLabels
 import GI.Gio.Interfaces.File qualified as Gio
@@ -62,15 +61,12 @@ instance DerivedGObject DesktopVisual where
     #initTemplate inst
     pure VisualPrivate
 
-pushDesktop :: DesktopVisual -> DesktopItemView -> IO ()
-pushDesktop view desktop = do
+insertDesktop :: DesktopVisual -> DesktopItemView -> IO ()
+insertDesktop view desktop = do
   #add (view `asA` Gtk.Box) desktop
   #showAll desktop
 
-popDesktop :: DesktopVisual -> IO ()
-popDesktop view = do
-  -- To remove the last one, get all the children.
-  children <- #getChildren (view `asA` Gtk.Box)
-  let lastChild = maybe (error "tried to pop desktop from empty view") NE.last $ NE.nonEmpty children
-  #hide lastChild
-  #remove (view `asA` Gtk.Box) lastChild
+removeDesktop :: DesktopVisual -> DesktopItemView -> IO ()
+removeDesktop view desktop = do
+  #hide desktop
+  #remove (view `asA` Gtk.Box) desktop

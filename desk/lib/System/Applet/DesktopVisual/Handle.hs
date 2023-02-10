@@ -108,7 +108,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     let deskWithWinCnt = pairDeskCnt <$> winDeskPairs <*> bDesktops
     syncBehavior deskWithWinCnt (Gtk.uiSingleRun . traverse_ (uncurry $ applyDesktopVisible deskSetup))
 
-    -- Activations.
+    -- Activations to send.
     eDesktopActivate <- switchE never (desktopActivates <$> eDesktops)
     eWindowActivate <- switchE never (windowActivates <$> eWindows)
     reactimate $ Gtk.uiSingleRun . traverse_ reqToDesktop <$> eDesktopActivate
@@ -117,9 +117,9 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   Gtk.toWidget mainView
   where
     asWinDeskPairs :: M.Map Window WinItem -> Behavior (S.Set (Window, Int))
-    asWinDeskPairs = fmap mapToPairs . traverse bWindowDesktop
+    asWinDeskPairs = fmap (S.fromList . M.toList) . traverse bWindowDesktop
 
-    -- Pair with desktop counts
+    -- Pair with desktop counts.
     pairDeskCnt :: S.Set (Window, Int) -> V.Vector a -> V.Vector (NumWindows, a)
     pairDeskCnt pairMap = V.imap $ \i v -> (fromMaybe 0 (deskHisto IM.!? i), v)
       where
@@ -141,9 +141,6 @@ data WinItem = WinItem
   , eWindowClick :: !(Event ())
   , winDelete :: !(IO ())
   }
-
-mapToPairs :: (Ord a, Ord b) => M.Map a b -> S.Set (a, b)
-mapToPairs = S.fromList . M.toList
 
 type ViewPair = (View.WindowItemView, View.DesktopItemView)
 
@@ -167,8 +164,8 @@ windowActivates = M.foldMapWithKey $ \win WinItem{eWindowClick} -> [win] <$ eWin
 
 applyDeskDiff :: View.DesktopVisual -> PatchOf (ColOp View.DesktopItemView) -> IO ()
 applyDeskDiff main = applyImpure $ \case
-  Insert desktop -> View.pushDesktop main desktop
-  Delete _ -> View.popDesktop main
+  Insert desktop -> View.insertDesktop main desktop
+  Delete desktop -> View.removeDesktop main desktop
 
 applyPairDiff :: PatchOf (ColOp ViewPair) -> IO ()
 applyPairDiff = applyImpure $ \case
