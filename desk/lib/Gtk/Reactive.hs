@@ -15,7 +15,7 @@ import Control.Monad.Reader
 import Data.GI.Base.BasicTypes
 import Data.GI.Base.Signals
 import Gtk.Commons
-import Gtk.Task qualified as Gtk
+import Gtk.Task
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
 
@@ -45,7 +45,7 @@ liftMomentIO = lift
 
 gtkReact :: Event (BuilderM IO ()) -> BuilderM MomentIO ()
 gtkReact evt = ReaderT $ \builder -> do
-  reactimate $ Gtk.uiSingleRun . (`runReaderT` builder) <$> evt
+  reactimate $ uiSingleRun . (`runReaderT` builder) <$> evt
 
 {-# DEPRECATED gtkExecute "Does not do threading properly for now, do not use" #-}
 gtkExecute :: Event (BuilderM MomentIO a) -> BuilderM MomentIO (Event a)
@@ -58,4 +58,4 @@ gtkExecute evt = ReaderT $ \builder -> do
 {-# DEPRECATED gtkSync "Phasing out" #-}
 gtkSync :: Behavior a -> (a -> BuilderM IO ()) -> BuilderM MomentIO ()
 gtkSync behav sink = ReaderT $ \builder -> do
-  syncBehavior behav $ Gtk.uiSingleRun . (`runReaderT` builder) . sink
+  syncBehavior behav $ uiSingleRun . (`runReaderT` builder) . sink

@@ -105,15 +105,15 @@ instance DerivedGObject WindowItemView where
 getPriority :: WindowItemView -> IO Int
 getPriority window = priority <$> gobjectGetPrivateData window
 
-setPriority :: WindowItemView -> Int -> IO ()
+setPriority :: WindowItemView -> Sink Int
 setPriority window priority = gobjectModifyPrivateData window $ \dat -> dat{priority}
 
-windowSetGIcon :: WindowItemView -> Gio.Icon -> IO ()
+windowSetGIcon :: WindowItemView -> Sink Gio.Icon
 windowSetGIcon window gic = do
   WindowItemPrivate{windowIcon} <- gobjectGetPrivateData window
   set windowIcon [#gicon := gic]
 
-windowSetRawIcons :: WindowItemView -> [Gtk.RawIcon] -> IO ()
+windowSetRawIcons :: WindowItemView -> Sink [Gtk.RawIcon]
 windowSetRawIcons window icons = do
   WindowItemPrivate{windowIcon} <- gobjectGetPrivateData window
   iconSize <- toEnum . fromIntegral <$> get windowIcon #iconSize
@@ -121,12 +121,12 @@ windowSetRawIcons window icons = do
     Just scaled -> set windowIcon [#pixbuf := scaled]
     Nothing -> set windowIcon [#iconName := T.pack "image-missing"]
 
-windowSetActivate :: WindowItemView -> Bool -> IO ()
+windowSetActivate :: WindowItemView -> Sink Bool
 windowSetActivate window flag = do
   ctxt <- #getStyleContext window
   (if flag then #addClass else #removeClass) ctxt (T.pack "active")
 
-windowSetStates :: WindowItemView -> [WMStateEx] -> IO ()
+windowSetStates :: WindowItemView -> Sink [WMStateEx]
 windowSetStates window states = do
   #getStyleContext window >>= Gtk.updateCssClass asClass states
   where

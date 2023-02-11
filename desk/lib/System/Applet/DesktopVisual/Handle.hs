@@ -74,7 +74,7 @@ Set a breakpoint on '_pixman_log_error' to debug
 In pixman_region_append_non_o: The expression y1 < y2 was false
 Set a breakpoint on '_pixman_log_error' to debug
 
-.. Apparently I am not calling GTK from other thread. WHAT
+.. Apparently I am not calling GTK from other thread.
 -}
 -- FIXME Fix that sometimes the widget space just retains itself
 deskVisualizer ::
@@ -249,6 +249,7 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
     createWindow = do
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
       -- FIXME Seems like creating UI cannot be called from other threads.
+      -- Listening to signals as well.
       windowView <- liftIO mkView
       lift $ do
         -- Currently, actual listening to window is tied with UI.

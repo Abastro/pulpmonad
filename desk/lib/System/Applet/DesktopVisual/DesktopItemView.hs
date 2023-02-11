@@ -34,9 +34,9 @@ import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Reactive qualified as Gtk
 import Gtk.Styles qualified as Gtk
+import Status.X11.WMStatus
 import System.Applet.DesktopVisual.WindowItemView
 import System.Pulp.PulpPath
-import Status.X11.WMStatus
 
 -- Desktop item which has windows sorted via priority
 newtype DesktopItemView = DesktopItemView (ManagedPtr DesktopItemView)
@@ -132,17 +132,17 @@ reflectPriority desktop = do
   DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
   #invalidateSort desktopContainer
 
-desktopSetLabel :: DesktopItemView -> T.Text -> IO ()
+desktopSetLabel :: DesktopItemView -> Sink T.Text
 desktopSetLabel desktop txt = do
   DesktopItemPrivate{desktopLabel} <- gobjectGetPrivateData desktop
   set desktopLabel [#label := txt]
 
-desktopSetVisible :: DesktopItemView -> Bool -> IO ()
+desktopSetVisible :: DesktopItemView -> Sink Bool
 desktopSetVisible desktop = \case
   True -> #showAll desktop
   False -> #hide desktop
 
-desktopSetState :: DesktopItemView -> DesktopState -> IO ()
+desktopSetState :: DesktopItemView -> Sink DesktopState
 desktopSetState desktop state = do
   #getStyleContext desktop >>= Gtk.updateCssClass asClass [state]
   where

@@ -1,5 +1,6 @@
-module Gtk.Task where
+module Gtk.Task (uiSingleRun, uiCreate, uiTask) where
 
+import Control.Concurrent.MVar
 import Control.Concurrent.Task
 import Control.Monad
 import Data.Foldable
@@ -10,6 +11,14 @@ import GI.Gdk.Functions qualified as Gdk
 -- | Adds UI single-use task, which only runs once.
 uiSingleRun :: IO a -> IO ()
 uiSingleRun task = void $ Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE (False <$ task)
+
+-- | Creates using the action and returns it through MVar.
+-- Please do not put values into the MVar.
+uiCreate :: IO a -> IO (MVar a)
+uiCreate make = do
+  res <- newEmptyMVar
+  uiSingleRun $ make >>= putMVar res
+  pure res
 
 -- NOTE: Currently, `uiTask` is the sole consumer of Task.
 -- Likely could be replaced with something else.
