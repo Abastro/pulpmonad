@@ -313,11 +313,12 @@ specifyWindowIcon ::
   IconSpecify ->
   m (Maybe IconSpecify)
 specifyWindowIcon WindowSetup{..} appCol (classChanged, winInfo) oldSpecify = withRunInIO $ \unlift -> do
-  if classChanged then doUpdate <$> onClassChange unlift else pure onInfoChange
+  if classChanged then Just <$> onClassChange unlift else pure onInfoChange
   where
     WindowInfo{windowClasses} = winInfo
 
     -- Class change: Re-evaluates from front to back.
+    -- Always updates. (EWMH: Will think later)
     onClassChange unlift = do
       spec <-
         runMaybeT . getAlt . foldMap Alt $
@@ -325,11 +326,6 @@ specifyWindowIcon WindowSetup{..} appCol (classChanged, winInfo) oldSpecify = wi
           , (MaybeT . pure) (FromCustom winInfo <$> windowImgIcon windowClasses)
           ]
       pure $ fromMaybe FromEWMH spec
-
-    -- FromEWMH: Does not update. (FIXME: Initial is FromEWMH)
-    doUpdate = \case
-      FromEWMH -> Nothing
-      newSpec -> Just newSpec
 
     -- No class change: Specific to each type.
     onInfoChange = case oldSpecify of
