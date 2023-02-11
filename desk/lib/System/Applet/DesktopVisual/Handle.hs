@@ -22,7 +22,6 @@ import Data.Maybe
 import Data.Set qualified as S
 import Data.Text qualified as T
 import Data.Vector qualified as V
-import GI.GLib qualified as Glib
 import GI.Gio.Interfaces.AppInfo qualified as Gio
 import GI.Gio.Interfaces.Icon qualified as Gio
 import Graphics.X11.Types
@@ -38,6 +37,7 @@ import System.Applet.DesktopVisual.DesktopItemView qualified as View
 import System.Applet.DesktopVisual.DesktopVisual qualified as View
 import System.Applet.DesktopVisual.WindowItemView qualified as View
 import System.Log.LogPrint
+import qualified Data.GI.Base.Constructible as Glib
 
 type NumWindows = Word
 
@@ -85,12 +85,13 @@ deskVisualizer ::
 deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   DeskVisRcvs{..} <- unlift $ runXHand deskVisInitiate
   appInfoCol <- trackAppInfo
+  -- UI thread here
   mainView <- Glib.new View.DesktopVisual []
 
   let getRawIcon = unlift . wrapGetRaw . winGetIcon
       specifyIcon = fmap unlift . specifyWindowIcon winSetup appInfoCol
-      updateDesk = updateDesktop deskSetup (Glib.new View.DesktopItemView [])
-      updateWin = updateWindow (Glib.new View.WindowItemView []) trackWinInfo getRawIcon specifyIcon
+      updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new View.DesktopItemView [])
+      updateWin = updateWindow (Gtk.uiCreate $ Glib.new View.WindowItemView []) trackWinInfo getRawIcon specifyIcon
 
   actuated <- newEmptyMVar
   network <- compile $ do
@@ -114,25 +115,25 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     -- Compute and apply container differences.
     eDeskDiffs <- diffEvent (-->) (AsCacheStack <$> bDeskViews)
     ePairDiffs <- diffEvent (-->) bWinDeskPairMap
-    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyDeskDiff mainView) <$> eDeskDiffs
-    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyPairDiff) <$> ePairDiffs
+    reactimate' $ fmap @Future (applyDeskDiff mainView) <$> eDeskDiffs
+    reactimate' $ fmap @Future applyPairDiff <$> ePairDiffs
 
     -- Sync with activated window.
     activeDiffs <- diffEvent (-->) bActiveView
-    reactimate' $ fmap @Future (Gtk.uiSingleRun . applyActiveWindow) <$> activeDiffs
+    reactimate' $ fmap @Future applyActiveWindow <$> activeDiffs
 
     -- Window list update changes window order. We do not care of desktop changes.
-    reactimate $ Gtk.uiSingleRun <$> (applyWindowPriority <$> bDesktops <@> eWindows)
+    reactimate $ applyWindowPriority <$> bDesktops <@> eWindows
 
     -- Visibility depends on both desktop state and window count.
     let deskWithWinCnt = pairDeskCnt <$> winDeskPairs <*> bDesktops
-    syncBehavior deskWithWinCnt (Gtk.uiSingleRun . traverse_ (uncurry $ applyDesktopVisible deskSetup))
+    syncBehavior deskWithWinCnt $ traverse_ (uncurry $ applyDesktopVisible deskSetup)
 
     -- Activations to send.
     eDesktopActivate <- switchE never (desktopActivates <$> eDesktops)
     eWindowActivate <- switchE never (windowActivates <$> eWindows)
-    reactimate $ Gtk.uiSingleRun . traverse_ reqToDesktop <$> eDesktopActivate
-    reactimate $ Gtk.uiSingleRun . traverse_ reqActivate <$> eWindowActivate
+    reactimate $ traverse_ reqToDesktop <$> eDesktopActivate
+    reactimate $ traverse_ reqActivate <$> eWindowActivate
   actuate network
   putMVar actuated ()
 
@@ -207,7 +208,7 @@ desktopList update eStat = exeAccumD V.empty (updateFn <$> eStat)
 
 updateDesktop ::
   DesktopSetup ->
-  IO View.DesktopItemView ->
+  IO (MVar View.DesktopItemView) ->
   Maybe DeskItem ->
   DesktopStat ->
   MomentIO DeskItem
@@ -217,7 +218,7 @@ updateDesktop setup mkView old desktopStat = do
   pure desktop
   where
     createDesktop = do
-      desktopView <- liftIO mkView
+      desktopView <- liftIO (mkView >>= takeMVar)
       (eDesktopClick, free1) <- sourceEventWA (View.desktopClickSource desktopView)
       let deskDelete = free1
       pure DeskItem{..}
@@ -237,7 +238,7 @@ windowMap update eList = do
       news <$ onRemainderRight (liftIO . winDelete) news olds
 
 updateWindow ::
-  IO View.WindowItemView ->
+  IO (MVar View.WindowItemView) ->
   (Window -> IO (Maybe PerWinRcvs)) ->
   (Window -> IO [Gtk.RawIcon]) ->
   ((Bool, WindowInfo) -> (Bool, IconSpecify) -> IO (Bool, IconSpecify)) ->
@@ -248,14 +249,11 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
   where
     createWindow = do
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
-      -- FIXME Seems like creating UI cannot be called from other threads.
-      -- Listening to signals as well.
-      windowView <- liftIO mkView
+      varWindowView <- liftIO mkView
       lift $ do
         -- Currently, actual listening to window is tied with UI.
         (bWindowDesktop, free1) <- taskToBehaviorWA winDesktop
         (eWinInfo, free2) <- sourceEventWA (taskToSource winInfo)
-        (eWindowClick, free3) <- sourceEventWA (View.windowClickSource windowView)
 
         -- Specify the window icon
         (eClassChangeWithInfo, _) <- mapAccum Nothing (addClassChange <$> eWinInfo)
@@ -263,9 +261,13 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
         -- MAYBE Filtering is not ideal
         let eSpecifyCh = snd <$> filterE fst eSpecify
 
+        -- Take window view as late as possible.
+        windowView <- liftIO $ takeMVar varWindowView
+        (eWindowClick, free3) <- sourceEventWA (View.windowClickSource windowView)
+
         -- Apply the received information on the window
-        free4 <- reactEvent (Gtk.uiSingleRun . applyWindowState windowView <$> eWinInfo)
-        free5 <- reactEvent (Gtk.uiSingleRun . applySpecifiedIcon (winGetRaw windowId) windowView <$> eSpecifyCh)
+        free4 <- reactEvent $ applyWindowState windowView <$> eWinInfo
+        free5 <- reactEvent $ applySpecifiedIcon (winGetRaw windowId) windowView <$> eSpecifyCh
         let winDelete = free1 <> free2 <> free3 <> free4 <> free5
 
         pure WinItem{..}
@@ -281,7 +283,9 @@ applyWindowPriority :: V.Vector DeskItem -> M.Map k WinItem -> IO ()
 applyWindowPriority desktops windows = do
   -- MAYBE Too complex? Perhaps better to embed inside window
   -- Perhaps, all the widgets can be read from single file
-  for_ windows $ \WinItem{..} -> View.setPriority windowView winIndex
+
+  -- Needs to be run in UI thread.
+  for_ windows $ \WinItem{..} -> Gtk.uiSingleRun $ View.setPriority windowView winIndex
   for_ desktops $ \DeskItem{desktopView} -> View.reflectPriority desktopView
 
 -- Patch only used to represent both old & new
@@ -301,7 +305,7 @@ applyDesktopVisible DesktopSetup{..} numWin DeskItem{..} = do
 
 applyWindowState :: View.WindowItemView -> WindowInfo -> IO ()
 applyWindowState view WindowInfo{..} = do
-  Gtk.widgetSetTooltipText view (Just windowTitle)
+  View.windowSetTitle view windowTitle
   View.windowSetStates view (S.toList windowState)
 
 -- From EWMH is the default

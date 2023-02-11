@@ -142,6 +142,8 @@ loopSource act cleanup = sourceWithUnreg $ \handler -> do
   pure (cleanup <> killThread tid)
 
 -- | Temporary solution before phasing out Task.
+--
+-- Should not be called multiple times.
 taskToSource :: Task a -> Source a
 taskToSource task = loopSource (taskNextWait task) (taskStop task)
 

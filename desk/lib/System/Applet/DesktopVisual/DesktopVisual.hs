@@ -18,6 +18,7 @@ import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
+import Gtk.Task qualified as Gtk
 import System.Applet.DesktopVisual.DesktopItemView
 import System.Pulp.PulpPath
 
@@ -62,9 +63,9 @@ instance DerivedGObject DesktopVisual where
     pure VisualPrivate
 
 insertDesktop :: DesktopVisual -> DesktopItemView -> IO ()
-insertDesktop view desktop = do
+insertDesktop view desktop = Gtk.uiSingleRun $ do
   #add (view `asA` Gtk.Box) desktop
 
 removeDesktop :: DesktopVisual -> DesktopItemView -> IO ()
-removeDesktop view desktop = do
+removeDesktop view desktop = Gtk.uiSingleRun $ do
   #remove (view `asA` Gtk.Box) desktop

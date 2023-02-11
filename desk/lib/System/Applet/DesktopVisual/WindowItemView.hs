@@ -10,6 +10,7 @@ module System.Applet.DesktopVisual.WindowItemView (
   windowSetGIcon,
   windowSetRawIcons,
   windowSetActivate,
+  windowSetTitle,
   windowSetStates,
   windowClickSource,
 ) where
@@ -31,8 +32,9 @@ import Gtk.Commons qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
 import Gtk.Reactive qualified as Gtk
 import Gtk.Styles qualified as Gtk
-import System.Pulp.PulpPath
+import Gtk.Task qualified as Gtk
 import Status.X11.WMStatus
+import System.Pulp.PulpPath
 
 -- MAYBE Use image internal to the button
 -- Essentially, a button with priority. Select in CSS by "button.windowitem".
@@ -101,20 +103,23 @@ instance DerivedGObject WindowItemView where
 
     pure WindowItemPrivate{priority = 0, windowIcon}
 
--- Too lazy to add labels for property
+-- Too lazy to add overloaded labels for property
+
+-- | Gets priority, should be called from UI thread.
 getPriority :: WindowItemView -> IO Int
 getPriority window = priority <$> gobjectGetPrivateData window
 
-setPriority :: WindowItemView -> Sink Int
+-- | Sets priority, should be called from UI thread.
+setPriority :: WindowItemView -> Int -> IO ()
 setPriority window priority = gobjectModifyPrivateData window $ \dat -> dat{priority}
 
 windowSetGIcon :: WindowItemView -> Sink Gio.Icon
-windowSetGIcon window gic = do
+windowSetGIcon window gic = Gtk.uiSingleRun $ do
   WindowItemPrivate{windowIcon} <- gobjectGetPrivateData window
   set windowIcon [#gicon := gic]
 
 windowSetRawIcons :: WindowItemView -> Sink [Gtk.RawIcon]
-windowSetRawIcons window icons = do
+windowSetRawIcons window icons = Gtk.uiSingleRun $ do
   WindowItemPrivate{windowIcon} <- gobjectGetPrivateData window
   iconSize <- toEnum . fromIntegral <$> get windowIcon #iconSize
   Gtk.iconsChoosePixbuf (Gtk.iconSizePx iconSize) Gtk.argbTorgba icons >>= \case
@@ -122,12 +127,16 @@ windowSetRawIcons window icons = do
     Nothing -> set windowIcon [#iconName := T.pack "image-missing"]
 
 windowSetActivate :: WindowItemView -> Sink Bool
-windowSetActivate window flag = do
+windowSetActivate window flag = Gtk.uiSingleRun $ do
   ctxt <- #getStyleContext window
   (if flag then #addClass else #removeClass) ctxt (T.pack "active")
 
+windowSetTitle :: WindowItemView -> Sink T.Text
+windowSetTitle window title = Gtk.uiSingleRun $ do
+  set (window `asA` Gtk.Widget) [#tooltipText := title]
+
 windowSetStates :: WindowItemView -> Sink [WMStateEx]
-windowSetStates window states = do
+windowSetStates window states = Gtk.uiSingleRun $ do
   #getStyleContext window >>= Gtk.updateCssClass asClass states
   where
     asClass = \case

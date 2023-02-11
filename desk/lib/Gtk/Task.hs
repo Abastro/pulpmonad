@@ -12,10 +12,11 @@ import GI.Gdk.Functions qualified as Gdk
 uiSingleRun :: IO a -> IO ()
 uiSingleRun task = void $ Gdk.threadsAddIdle PRIORITY_DEFAULT_IDLE (False <$ task)
 
--- | Creates using the action and returns it through MVar.
+-- | Creates using the action in UI thread and returns it through MVar.
 -- Please do not put values into the MVar.
 uiCreate :: IO a -> IO (MVar a)
 uiCreate make = do
+  -- TODO Check if / Guard against main thread?
   res <- newEmptyMVar
   uiSingleRun $ make >>= putMVar res
   pure res

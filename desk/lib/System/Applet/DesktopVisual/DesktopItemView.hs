@@ -34,6 +34,7 @@ import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Reactive qualified as Gtk
 import Gtk.Styles qualified as Gtk
+import Gtk.Task qualified as Gtk
 import Status.X11.WMStatus
 import System.Applet.DesktopVisual.WindowItemView
 import System.Pulp.PulpPath
@@ -108,14 +109,14 @@ sortFunc childA childB = do
       getPriority win
 
 insertWindow :: DesktopItemView -> WindowItemView -> IO ()
-insertWindow desktop window = do
+insertWindow desktop window = Gtk.uiSingleRun $ do
   DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
   -- FlowBox requires FlowBoxChild
   winChild <- new Gtk.FlowBoxChild [#child := window]
   #add desktopContainer winChild
 
 removeWindow :: DesktopItemView -> WindowItemView -> IO ()
-removeWindow desktop window = do
+removeWindow desktop window = Gtk.uiSingleRun $ do
   DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
   -- Gets the parent, FlowBoxChild
   Just winChild <- traverse (unsafeCastTo Gtk.FlowBoxChild) =<< #getParent window
@@ -128,22 +129,23 @@ removeWindow desktop window = do
 -- This is here since in the end, priorities are usually updated in batch.
 -- (Also, notifying FlowBoxChild can introduce coupling)
 reflectPriority :: DesktopItemView -> IO ()
-reflectPriority desktop = do
+reflectPriority desktop = Gtk.uiSingleRun $ do
   DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
   #invalidateSort desktopContainer
 
 desktopSetLabel :: DesktopItemView -> Sink T.Text
-desktopSetLabel desktop txt = do
+desktopSetLabel desktop txt = Gtk.uiSingleRun $ do
   DesktopItemPrivate{desktopLabel} <- gobjectGetPrivateData desktop
   set desktopLabel [#label := txt]
 
 desktopSetVisible :: DesktopItemView -> Sink Bool
-desktopSetVisible desktop = \case
-  True -> #showAll desktop
-  False -> #hide desktop
+desktopSetVisible desktop =
+  Gtk.uiSingleRun . \case
+    True -> #showAll desktop
+    False -> #hide desktop
 
 desktopSetState :: DesktopItemView -> Sink DesktopState
-desktopSetState desktop state = do
+desktopSetState desktop state = Gtk.uiSingleRun $ do
   #getStyleContext desktop >>= Gtk.updateCssClass asClass [state]
   where
     asClass = \case

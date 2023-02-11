@@ -19,7 +19,13 @@ import Gtk.Task
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
 
+-- MAYBE Forks a new thread on every signal handling.
+
 -- | Connect a signal and take it as a event source.
+--
+-- Connecting and disconnecting is both done in the UI thread.
+--
+-- Caveat: Can deadlock if Source is unregistered in UI thread while UI is being created.
 onSource ::
   (GObject obj, SignalInfo info) =>
   obj ->
@@ -27,8 +33,10 @@ onSource ::
   (Handler a -> HaskellCallbackType info) ->
   Source a
 onSource obj proxy asCallback = sourceWithUnreg $ \handler -> do
-  handlerId <- on obj proxy (asCallback handler)
-  pure (disconnectSignalHandler obj handlerId)
+  varHandlerId <- uiCreate $ on obj proxy (asCallback handler)
+  pure $ do
+    handlerId <- takeMVar varHandlerId
+    uiSingleRun $ disconnectSignalHandler obj handlerId
 
 -- | Intended to be used last.
 {-# DEPRECATED activateUI "Phasing out" #-}
