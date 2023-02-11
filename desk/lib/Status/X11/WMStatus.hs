@@ -172,7 +172,7 @@ data DesktopState
     DeskVisible
   | -- | Other hidden desktops
     DeskHidden
-  deriving (Eq, Ord, Enum, Bounded)
+  deriving (Eq, Ord, Enum, Bounded, Show)
 
 -- | Desktop status for each desktop.
 data DesktopStat = DesktopStat
@@ -180,6 +180,7 @@ data DesktopStat = DesktopStat
   -- ^ Name of the desktop. May not exist.
   , desktopState :: !DesktopState
   }
+  deriving (Eq, Show)
 
 -- | Get the vector of desktop status.
 getDesktopStat :: XPQuery (V.Vector DesktopStat)
@@ -250,7 +251,7 @@ reqActiveWindow flag = do
 
 -- | Inclusive states of the window.
 data WMStateEx = WinHidden | WinDemandAttention
-  deriving (Eq, Ord, Enum, Bounded)
+  deriving (Eq, Ord, Enum, Bounded, Show)
 
 -- TODO WM_CLASS must be [instance name, class name]
 
@@ -260,7 +261,7 @@ data WindowInfo = WindowInfo
   , windowClasses :: !(V.Vector T.Text)
   , windowState :: !(S.Set WMStateEx)
   }
-  deriving (Eq)
+  deriving (Eq, Show)
 
 -- | Window information. Only fails when WM_CLASS property is missing.
 -- When name(title) is missing, this gives the empty title.

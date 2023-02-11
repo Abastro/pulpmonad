@@ -37,7 +37,6 @@ import Status.X11.XHandle
 import System.Applet.DesktopVisual.DesktopItemView qualified as View
 import System.Applet.DesktopVisual.DesktopVisual qualified as View
 import System.Applet.DesktopVisual.WindowItemView qualified as View
-import System.IO
 import System.Log.LogPrint
 
 type NumWindows = Word
@@ -238,7 +237,6 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
       windowView <- liftIO mkView
       lift $ do
-        liftIO $ hPutStrLn stderr $ "Window " <> show windowId
         (bWindowDesktop, free1) <- taskToBehaviorWA winDesktop
         (eWinInfo, free2) <- sourceEventWA (taskToSource winInfo)
         (eWindowClick, free3) <- sourceEventWA (View.windowClickSource windowView)
@@ -260,7 +258,7 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
 
     addClassChange newInfo mayOldInfo = ((classChange, newInfo), Just newInfo)
       where
-        classChange = Just (windowClasses newInfo) == (windowClasses <$> mayOldInfo)
+        classChange = Just (windowClasses newInfo) /= (windowClasses <$> mayOldInfo)
 
 -- | Update priority of windows, then reflect the priority.
 applyWindowPriority :: V.Vector DeskItem -> M.Map k WinItem -> IO ()
