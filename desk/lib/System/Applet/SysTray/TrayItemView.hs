@@ -4,14 +4,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module System.Applet.SysTray.TrayItemView (
-  TrayItemView (..),
+  View (..),
   MouseButton (..),
+  ScrollDir (..),
   TrayItemInput (..),
   TrayItemIcon (..),
-  itemSetInputHandler,
-  itemSetIcon,
-  itemSetOverlay,
-  itemShowPopup,
+  setInputHandler,
+  setIcon,
+  setOverlay,
+  showPopup,
 ) where
 
 import Control.Applicative
@@ -41,22 +42,22 @@ import Gtk.Commons qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
 import System.Pulp.PulpPath
 
-newtype TrayItemView = TrayItemView (ManagedPtr TrayItemView)
+newtype View = AsView (ManagedPtr View)
 
-instance TypedObject TrayItemView where
+instance TypedObject View where
   glibType :: IO GType
-  glibType = registerGType TrayItemView
-instance GObject TrayItemView
+  glibType = registerGType AsView
+instance GObject View
 
-type instance ParentTypes TrayItemView = Gtk.EventBox ': ParentTypes Gtk.EventBox
-instance HasParentTypes TrayItemView
+type instance ParentTypes View = Gtk.EventBox ': ParentTypes Gtk.EventBox
+instance HasParentTypes View
 
 -- Disallow box/container methods
 instance
-  ( info ~ Gtk.ResolveWidgetMethod t TrayItemView
-  , OverloadedMethod info TrayItemView p
+  ( info ~ Gtk.ResolveWidgetMethod t View
+  , OverloadedMethod info View p
   ) =>
-  IsLabel t (TrayItemView -> p)
+  IsLabel t (View -> p)
   where
   fromLabel = overloadedMethod @info
 
@@ -65,10 +66,10 @@ data TrayItemPrivate = TrayItemPrivate
   , trayOverlay :: !Gtk.Image
   }
 
-instance DerivedGObject TrayItemView where
+instance DerivedGObject View where
   -- MAYBE Inherit button and its styling
-  type GObjectParentType TrayItemView = Gtk.EventBox
-  type GObjectPrivateData TrayItemView = TrayItemPrivate
+  type GObjectParentType View = Gtk.EventBox
+  type GObjectPrivateData View = TrayItemPrivate
 
   objectTypeName :: T.Text
   objectTypeName = T.pack "TrayItemView"
@@ -83,7 +84,7 @@ instance DerivedGObject TrayItemView where
 
     #setCssName widgetClass (T.pack "TrayItemView")
 
-  objectInstanceInit :: GObjectClass -> TrayItemView -> IO TrayItemPrivate
+  objectInstanceInit :: GObjectClass -> View -> IO TrayItemPrivate
   objectInstanceInit _gClass inst = do
     #initTemplate inst
     trayIcon <- Gtk.templateChild inst (T.pack "tray-icon") Gtk.Image
@@ -95,8 +96,9 @@ instance DerivedGObject TrayItemView where
     pure TrayItemPrivate{..}
 
 data MouseButton = MouseLeft | MouseMiddle | MouseRight
+data ScrollDir = ScrollUp | ScrollDown | ScrollLeft | ScrollRight
 data TrayItemInput
-  = TrayItemScroll !Gtk.ScrollDirection
+  = TrayItemScroll !ScrollDir
   | TrayItemClick !MouseButton !Int32 !Int32
 
 -- | Icon information from the tray item.
@@ -106,8 +108,8 @@ data TrayItemIcon = TrayItemIcon
   , itemIconInfo :: [(Int32, Int32, BS.ByteString)]
   }
 
-itemSetInputHandler :: TrayItemView -> (TrayItemInput -> IO ()) -> IO ()
-itemSetInputHandler item handler = do
+setInputHandler :: View -> (TrayItemInput -> IO ()) -> IO ()
+setInputHandler item handler = do
   on (item `asA` Gtk.Widget) #buttonPressEvent $ \event -> do
     xRoot <- round <$> get event #xRoot
     yRoot <- round <$> get event #yRoot
@@ -117,22 +119,26 @@ itemSetInputHandler item handler = do
       3 -> True <$ handler (TrayItemClick MouseRight xRoot yRoot)
       _ -> pure False
   on (item `asA` Gtk.Widget) #scrollEvent $ \event -> do
-    direction <- get event #direction
-    True <$ handler (TrayItemScroll direction)
+    get event #direction >>= \case
+      Gtk.ScrollDirectionUp -> True <$ handler (TrayItemScroll ScrollUp)
+      Gtk.ScrollDirectionDown -> True <$ handler (TrayItemScroll ScrollDown)
+      Gtk.ScrollDirectionLeft -> True <$ handler (TrayItemScroll ScrollLeft)
+      Gtk.ScrollDirectionRight -> True <$ handler (TrayItemScroll ScrollRight)
+      _ -> pure False
   pure ()
 
-itemSetIcon :: TrayItemView -> TrayItemIcon -> IO ()
-itemSetIcon item icon = do
+setIcon :: View -> TrayItemIcon -> IO ()
+setIcon item icon = do
   TrayItemPrivate{trayIcon} <- gobjectGetPrivateData item
   setTrayIcon trayIcon icon
 
-itemSetOverlay :: TrayItemView -> TrayItemIcon -> IO ()
-itemSetOverlay item icon = do
+setOverlay :: View -> TrayItemIcon -> IO ()
+setOverlay item icon = do
   TrayItemPrivate{trayOverlay} <- gobjectGetPrivateData item
   setTrayIcon trayOverlay icon
 
-itemShowPopup :: TrayItemView -> DBus.Menu -> IO ()
-itemShowPopup item menu = do
+showPopup :: View -> DBus.Menu -> IO ()
+showPopup item menu = do
   Gtk.menuPopupAtWidget menu item Gtk.GravitySouthWest Gtk.GravityNorthWest Nothing
 
 data IconData = ByGIcon Gio.Icon | ByPixbuf Gtk.Pixbuf

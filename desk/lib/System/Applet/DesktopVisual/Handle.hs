@@ -350,6 +350,7 @@ applySpecifiedIcon getRaw view = \case
 wrapGetRaw :: (MonadUnliftIO m, MonadLog m) => GetXIcon -> m [Gtk.RawIcon]
 wrapGetRaw getXIcon =
   liftIO getXIcon >>= \case
+    -- MAYBE Warning level?
     Left err -> [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
     Right icons -> pure icons
 

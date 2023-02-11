@@ -4,12 +4,12 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module System.Applet.SysTray.SystemTrayView (
-  SystemTrayView (..),
+  View (..),
   PackAt (..),
-  traySetOrientation,
-  traySetPackAt,
-  trayAddItem,
-  trayRemoveItem,
+  setOrientation,
+  setPackAt,
+  addItem,
+  removeItem,
 ) where
 
 import Data.GI.Base.Attributes
@@ -22,34 +22,34 @@ import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
-import System.Applet.SysTray.TrayItemView
+import System.Applet.SysTray.TrayItemView qualified as ItemView
 import System.Pulp.PulpPath
 
-newtype SystemTrayView = SystemTrayView (ManagedPtr SystemTrayView)
+newtype View = AsView (ManagedPtr View)
 
-instance TypedObject SystemTrayView where
+instance TypedObject View where
   glibType :: IO GType
-  glibType = registerGType SystemTrayView
-instance GObject SystemTrayView
+  glibType = registerGType AsView
+instance GObject View
 
-type instance ParentTypes SystemTrayView = Gtk.Box ': ParentTypes Gtk.Box
-instance HasParentTypes SystemTrayView
+type instance ParentTypes View = Gtk.Box ': ParentTypes Gtk.Box
+instance HasParentTypes View
 
 -- Disallow box/container methods
 instance
-  ( info ~ Gtk.ResolveWidgetMethod t SystemTrayView
-  , OverloadedMethod info SystemTrayView p
+  ( info ~ Gtk.ResolveWidgetMethod t View
+  , OverloadedMethod info View p
   ) =>
-  IsLabel t (SystemTrayView -> p)
+  IsLabel t (View -> p)
   where
   fromLabel = overloadedMethod @info
 
 data PackAt = PackStart | PackEnd
 newtype TrayPrivate = TrayPrivate PackAt
 
-instance DerivedGObject SystemTrayView where
-  type GObjectParentType SystemTrayView = Gtk.Box
-  type GObjectPrivateData SystemTrayView = TrayPrivate
+instance DerivedGObject View where
+  type GObjectParentType View = Gtk.Box
+  type GObjectPrivateData View = TrayPrivate
 
   objectTypeName :: T.Text
   objectTypeName = T.pack "SystemTrayView"
@@ -61,28 +61,28 @@ instance DerivedGObject SystemTrayView where
 
     #setCssName widgetClass (T.pack "SystemTrayView")
 
-  objectInstanceInit :: GObjectClass -> SystemTrayView -> IO TrayPrivate
+  objectInstanceInit :: GObjectClass -> View -> IO TrayPrivate
   objectInstanceInit _gClass inst = do
     #initTemplate inst
     pure (TrayPrivate PackStart)
 
-traySetOrientation :: SystemTrayView -> Gtk.Orientation -> IO ()
-traySetOrientation tray orient = do
+setOrientation :: View -> Gtk.Orientation -> IO ()
+setOrientation tray orient = do
   set (tray `asA` Gtk.Box) [#orientation := orient]
 
-traySetPackAt :: SystemTrayView -> PackAt -> IO ()
-traySetPackAt tray at = do
+setPackAt :: View -> PackAt -> IO ()
+setPackAt tray at = do
   gobjectSetPrivateData tray (TrayPrivate at)
 
-trayAddItem :: SystemTrayView -> TrayItemView -> IO ()
-trayAddItem tray item = do
+addItem :: View -> ItemView.View -> IO ()
+addItem tray item = do
   TrayPrivate at <- gobjectGetPrivateData tray
   case at of
     PackStart -> #packStart (tray `asA` Gtk.Box) item False False 0
     PackEnd -> #packEnd (tray `asA` Gtk.Box) item False False 0
   #showAll item
 
-trayRemoveItem :: SystemTrayView -> TrayItemView -> IO ()
-trayRemoveItem tray item = do
+removeItem :: View -> ItemView.View -> IO ()
+removeItem tray item = do
   #hide item
   #remove (tray `asA` Gtk.Box) item
