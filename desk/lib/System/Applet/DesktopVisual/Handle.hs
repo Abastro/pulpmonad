@@ -76,7 +76,6 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
 
   actuated <- newEmptyMVar
   network <- compile $ do
-    -- FIXME Three windows somehow crash application
     eDesktopList <- sourceEvent (taskToSourceAfter desktopStats actuated)
     eWindowList <- sourceEvent (taskToSourceAfter windowsList actuated)
     eActiveWindow <- sourceEvent (taskToSourceAfter windowActive actuated)
@@ -291,7 +290,6 @@ applyWindowState view WindowInfo{..} = do
 -- From EWMH is the default
 data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !Gio.Icon | FromEWMH
 
--- FIXME Setting application icon is called multiple times.
 -- Gives change flag with specify.
 specifyWindowIcon ::
   (MonadUnliftIO m, MonadLog m) =>
