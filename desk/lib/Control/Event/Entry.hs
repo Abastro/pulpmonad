@@ -15,6 +15,7 @@ module Control.Event.Entry (
   reactEvent,
   loopSource,
   taskToSource,
+  taskToSourceAfter,
   taskToBehavior,
   taskToBehaviorWA,
   periodicSource,
@@ -127,7 +128,8 @@ reactEvent event = do
   eFreeOnce <- once eFree
   eLimited <- switchE event (never <$ eFreeOnce)
   reactimate eLimited
-  pure free
+  -- Forks to avoid deadlock when called inside `execute`.
+  pure (void $ forkIO free)
   where
     -- Without unregister call, as unregister could be problematic.
     freeSource freeRef = sourceSimple $ \handler -> writeIORef freeRef $ handler ()
@@ -135,13 +137,21 @@ reactEvent event = do
 -- | Looping source from performing action with cleanup.
 -- Forks a thread on each register call, so each handler would receive calls separately.
 loopSource :: IO a -> IO () -> Source a
-loopSource act cleanup = AddHandler $ \handler -> do
+loopSource act cleanup = sourceWithUnreg $ \handler -> do
   tid <- forkIO . forever $ act >>= handler
   pure (cleanup <> killThread tid)
 
 -- | Temporary solution before phasing out Task.
 taskToSource :: Task a -> Source a
 taskToSource task = loopSource (taskNextWait task) (taskStop task)
+
+-- | Workaround for reactive-banana passing through events when not actuated.
+taskToSourceAfter :: Task a -> MVar () -> Source a
+taskToSourceAfter task wait = sourceWithUnreg $ \handler -> do
+  tid <- forkIO $ do
+    () <- readMVar wait
+    forever $ taskNextWait task >>= handler
+  pure (taskStop task <> killThread tid)
 
 -- | Waits for first task to finish, so that we get a behavior.
 taskToBehavior :: Task a -> MomentIO (Behavior a)

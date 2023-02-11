@@ -7,6 +7,7 @@ module System.Applet.DesktopVisual.Handle (
 ) where
 
 import Control.Applicative
+import Control.Concurrent.MVar
 import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Event.State
@@ -36,6 +37,7 @@ import Status.X11.XHandle
 import System.Applet.DesktopVisual.DesktopItemView qualified as View
 import System.Applet.DesktopVisual.DesktopVisual qualified as View
 import System.Applet.DesktopVisual.WindowItemView qualified as View
+import System.IO
 import System.Log.LogPrint
 
 type NumWindows = Word
@@ -73,11 +75,12 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
       updateDesk = updateDesktop deskSetup (Glib.new View.DesktopItemView [])
       updateWin = updateWindow (Glib.new View.WindowItemView []) trackWinInfo getRawIcon specifyIcon
 
+  actuated <- newEmptyMVar
   network <- compile $ do
-    -- FIXME Apparently, the event values invoked before `actuate` call are discarded...
-    eDesktopList <- sourceEvent (taskToSource desktopStats)
-    eWindowList <- sourceEvent (taskToSource windowsList)
-    eActiveWindow <- sourceEvent (taskToSource windowActive)
+    -- FIXME Three windows somehow crash application
+    eDesktopList <- sourceEvent (taskToSourceAfter desktopStats actuated)
+    eWindowList <- sourceEvent (taskToSourceAfter windowsList actuated)
+    eActiveWindow <- sourceEvent (taskToSourceAfter windowActive actuated)
 
     let myLog ws = unlift $ logS (T.pack "DeskVis") LevelDebug (logStrf "Window List: $1" (show ws))
     reactimate $ myLog <$> eWindowList
@@ -117,8 +120,9 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     eWindowActivate <- switchE never (windowActivates <$> eWindows)
     reactimate $ Gtk.uiSingleRun . traverse_ reqToDesktop <$> eDesktopActivate
     reactimate $ Gtk.uiSingleRun . traverse_ reqActivate <$> eWindowActivate
-
   actuate network
+  putMVar actuated ()
+
   Gtk.toWidget mainView
   where
     asWinDeskPairs :: M.Map Window WinItem -> Behavior (S.Set (Window, Int))
@@ -206,6 +210,7 @@ updateDesktop setup mkView old desktopStat = do
       pure DeskItem{..}
     updated desktop = desktop{desktopStat}
 
+-- NOTE: Calling event handler in `execute` causes problems.
 windowMap ::
   (Maybe WinItem -> (Window, Int) -> MomentIO (Maybe WinItem)) ->
   Event (V.Vector Window) ->
@@ -233,12 +238,13 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
       windowView <- liftIO mkView
       lift $ do
+        liftIO $ hPutStrLn stderr $ "Window " <> show windowId
         (bWindowDesktop, free1) <- taskToBehaviorWA winDesktop
         (eWinInfo, free2) <- sourceEventWA (taskToSource winInfo)
         (eWindowClick, free3) <- sourceEventWA (View.windowClickSource windowView)
 
         -- Specify the window icon
-        eClassChangeWithInfo <- accumE (False, error "no init") (addClassChange <$> eWinInfo)
+        (eClassChangeWithInfo, _) <- mapAccum Nothing (addClassChange <$> eWinInfo)
         (eSpecify, _) <- exeAccumD (False, FromEWMH) (fmap liftIO . updateSpecify <$> eClassChangeWithInfo)
         -- MAYBE Filtering is not ideal
         let eSpecifyCh = snd <$> filterE fst eSpecify
@@ -252,7 +258,9 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
     updated = MaybeT $ pure (setIndex <$> old)
     setIndex window = window{winIndex}
 
-    addClassChange newInfo (_, oldInfo) = (windowClasses newInfo /= windowClasses oldInfo, newInfo)
+    addClassChange newInfo mayOldInfo = ((classChange, newInfo), Just newInfo)
+      where
+        classChange = Just (windowClasses newInfo) == (windowClasses <$> mayOldInfo)
 
 -- | Update priority of windows, then reflect the priority.
 applyWindowPriority :: V.Vector DeskItem -> M.Map k WinItem -> IO ()
@@ -285,6 +293,7 @@ applyWindowState view WindowInfo{..} = do
 -- From EWMH is the default
 data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !Gio.Icon | FromEWMH
 
+-- FIXME Setting application icon is called multiple times.
 -- Gives change flag with specify.
 specifyWindowIcon ::
   (MonadUnliftIO m, MonadLog m) =>
