@@ -61,18 +61,20 @@ newtype WindowSetup = WindowSetup
 
 -- FIXME Segmentation fault somehow (Likely from gtk)
 {-
-GTK gave some logs:
-\*** BUG ***
+Some logs:
+*** BUG ***
 In pixman_op: The expression r1 != r1_end was false
 Set a breakpoint on '_pixman_log_error' to debug
 
-\*** BUG ***
+*** BUG ***
 In pixman_op: The expression r1 != r1_end was false
 Set a breakpoint on '_pixman_log_error' to debug
 
-\*** BUG ***
+*** BUG ***
 In pixman_region_append_non_o: The expression y1 < y2 was false
 Set a breakpoint on '_pixman_log_error' to debug
+
+.. Apparently I am not calling GTK from other thread. WHAT
 -}
 -- FIXME Fix that sometimes the widget space just retains itself
 deskVisualizer ::
@@ -246,8 +248,10 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
   where
     createWindow = do
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
+      -- FIXME Seems like creating UI cannot be called from other threads.
       windowView <- liftIO mkView
       lift $ do
+        -- Currently, actual listening to window is tied with UI.
         (bWindowDesktop, free1) <- taskToBehaviorWA winDesktop
         (eWinInfo, free2) <- sourceEventWA (taskToSource winInfo)
         (eWindowClick, free3) <- sourceEventWA (View.windowClickSource windowView)
