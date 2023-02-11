@@ -4,7 +4,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module System.Applet.DesktopVisual.DesktopVisual (
-  DesktopVisual (..),
+  View (..),
   insertDesktop,
   removeDesktop,
 ) where
@@ -19,33 +19,33 @@ import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Task qualified as Gtk
-import System.Applet.DesktopVisual.DesktopItemView
+import System.Applet.DesktopVisual.DesktopItemView qualified as DeskView
 import System.Pulp.PulpPath
 
-newtype DesktopVisual = DesktopVisual (ManagedPtr DesktopVisual)
+newtype View = AsView (ManagedPtr View)
 
-instance TypedObject DesktopVisual where
+instance TypedObject View where
   glibType :: IO GType
-  glibType = registerGType DesktopVisual
-instance GObject DesktopVisual
+  glibType = registerGType AsView
+instance GObject View
 
-type instance ParentTypes DesktopVisual = Gtk.Box ': ParentTypes Gtk.Box
-instance HasParentTypes DesktopVisual
+type instance ParentTypes View = Gtk.Box ': ParentTypes Gtk.Box
+instance HasParentTypes View
 
 -- Disallow box/container methods
 instance
-  ( info ~ Gtk.ResolveWidgetMethod t DesktopVisual
-  , OverloadedMethod info DesktopVisual p
+  ( info ~ Gtk.ResolveWidgetMethod t View
+  , OverloadedMethod info View p
   ) =>
-  IsLabel t (DesktopVisual -> p)
+  IsLabel t (View -> p)
   where
   fromLabel = overloadedMethod @info
 
-data VisualPrivate = VisualPrivate
+data Private = MkPrivate
 
-instance DerivedGObject DesktopVisual where
-  type GObjectParentType DesktopVisual = Gtk.Box
-  type GObjectPrivateData DesktopVisual = VisualPrivate
+instance DerivedGObject View where
+  type GObjectParentType View = Gtk.Box
+  type GObjectPrivateData View = Private
 
   objectTypeName :: T.Text
   objectTypeName = T.pack "DesktopVisualizer"
@@ -57,15 +57,15 @@ instance DerivedGObject DesktopVisual where
 
     #setCssName widgetClass (T.pack "desktopvisualizer")
 
-  objectInstanceInit :: GObjectClass -> DesktopVisual -> IO VisualPrivate
+  objectInstanceInit :: GObjectClass -> View -> IO Private
   objectInstanceInit _gClass inst = do
     #initTemplate inst
-    pure VisualPrivate
+    pure MkPrivate
 
-insertDesktop :: DesktopVisual -> DesktopItemView -> IO ()
+insertDesktop :: View -> DeskView.View -> IO ()
 insertDesktop view desktop = Gtk.uiSingleRun $ do
   #add (view `asA` Gtk.Box) desktop
 
-removeDesktop :: DesktopVisual -> DesktopItemView -> IO ()
+removeDesktop :: View -> DeskView.View -> IO ()
 removeDesktop view desktop = Gtk.uiSingleRun $ do
   #remove (view `asA` Gtk.Box) desktop

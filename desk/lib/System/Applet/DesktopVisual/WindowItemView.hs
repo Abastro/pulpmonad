@@ -4,15 +4,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module System.Applet.DesktopVisual.WindowItemView (
-  WindowItemView (..),
+  View (..),
   getPriority,
   setPriority,
-  windowSetGIcon,
-  windowSetRawIcons,
-  windowSetActivate,
-  windowSetTitle,
-  windowSetStates,
-  windowClickSource,
+  setGIcon,
+  setRawIcons,
+  setActivate,
+  setTitle,
+  setStates,
+  clickSource,
 ) where
 
 import Control.Event.Entry
@@ -38,32 +38,32 @@ import System.Pulp.PulpPath
 
 -- MAYBE Use image internal to the button
 -- Essentially, a button with priority. Select in CSS by "button.windowitem".
-newtype WindowItemView = WindowItemView (ManagedPtr WindowItemView)
+newtype View = AsView (ManagedPtr View)
 
-instance TypedObject WindowItemView where
+instance TypedObject View where
   glibType :: IO GType
-  glibType = registerGType WindowItemView
-instance GObject WindowItemView
+  glibType = registerGType AsView
+instance GObject View
 
-type instance ParentTypes WindowItemView = Gtk.Button ': ParentTypes Gtk.Button
-instance HasParentTypes WindowItemView
+type instance ParentTypes View = Gtk.Button ': ParentTypes Gtk.Button
+instance HasParentTypes View
 
 instance
-  ( info ~ Gtk.ResolveWidgetMethod t WindowItemView
-  , OverloadedMethod info WindowItemView p
+  ( info ~ Gtk.ResolveWidgetMethod t View
+  , OverloadedMethod info View p
   ) =>
-  IsLabel t (WindowItemView -> p)
+  IsLabel t (View -> p)
   where
   fromLabel = overloadedMethod @info
 
-data WindowItemPrivate = WindowItemPrivate
+data Private = MkPrivate
   { priority :: !Int
   , windowIcon :: !Gtk.Image
   }
 
-instance DerivedGObject WindowItemView where
-  type GObjectParentType WindowItemView = Gtk.Button
-  type GObjectPrivateData WindowItemView = WindowItemPrivate
+instance DerivedGObject View where
+  type GObjectParentType View = Gtk.Button
+  type GObjectPrivateData View = Private
 
   objectTypeName :: T.Text
   objectTypeName = T.pack "WindowItemView"
@@ -75,7 +75,7 @@ instance DerivedGObject WindowItemView where
 
     #bindTemplateChildFull widgetClass (T.pack "window-icon") True 0
 
-    gobjectInstallCIntProperty @WindowItemView
+    gobjectInstallCIntProperty @View
       gClass
       CIntPropertyInfo
         { name = T.pack "priority"
@@ -92,58 +92,59 @@ instance DerivedGObject WindowItemView where
         }
 
     -- Handling signal is sadly not supported for now.
+
     #setCssName widgetClass (T.pack "button")
 
-  objectInstanceInit :: GObjectClass -> WindowItemView -> IO WindowItemPrivate
+  objectInstanceInit :: GObjectClass -> View -> IO Private
   objectInstanceInit _gClass inst = do
     #initTemplate inst
     windowIcon <- Gtk.templateChild inst (T.pack "window-icon") Gtk.Image
 
     #getStyleContext inst >>= flip #addClass (T.pack "windowitem")
 
-    pure WindowItemPrivate{priority = 0, windowIcon}
+    pure MkPrivate{priority = 0, windowIcon}
 
 -- Too lazy to add overloaded labels for property
 
 -- | Gets priority, should be called from UI thread.
-getPriority :: WindowItemView -> IO Int
-getPriority window = priority <$> gobjectGetPrivateData window
+getPriority :: View -> IO Int
+getPriority view = priority <$> gobjectGetPrivateData view
 
 -- | Sets priority, should be called from UI thread.
-setPriority :: WindowItemView -> Int -> IO ()
-setPriority window priority = gobjectModifyPrivateData window $ \dat -> dat{priority}
+setPriority :: View -> Int -> IO ()
+setPriority view priority = gobjectModifyPrivateData view $ \dat -> dat{priority}
 
-windowSetGIcon :: WindowItemView -> Sink Gio.Icon
-windowSetGIcon window gic = Gtk.uiSingleRun $ do
-  WindowItemPrivate{windowIcon} <- gobjectGetPrivateData window
+setGIcon :: View -> Sink Gio.Icon
+setGIcon view gic = Gtk.uiSingleRun $ do
+  MkPrivate{windowIcon} <- gobjectGetPrivateData view
   set windowIcon [#gicon := gic]
 
-windowSetRawIcons :: WindowItemView -> Sink [Gtk.RawIcon]
-windowSetRawIcons window icons = Gtk.uiSingleRun $ do
-  WindowItemPrivate{windowIcon} <- gobjectGetPrivateData window
+setRawIcons :: View -> Sink [Gtk.RawIcon]
+setRawIcons view icons = Gtk.uiSingleRun $ do
+  MkPrivate{windowIcon} <- gobjectGetPrivateData view
   iconSize <- toEnum . fromIntegral <$> get windowIcon #iconSize
   Gtk.iconsChoosePixbuf (Gtk.iconSizePx iconSize) Gtk.argbTorgba icons >>= \case
     Just scaled -> set windowIcon [#pixbuf := scaled]
     Nothing -> set windowIcon [#iconName := T.pack "image-missing"]
 
-windowSetActivate :: WindowItemView -> Sink Bool
-windowSetActivate window flag = Gtk.uiSingleRun $ do
-  ctxt <- #getStyleContext window
+setActivate :: View -> Sink Bool
+setActivate view flag = Gtk.uiSingleRun $ do
+  ctxt <- #getStyleContext view
   (if flag then #addClass else #removeClass) ctxt (T.pack "active")
 
-windowSetTitle :: WindowItemView -> Sink T.Text
-windowSetTitle window title = Gtk.uiSingleRun $ do
-  set (window `asA` Gtk.Widget) [#tooltipText := title]
+setTitle :: View -> Sink T.Text
+setTitle view title = Gtk.uiSingleRun $ do
+  set (view `asA` Gtk.Widget) [#tooltipText := title]
 
-windowSetStates :: WindowItemView -> Sink [WMStateEx]
-windowSetStates window states = Gtk.uiSingleRun $ do
-  #getStyleContext window >>= Gtk.updateCssClass asClass states
+setStates :: View -> Sink [WMStateEx]
+setStates view states = Gtk.uiSingleRun $ do
+  #getStyleContext view >>= Gtk.updateCssClass asClass states
   where
     asClass = \case
       WinHidden -> T.pack "hidden"
       WinDemandAttention -> T.pack "demanding"
 
-windowClickSource :: WindowItemView -> Source ()
-windowClickSource window =
-  Gtk.onSource (window `asA` Gtk.Button) #clicked $ \handler -> do
+clickSource :: View -> Source ()
+clickSource view =
+  Gtk.onSource (view `asA` Gtk.Button) #clicked $ \handler -> do
     handler ()

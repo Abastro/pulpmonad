@@ -4,15 +4,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module System.Applet.DesktopVisual.DesktopItemView (
-  DesktopItemView (..),
+  View (..),
   insertWindow,
   removeWindow,
   reflectPriority,
-  desktopSetLabel,
-  desktopSetVisible,
+  setLabel,
+  setVisible,
   DesktopState (..),
-  desktopSetState,
-  desktopClickSource,
+  setState,
+  clickSource,
 ) where
 
 import Control.Event.Entry
@@ -36,37 +36,37 @@ import Gtk.Reactive qualified as Gtk
 import Gtk.Styles qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Status.X11.WMStatus
-import System.Applet.DesktopVisual.WindowItemView
+import System.Applet.DesktopVisual.WindowItemView qualified as WinView
 import System.Pulp.PulpPath
 
 -- Desktop item which has windows sorted via priority
-newtype DesktopItemView = DesktopItemView (ManagedPtr DesktopItemView)
+newtype View = DesktopItemView (ManagedPtr View)
 
-instance TypedObject DesktopItemView where
+instance TypedObject View where
   glibType :: IO GType
   glibType = registerGType DesktopItemView
-instance GObject DesktopItemView
+instance GObject View
 
-type instance ParentTypes DesktopItemView = Gtk.EventBox ': ParentTypes Gtk.EventBox
-instance HasParentTypes DesktopItemView
+type instance ParentTypes View = Gtk.EventBox ': ParentTypes Gtk.EventBox
+instance HasParentTypes View
 
 -- Disallow box/container methods
 instance
-  ( info ~ Gtk.ResolveWidgetMethod t DesktopItemView
-  , OverloadedMethod info DesktopItemView p
+  ( info ~ Gtk.ResolveWidgetMethod t View
+  , OverloadedMethod info View p
   ) =>
-  IsLabel t (DesktopItemView -> p)
+  IsLabel t (View -> p)
   where
   fromLabel = overloadedMethod @info
 
-data DesktopItemPrivate = DesktopItemPrivate
+data Private = MkPrivate
   { desktopLabel :: !Gtk.Label
   , desktopContainer :: !Gtk.FlowBox
   }
 
-instance DerivedGObject DesktopItemView where
-  type GObjectParentType DesktopItemView = Gtk.EventBox
-  type GObjectPrivateData DesktopItemView = DesktopItemPrivate
+instance DerivedGObject View where
+  type GObjectParentType View = Gtk.EventBox
+  type GObjectPrivateData View = Private
 
   objectTypeName :: T.Text
   objectTypeName = T.pack "DesktopItemView"
@@ -81,7 +81,7 @@ instance DerivedGObject DesktopItemView where
 
     #setCssName widgetClass (T.pack "desktopitem")
 
-  objectInstanceInit :: GObjectClass -> DesktopItemView -> IO DesktopItemPrivate
+  objectInstanceInit :: GObjectClass -> View -> IO Private
   objectInstanceInit _gClass inst = do
     #initTemplate inst
     desktopLabel <- Gtk.templateChild inst (T.pack "desktop-label") Gtk.Label
@@ -90,7 +90,7 @@ instance DerivedGObject DesktopItemView where
     -- Sort function is pre-set
     #setSortFunc desktopContainer (Just sortFunc)
 
-    pure DesktopItemPrivate{..}
+    pure MkPrivate{..}
 
 sortFunc :: Gtk.FlowBoxChild -> Gtk.FlowBoxChild -> IO Int32
 sortFunc childA childB = do
@@ -105,19 +105,19 @@ sortFunc childA childB = do
     priorityOf :: Gtk.FlowBoxChild -> IO Int
     priorityOf child = do
       Just wid <- #getChild child
-      win <- unsafeCastTo WindowItemView wid
-      getPriority win
+      win <- unsafeCastTo WinView.AsView wid
+      WinView.getPriority win
 
-insertWindow :: DesktopItemView -> WindowItemView -> IO ()
+insertWindow :: View -> WinView.View -> IO ()
 insertWindow desktop window = Gtk.uiSingleRun $ do
-  DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
+  MkPrivate{desktopContainer} <- gobjectGetPrivateData desktop
   -- FlowBox requires FlowBoxChild
   winChild <- new Gtk.FlowBoxChild [#child := window]
   #add desktopContainer winChild
 
-removeWindow :: DesktopItemView -> WindowItemView -> IO ()
+removeWindow :: View -> WinView.View -> IO ()
 removeWindow desktop window = Gtk.uiSingleRun $ do
-  DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
+  MkPrivate{desktopContainer} <- gobjectGetPrivateData desktop
   -- Gets the parent, FlowBoxChild
   Just winChild <- traverse (unsafeCastTo Gtk.FlowBoxChild) =<< #getParent window
   -- And remove both parent-child deps
@@ -128,24 +128,24 @@ removeWindow desktop window = Gtk.uiSingleRun $ do
 --
 -- This is here since in the end, priorities are usually updated in batch.
 -- (Also, notifying FlowBoxChild can introduce coupling)
-reflectPriority :: DesktopItemView -> IO ()
+reflectPriority :: View -> IO ()
 reflectPriority desktop = Gtk.uiSingleRun $ do
-  DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
+  MkPrivate{desktopContainer} <- gobjectGetPrivateData desktop
   #invalidateSort desktopContainer
 
-desktopSetLabel :: DesktopItemView -> Sink T.Text
-desktopSetLabel desktop txt = Gtk.uiSingleRun $ do
-  DesktopItemPrivate{desktopLabel} <- gobjectGetPrivateData desktop
+setLabel :: View -> Sink T.Text
+setLabel desktop txt = Gtk.uiSingleRun $ do
+  MkPrivate{desktopLabel} <- gobjectGetPrivateData desktop
   set desktopLabel [#label := txt]
 
-desktopSetVisible :: DesktopItemView -> Sink Bool
-desktopSetVisible desktop =
+setVisible :: View -> Sink Bool
+setVisible desktop =
   Gtk.uiSingleRun . \case
     True -> #showAll desktop
     False -> #hide desktop
 
-desktopSetState :: DesktopItemView -> Sink DesktopState
-desktopSetState desktop state = Gtk.uiSingleRun $ do
+setState :: View -> Sink DesktopState
+setState desktop state = Gtk.uiSingleRun $ do
   #getStyleContext desktop >>= Gtk.updateCssClass asClass [state]
   where
     asClass = \case
@@ -153,8 +153,8 @@ desktopSetState desktop state = Gtk.uiSingleRun $ do
       DeskVisible -> T.pack "visible"
       DeskHidden -> T.pack "hidden"
 
-desktopClickSource :: DesktopItemView -> Source ()
-desktopClickSource desktop =
+clickSource :: View -> Source ()
+clickSource desktop =
   Gtk.onSource (desktop `asA` Gtk.Widget) #buttonReleaseEvent $ \handler btn -> do
     get btn #button >>= \case
       1 -> True <$ handler ()

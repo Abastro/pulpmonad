@@ -33,9 +33,9 @@ import Reactive.Banana.Frameworks
 import Status.AppInfos
 import Status.X11.WMStatus
 import Status.X11.XHandle
-import System.Applet.DesktopVisual.DesktopItemView qualified as View
-import System.Applet.DesktopVisual.DesktopVisual qualified as View
-import System.Applet.DesktopVisual.WindowItemView qualified as View
+import System.Applet.DesktopVisual.DesktopItemView qualified as DeskView
+import System.Applet.DesktopVisual.DesktopVisual qualified as MainView
+import System.Applet.DesktopVisual.WindowItemView qualified as WinView
 import System.Log.LogPrint
 import qualified Data.GI.Base.Constructible as Glib
 
@@ -68,12 +68,12 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   DeskVisRcvs{..} <- unlift $ runXHand deskVisInitiate
   appInfoCol <- trackAppInfo
   -- UI thread here
-  mainView <- Glib.new View.DesktopVisual []
+  mainView <- Glib.new MainView.AsView []
 
   let getRawIcon = unlift . wrapGetRaw . winGetIcon
       specifyIcon = fmap unlift . specifyWindowIcon winSetup appInfoCol
-      updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new View.DesktopItemView [])
-      updateWin = updateWindow (Gtk.uiCreate $ Glib.new View.WindowItemView []) trackWinInfo getRawIcon specifyIcon
+      updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new DeskView.DesktopItemView [])
+      updateWin = updateWindow (Gtk.uiCreate $ Glib.new WinView.AsView []) trackWinInfo getRawIcon specifyIcon
 
   actuated <- newEmptyMVar
   network <- compile $ do
@@ -132,14 +132,14 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
         deskHisto = IM.fromListWith (+) . map pairToCnt $ S.toList pairMap
 
 data DeskItem = DeskItem
-  { desktopView :: !View.DesktopItemView
+  { desktopView :: !DeskView.View
   , desktopStat :: !DesktopStat
   , eDesktopClick :: !(Event ())
   , deskDelete :: !(IO ())
   }
 
 data WinItem = WinItem
-  { windowView :: !View.WindowItemView
+  { windowView :: !WinView.View
   , winIndex :: !Int
   -- ^ Index in the window list.
   , bWindowDesktop :: !(Behavior Int)
@@ -147,11 +147,11 @@ data WinItem = WinItem
   , winDelete :: !(IO ())
   }
 
-type ViewPair = (View.WindowItemView, View.DesktopItemView)
+type ViewPair = (WinView.View, DeskView.View)
 
 asViewPairMap ::
-  V.Vector View.DesktopItemView ->
-  M.Map Window View.WindowItemView ->
+  V.Vector DeskView.View ->
+  M.Map Window WinView.View ->
   S.Set (Window, Int) ->
   CacheMap (Window, Int) ViewPair
 asViewPairMap desktops windows = AsCacheMap . M.mapMaybe pairToView . M.fromSet id
@@ -167,15 +167,15 @@ desktopActivates = fold . V.imap eWithIdx
 windowActivates :: M.Map Window WinItem -> Event [Window]
 windowActivates = M.foldMapWithKey $ \win WinItem{eWindowClick} -> [win] <$ eWindowClick
 
-applyDeskDiff :: View.DesktopVisual -> PatchOf (ColOp View.DesktopItemView) -> IO ()
+applyDeskDiff :: MainView.View -> PatchOf (ColOp DeskView.View) -> IO ()
 applyDeskDiff main = applyImpure $ \case
-  Insert desktop -> View.insertDesktop main desktop
-  Delete desktop -> View.removeDesktop main desktop
+  Insert desktop -> MainView.insertDesktop main desktop
+  Delete desktop -> MainView.removeDesktop main desktop
 
 applyPairDiff :: PatchOf (ColOp ViewPair) -> IO ()
 applyPairDiff = applyImpure $ \case
-  Insert (window, desktop) -> View.insertWindow desktop window
-  Delete (window, desktop) -> View.removeWindow desktop window
+  Insert (window, desktop) -> DeskView.insertWindow desktop window
+  Delete (window, desktop) -> DeskView.removeWindow desktop window
 
 -- TODO Need a test that same ID points towards the same View. Likely require restructure.
 desktopList ::
@@ -190,7 +190,7 @@ desktopList update eStat = exeAccumD V.empty (updateFn <$> eStat)
 
 updateDesktop ::
   DesktopSetup ->
-  IO (MVar View.DesktopItemView) ->
+  IO (MVar DeskView.View) ->
   Maybe DeskItem ->
   DesktopStat ->
   MomentIO DeskItem
@@ -201,7 +201,7 @@ updateDesktop setup mkView old desktopStat = do
   where
     createDesktop = do
       desktopView <- liftIO (mkView >>= takeMVar)
-      (eDesktopClick, free1) <- sourceEventWA (View.desktopClickSource desktopView)
+      (eDesktopClick, free1) <- sourceEventWA (DeskView.clickSource desktopView)
       let deskDelete = free1
       pure DeskItem{..}
     updated desktop = desktop{desktopStat}
@@ -220,7 +220,7 @@ windowMap update eList = do
       news <$ onRemainderRight (liftIO . winDelete) news olds
 
 updateWindow ::
-  IO (MVar View.WindowItemView) ->
+  IO (MVar WinView.View) ->
   (Window -> IO (Maybe PerWinRcvs)) ->
   (Window -> IO [Gtk.RawIcon]) ->
   ((Bool, WindowInfo) -> (Bool, IconSpecify) -> IO (Bool, IconSpecify)) ->
@@ -237,7 +237,7 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
         (bWindowDesktop, free1) <- taskToBehaviorWA winDesktop
         (eWinInfo, free2) <- sourceEventWA (taskToSource winInfo)
 
-        -- Specify the window icon
+        -- Specify the window icon.
         (eClassChangeWithInfo, _) <- mapAccum Nothing (addClassChange <$> eWinInfo)
         (eSpecify, _) <- exeAccumD (False, FromEWMH) (fmap liftIO . updateSpecify <$> eClassChangeWithInfo)
         -- MAYBE Filtering is not ideal
@@ -245,9 +245,9 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
 
         -- Take window view as late as possible.
         windowView <- liftIO $ takeMVar varWindowView
-        (eWindowClick, free3) <- sourceEventWA (View.windowClickSource windowView)
+        (eWindowClick, free3) <- sourceEventWA (WinView.clickSource windowView)
 
-        -- Apply the received information on the window
+        -- Apply the received information on the window.
         free4 <- reactEvent $ applyWindowState windowView <$> eWinInfo
         free5 <- reactEvent $ applySpecifiedIcon (winGetRaw windowId) windowView <$> eSpecifyCh
         let winDelete = free1 <> free2 <> free3 <> free4 <> free5
@@ -267,28 +267,28 @@ applyWindowPriority desktops windows = do
   -- Perhaps, all the widgets can be read from single file
 
   -- Needs to be run in UI thread.
-  for_ windows $ \WinItem{..} -> Gtk.uiSingleRun $ View.setPriority windowView winIndex
-  for_ desktops $ \DeskItem{desktopView} -> View.reflectPriority desktopView
+  for_ windows $ \WinItem{..} -> Gtk.uiSingleRun $ WinView.setPriority windowView winIndex
+  for_ desktops $ \DeskItem{desktopView} -> DeskView.reflectPriority desktopView
 
 -- Patch only used to represent both old & new
-applyActiveWindow :: PatchOf (ColOp View.WindowItemView) -> IO ()
+applyActiveWindow :: PatchOf (ColOp WinView.View) -> IO ()
 applyActiveWindow = applyImpure $ \case
-  Insert window -> View.windowSetActivate window True
-  Delete window -> View.windowSetActivate window False
+  Insert window -> WinView.setActivate window True
+  Delete window -> WinView.setActivate window False
 
 applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
 applyDesktopState DesktopSetup{..} DeskItem{desktopStat = DesktopStat{..}, ..} = do
-  View.desktopSetLabel desktopView (desktopLabeling desktopName)
-  View.desktopSetState desktopView desktopState
+  DeskView.setLabel desktopView (desktopLabeling desktopName)
+  DeskView.setState desktopView desktopState
 
 applyDesktopVisible :: DesktopSetup -> NumWindows -> DeskItem -> IO ()
 applyDesktopVisible DesktopSetup{..} numWin DeskItem{..} = do
-  View.desktopSetVisible desktopView (showDesktop desktopStat numWin)
+  DeskView.setVisible desktopView (showDesktop desktopStat numWin)
 
-applyWindowState :: View.WindowItemView -> WindowInfo -> IO ()
+applyWindowState :: WinView.View -> WindowInfo -> IO ()
 applyWindowState view WindowInfo{..} = do
-  View.windowSetTitle view windowTitle
-  View.windowSetStates view (S.toList windowState)
+  WinView.setTitle view windowTitle
+  WinView.setStates view (S.toList windowState)
 
 -- From EWMH is the default
 data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !Gio.Icon | FromEWMH
@@ -324,13 +324,13 @@ specifyWindowIcon WindowSetup{..} appCol (classChanged, winInfo) (_, oldSpecify)
 
 applySpecifiedIcon ::
   IO [Gtk.RawIcon] ->
-  View.WindowItemView ->
+  WinView.View ->
   IconSpecify ->
   IO ()
 applySpecifiedIcon getRaw view = \case
-  FromAppIcon icon -> View.windowSetGIcon view icon
-  FromCustom icon -> View.windowSetGIcon view icon
-  FromEWMH -> View.windowSetRawIcons view =<< getRaw
+  FromAppIcon icon -> WinView.setGIcon view icon
+  FromCustom icon -> WinView.setGIcon view icon
+  FromEWMH -> WinView.setRawIcons view =<< getRaw
 
 -- Wraps the raw icon getter so that exception is cared for.
 wrapGetRaw :: (MonadUnliftIO m, MonadLog m) => GetXIcon -> m [Gtk.RawIcon]
