@@ -59,24 +59,6 @@ newtype WindowSetup = WindowSetup
   -- Due to implementation concerns, only class change would allow custom to start acting for icon set.
   }
 
--- FIXME Segmentation fault somehow (Likely from gtk)
-{-
-Some logs:
-*** BUG ***
-In pixman_op: The expression r1 != r1_end was false
-Set a breakpoint on '_pixman_log_error' to debug
-
-*** BUG ***
-In pixman_op: The expression r1 != r1_end was false
-Set a breakpoint on '_pixman_log_error' to debug
-
-*** BUG ***
-In pixman_region_append_non_o: The expression y1 < y2 was false
-Set a breakpoint on '_pixman_log_error' to debug
-
-.. Apparently I am not calling GTK from other thread.
--}
--- FIXME Fix that sometimes the widget space just retains itself
 deskVisualizer ::
   (MonadUnliftIO m, MonadLog m, MonadXHand m) =>
   DesktopSetup ->
