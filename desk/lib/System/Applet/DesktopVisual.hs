@@ -8,13 +8,14 @@ module System.Applet.DesktopVisual (
   defShowFn,
 ) where
 
-import Control.Monad.Trans.Maybe
+import Data.Text qualified as T
+import Data.Vector qualified as V
 import GI.Gio.Interfaces.Icon qualified as Gio
 import Status.X11.WMStatus
 import System.Applet.DesktopVisual.Handle
 
-defImageIcon :: WindowInfo -> MaybeT IO Gio.Icon
-defImageIcon = const (fail "not handle")
+defImageIcon :: V.Vector T.Text -> Maybe (WindowInfo -> IO Gio.Icon)
+defImageIcon _ = Nothing
 
 defShowFn :: DesktopStat -> NumWindows -> Bool
 defShowFn DesktopStat{desktopState} num = desktopState /= DeskHidden || num > 0
