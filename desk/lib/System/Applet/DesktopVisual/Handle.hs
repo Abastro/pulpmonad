@@ -59,6 +59,8 @@ newtype WindowSetup = WindowSetup
   -- Due to implementation concerns, only class change would allow custom to start acting for icon set.
   }
 
+-- FIXME Segmentation fault somehow
+-- FIXME Fix that sometimes the space just retains itself
 deskVisualizer ::
   (MonadUnliftIO m, MonadLog m, MonadXHand m) =>
   DesktopSetup ->
@@ -208,7 +210,6 @@ updateDesktop setup mkView old desktopStat = do
       pure DeskItem{..}
     updated desktop = desktop{desktopStat}
 
--- NOTE: Calling event handler in `execute` causes problems.
 windowMap ::
   (Maybe WinItem -> (Window, Int) -> MomentIO (Maybe WinItem)) ->
   Event (V.Vector Window) ->
@@ -345,12 +346,6 @@ wrapGetRaw getXIcon =
                           Application Info
 --------------------------------------------------------------------}
 
--- MAYBE Perhaps consulting for process id is better
--- libwnck application.c and window.c might have relevant logic
---
--- ..apparently it uses _NET_WM_ICON as a better choice. (Even uses WM_HINTS)
---
--- PID does not provide info of corresponding desktop file, so the part does need heuristics.
 appInfoImgSetter :: (MonadUnliftIO m, MonadLog m) => AppInfoCol -> V.Vector T.Text -> MaybeT m Gio.Icon
 appInfoImgSetter appCol classes = do
   allDat <- liftIO $ getAppInfos appCol

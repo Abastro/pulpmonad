@@ -100,6 +100,7 @@ sortFunc childA childB = do
     EQ -> 0
     GT -> 1
   where
+    -- This means we need to refer to WindowItemView anyway..
     priorityOf :: Gtk.FlowBoxChild -> IO Int
     priorityOf child = do
       Just wid <- #getChild child
@@ -118,8 +119,9 @@ removeWindow :: DesktopItemView -> WindowItemView -> IO ()
 removeWindow desktop window = do
   DesktopItemPrivate{desktopContainer} <- gobjectGetPrivateData desktop
   -- Gets the parent, FlowBoxChild
-  -- FIXME Apparently have no parent - what?
-  Just winChild <- #getParent window
+  Just winChild <- traverse (unsafeCastTo Gtk.FlowBoxChild) =<< #getParent window
+  -- And remove both parent-child deps
+  #remove winChild window
   #remove desktopContainer winChild
   #hide winChild
 
