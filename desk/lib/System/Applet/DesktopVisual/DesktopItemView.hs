@@ -113,7 +113,6 @@ insertWindow desktop window = do
   -- FlowBox requires FlowBoxChild
   winChild <- new Gtk.FlowBoxChild [#child := window]
   #add desktopContainer winChild
-  #showAll winChild
 
 removeWindow :: DesktopItemView -> WindowItemView -> IO ()
 removeWindow desktop window = do
@@ -123,7 +122,6 @@ removeWindow desktop window = do
   -- And remove both parent-child deps
   #remove winChild window
   #remove desktopContainer winChild
-  #hide winChild
 
 -- | Reflect the priorities to the sort as priorities change.
 --

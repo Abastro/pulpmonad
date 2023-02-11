@@ -64,9 +64,7 @@ instance DerivedGObject DesktopVisual where
 insertDesktop :: DesktopVisual -> DesktopItemView -> IO ()
 insertDesktop view desktop = do
   #add (view `asA` Gtk.Box) desktop
-  #showAll desktop
 
 removeDesktop :: DesktopVisual -> DesktopItemView -> IO ()
 removeDesktop view desktop = do
-  #hide desktop
   #remove (view `asA` Gtk.Box) desktop

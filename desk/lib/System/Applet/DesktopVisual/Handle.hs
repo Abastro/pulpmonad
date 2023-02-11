@@ -59,8 +59,22 @@ newtype WindowSetup = WindowSetup
   -- Due to implementation concerns, only class change would allow custom to start acting for icon set.
   }
 
--- FIXME Segmentation fault somehow
--- FIXME Fix that sometimes the space just retains itself
+-- FIXME Segmentation fault somehow (Likely from gtk)
+{-
+GTK gave some logs:
+\*** BUG ***
+In pixman_op: The expression r1 != r1_end was false
+Set a breakpoint on '_pixman_log_error' to debug
+
+\*** BUG ***
+In pixman_op: The expression r1 != r1_end was false
+Set a breakpoint on '_pixman_log_error' to debug
+
+\*** BUG ***
+In pixman_region_append_non_o: The expression y1 < y2 was false
+Set a breakpoint on '_pixman_log_error' to debug
+-}
+-- FIXME Fix that sometimes the widget space just retains itself
 deskVisualizer ::
   (MonadUnliftIO m, MonadLog m, MonadXHand m) =>
   DesktopSetup ->
@@ -81,9 +95,6 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     eDesktopList <- sourceEvent (taskToSourceAfter desktopStats actuated)
     eWindowList <- sourceEvent (taskToSourceAfter windowsList actuated)
     eActiveWindow <- sourceEvent (taskToSourceAfter windowActive actuated)
-
-    let myLog ws = unlift $ logS (T.pack "DeskVis") LevelDebug (logStrf "Window List: $1" (show ws))
-    reactimate $ myLog <$> eWindowList
 
     (eDesktops, bDesktops) <- desktopList updateDesk eDesktopList
     (eWindows, bWindows) <- windowMap updateWin eWindowList
