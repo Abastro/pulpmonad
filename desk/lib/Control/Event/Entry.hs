@@ -74,6 +74,8 @@ sourceEventWA src = do
 
 -- We do not need sourceBehavior, easy enough to create Behavior
 
+-- MAYBE diffEvent should accept `a -> Future a -> b` for more descriptive types
+
 -- | Compute difference between old and new value of a behaviors on each change.
 diffEvent ::
   (a -> a -> b) ->

@@ -24,6 +24,7 @@ import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import System.Applet.SysTray.TrayItemView qualified as ItemView
 import System.Pulp.PulpPath
+import qualified Gtk.Task as Gtk
 
 newtype View = AsView (ManagedPtr View)
 
@@ -67,15 +68,15 @@ instance DerivedGObject View where
     pure (TrayPrivate PackStart)
 
 setOrientation :: View -> Gtk.Orientation -> IO ()
-setOrientation tray orient = do
+setOrientation tray orient = Gtk.uiSingleRun $ do
   set (tray `asA` Gtk.Box) [#orientation := orient]
 
 setPackAt :: View -> PackAt -> IO ()
-setPackAt tray at = do
+setPackAt tray at = Gtk.uiSingleRun $ do
   gobjectSetPrivateData tray (TrayPrivate at)
 
 addItem :: View -> ItemView.View -> IO ()
-addItem tray item = do
+addItem tray item = Gtk.uiSingleRun $ do
   TrayPrivate at <- gobjectGetPrivateData tray
   case at of
     PackStart -> #packStart (tray `asA` Gtk.Box) item False False 0
@@ -83,6 +84,6 @@ addItem tray item = do
   #showAll item
 
 removeItem :: View -> ItemView.View -> IO ()
-removeItem tray item = do
+removeItem tray item = Gtk.uiSingleRun $ do
   #hide item
   #remove (tray `asA` Gtk.Box) item
