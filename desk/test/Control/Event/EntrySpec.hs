@@ -37,10 +37,9 @@ networkSyncBehavior out x0 ex = do
   syncBehavior bx $ appendRef out
   pure never
 
--- Tests using pure function, comparing with mapAccum.
-networkExeMapAccum :: IORef [acc] -> acc -> Event (acc -> (sig, acc)) -> MomentIO (Event sig)
+networkExeMapAccum :: IORef [acc] -> acc -> Event (acc -> MomentIO (sig, acc)) -> MomentIO (Event sig)
 networkExeMapAccum out acc eUpdate = do
-  (eSig, bAcc) <- exeMapAccum acc $ (pure .) <$> eUpdate
+  (eSig, bAcc) <- exeMapAccum acc eUpdate
   -- TODO Better tracking of behavior
   syncBehavior bAcc $ appendRef out
   pure eSig
@@ -102,14 +101,31 @@ entrySpec = do
 
   describe "exeMapAccum" $ do
     -- We generate update function once, which maps event stream from list.
-    prop "matches mapAccum for pure updates" $ \update x mayYs -> monadicIO $ do
-      let inE = map (fmap @Maybe @Integer $ applyFun2 update) mayYs
+    prop "matches mapAccum for pure updates" $ \(Fn2 update) x mayYs -> monadicIO $ do
+      let inE = map (fmap @Maybe @Integer update) mayYs
       outB1 <- run $ newIORef []
       outE1 <- run $ interpretFrameworks (networkMapAccum @Integer @Integer outB1 x) inE
       expected <- run $ (outE1,) <$> readIORef outB1
 
+      -- Pure updates.
       outB2 <- run $ newIORef []
-      outE2 <- run $ interpretFrameworks (networkExeMapAccum outB2 x) inE
+      outE2 <- run $ interpretFrameworks (networkExeMapAccum outB2 x . fmap (pure .)) inE
+      actual <- run $ (outE2,) <$> readIORef outB2
+
+      expectVsActual expected actual
+
+    -- FIXME This test does not check concurrent behaviors
+    prop "preserves behavior on delay" . withMaxSuccess 20 $ \(Fn2 update) x mayYs -> monadicIO $ do
+      let asPure (out, _delay) = pure out
+          asDelay (out, Small delay) = out <$ liftIO (threadDelay delay)
+
+      let inE = map (fmap @Maybe @Integer update) mayYs
+      outB1 <- run $ newIORef []
+      outE1 <- run $ interpretFrameworks (networkExeMapAccum @Integer @Integer outB1 x . fmap (asPure .)) inE
+      expected <- run $ (outE1,) <$> readIORef outB1
+
+      outB2 <- run $ newIORef []
+      outE2 <- run $ interpretFrameworks (networkExeMapAccum outB2 x . fmap (asDelay .)) inE
       actual <- run $ (outE2,) <$> readIORef outB2
 
       expectVsActual expected actual
@@ -124,6 +140,7 @@ entrySpec = do
           actual = catMaybes mayRs
       expectVsActual expected actual
 
+  -- FIXME This stopped working
   -- Test if reactimate is GC-ed on event GC.
   describe "reactEvent" $ do
     prop "correctly frees react content when free is called" . withMaxSuccess 20 $ \fstE sndE ->

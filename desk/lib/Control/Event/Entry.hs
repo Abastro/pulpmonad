@@ -87,7 +87,13 @@ diffEvent compute bOrigin = do
   where
     liftedCompute old = fmap (compute old)
 
+-- FIXME !! Need to check behavior on race !!
+
 -- | mapAccum which accumulates by executing momentous action.
+--
+-- WARNING: Either the event or the behavior needs to be used.
+--
+-- If they are discarded, it will invoke GC and result in unpredicted behavior.
 exeMapAccum :: acc -> Event (acc -> MomentIO (sig, acc)) -> MomentIO (Event sig, Behavior acc)
 exeMapAccum initial eFn = do
   rec bAcc <- stepper initial eAcc
@@ -99,6 +105,8 @@ exeMapAccum initial eFn = do
     newSigAcc acc update = acc `seq` update acc
 
 -- | Discrete behavior which accumulates by executing momentous action.
+--
+-- Inherits the same caveat as 'exeMapAccum'.
 exeAccumD :: a -> Event (a -> MomentIO a) -> MomentIO (Discrete a)
 exeAccumD initial eFn = do
   exeMapAccum initial (withSig <$> eFn)

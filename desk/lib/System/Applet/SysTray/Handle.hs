@@ -15,6 +15,7 @@ import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 import Data.Traversable
 import GI.DbusmenuGtk3.Objects.Menu qualified as DMenu
+import GI.Gtk.Objects.Menu qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Reactive.Banana.Combinators
@@ -25,7 +26,6 @@ import System.Applet.SysTray.SystemTrayView qualified as MainView
 import System.Applet.SysTray.TrayItemView qualified as ItemView
 import System.IO
 import System.Posix.Process (getProcessID)
-import qualified GI.Gtk.Objects.Menu as Gtk
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !Gtk.Orientation
@@ -60,7 +60,9 @@ systemTray SysTrayArgs{..} = do
     let eUpdate = filterJust (uncurry splitUpdate <$> eAllUpdates)
         (eColChange, eNormalUp) = split eUpdate
     -- Discards results for now.
-    _ <- exeAccumD M.empty (modifyItems client trayView eNormalUp <$> eColChange)
+    (eCh, _) <- exeMapAccum M.empty (fmap (fmap ((),)) . modifyItems client trayView eNormalUp <$> eColChange)
+    -- TODO This is a convenient place to insert a log.
+    reactimate (hPutStrLn stderr "Collection change" <$ eCh)
     pure ()
 
   actuate network
@@ -97,9 +99,9 @@ modifyItems ::
   ColOp HS.ItemInfo ->
   M.Map BusName TrayItem ->
   MomentIO (M.Map BusName TrayItem)
-modifyItems client mainView eNormalUp colOp = M.alterF after serviceName
+modifyItems client mainView eNormalUp colOp = \m -> do
+  M.alterF after serviceName m
   where
-    -- FIXME Apparently some events are not fired!
     after old = case (colOp, old) of
       -- Will update view here as well
       (Insert newItem, Nothing) -> do
@@ -129,8 +131,6 @@ createTrayItem client info@HS.ItemInfo{..} mainView eNormalUp = do
 
   (eClick, kill1) <- sourceEventWA (ItemView.clickSource itemView)
   (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource itemView)
-
-  liftIO $ hPrint stderr (HS.supressPixelData info)
 
   -- Run updates; Not putting in Behavior now, as it could incur memory cost.
   liftIO $ ItemView.setIcon itemView (iconOf info)

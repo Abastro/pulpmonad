@@ -62,6 +62,7 @@ stateSpec = do
 
     describe "Patch" $ do
       describe "Set" $ patchSpec (Proxy @(S.Set Integer))
+      -- FIXME Duplicate entries are removed altogether!
       describe "Vector" $ patchSpec (Proxy @(V.Vector Integer))
 
     describe "DiffPatching" $ do
