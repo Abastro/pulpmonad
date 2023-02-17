@@ -56,7 +56,7 @@ networkPollingDiscrete vals eInp = do
   (eRes, _) <- pollingDiscrete (atomicModifyIORef' ref $ \(x : xs) -> (xs, x)) eInp
   pure eRes
 
-data ReactGC = Signal | Finish | Detect deriving (Eq)
+data ReactGC = Signal | Finish | Detect deriving (Eq, Show)
 
 networkReactEvent :: Event ReactGC -> MomentIO (Event Bool)
 networkReactEvent event = do
@@ -140,13 +140,14 @@ entrySpec = do
           actual = catMaybes mayRs
       expectVsActual expected actual
 
-  -- FIXME This stopped working
+  -- FIXME This stopped working, inspect 'reactEvent' changes
   -- Test if reactimate is GC-ed on event GC.
   describe "reactEvent" $ do
     prop "correctly frees react content when free is called" . withMaxSuccess 20 $ \fstE sndE ->
       monadicIO $ do
         let withSignal = map . fmap $ \() -> Signal
             inE = withSignal fstE <> [Just Finish] <> withSignal sndE <> [Just Detect]
+        monitor (counterexample $ "Input: " <> show inE)
         outE <- run $ interpretFrameworks networkReactEvent inE
         let actual = head $ catMaybes outE
         expectVsActual True actual

@@ -165,7 +165,9 @@ instance Eq a => Act (PatchCol a) (V.Vector a) where
   (<:) :: Eq a => PatchCol a -> V.Vector a -> V.Vector a
   (<:) = applyPatches $ \case
     Insert x -> (`V.snoc` x)
-    Delete x -> V.filter (/= x)
+    Delete x -> rmOneFromAfter . V.break (== x)
+    where
+      rmOneFromAfter (beforeX, afterX) = beforeX <> V.drop 1 afterX
 
 -- Rudimentary difference evaluation.
 instance Eq a => Diff (PatchCol a) (V.Vector a) where
