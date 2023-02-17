@@ -14,6 +14,7 @@ module System.Applet.SysTray.TrayItemView (
   setIcon,
   setOverlay,
   setTooltip,
+  showPopup,
 ) where
 
 import Control.Applicative
@@ -24,25 +25,28 @@ import Data.ByteString qualified as BS
 import Data.Foldable
 import Data.GI.Base.Attributes
 import Data.GI.Base.BasicTypes
+import Data.GI.Base.Constructible
 import Data.GI.Base.GObject
 import Data.GI.Base.Overloading
 import Data.Int
 import Data.Text qualified as T
 import GHC.OverloadedLabels
 import GI.Gdk.Objects.Screen qualified as Gdk
+import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gio.Interfaces.Icon qualified as Gio
 import GI.Gio.Objects.FileIcon qualified as Gio
 import GI.Gtk.Objects.EventBox qualified as Gtk
 import GI.Gtk.Objects.IconTheme qualified as Gtk
 import GI.Gtk.Objects.Image qualified as Gtk
+import GI.Gtk.Objects.Menu qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Pixbufs qualified as Gtk
 import Gtk.Reactive qualified as Gtk
 import Gtk.Task qualified as Gtk
 import System.Pulp.PulpPath
-import Data.GI.Base.Constructible
+
 newtype View = AsView (ManagedPtr View)
 
 instance TypedObject View where
@@ -97,7 +101,7 @@ instance DerivedGObject View where
     pure TrayItemPrivate{..}
 
 data MouseButton = MouseLeft | MouseMiddle | MouseRight
-data MouseClick = MouseClickOf !Int32 !Int32 !MouseButton
+data MouseClick = MouseClickOf (Maybe Gdk.Event) !Int32 !Int32 !MouseButton
 data ScrollDir = ScrollUp | ScrollDown | ScrollLeft | ScrollRight
 
 -- | Icon information from the tray item.
@@ -111,13 +115,14 @@ data TrayItemIcon = TrayItemIcon
 clickSource :: View -> Source MouseClick
 clickSource view =
   Gtk.onSource (view `asA` Gtk.Widget) #buttonPressEvent $ \handler event -> do
+    evUnion <- Gtk.getCurrentEvent
     xRoot <- round <$> get event #xRoot
     yRoot <- round <$> get event #yRoot
-    let mouseClick = MouseClickOf xRoot yRoot
+    let click = MouseClickOf evUnion xRoot yRoot
     get event #button >>= \case
-      1 -> True <$ handler (mouseClick MouseLeft)
-      2 -> True <$ handler (mouseClick MouseMiddle)
-      3 -> True <$ handler (mouseClick MouseRight)
+      1 -> True <$ handler (click MouseLeft)
+      2 -> True <$ handler (click MouseMiddle)
+      3 -> True <$ handler (click MouseRight)
       _ -> pure False
 
 scrollSource :: View -> Source ScrollDir
@@ -143,6 +148,10 @@ setOverlay item icon = Gtk.uiSingleRun $ do
 setTooltip :: View -> Sink (Maybe T.Text)
 setTooltip view tooltip = Gtk.uiSingleRun $ do
   #setTooltipText (view `asA` Gtk.Widget) tooltip
+
+showPopup :: View -> Sink (Maybe Gdk.Event, Gtk.Menu)
+showPopup view (event, menu) = Gtk.uiSingleRun $ do
+  #popupAtWidget menu view Gtk.GravitySouthWest Gtk.GravityNorthWest event
 
 {- Internal procedures here -}
 
@@ -186,13 +195,15 @@ imgNameSet pixelSize mayTheme name = do
     -- Uses pixbuf, because somehow lookup directory is different.
     withDefTheme = Gtk.iconThemeGetDefault >>= setPixbuf
     forCustomTheme themePath = customIconTheme themePath >>= setPixbuf
-    directPath themePath name = ByGIcon <$> do
-      themeDir <- Gio.fileNewForPath themePath
-      iconPath <- #getChild themeDir (T.unpack name)
-      fileIcon <- new Gio.FileIcon [#file := iconPath]
-      pure (fileIcon `asA` Gio.Icon)
-    setPixbuf theme = ByPixbuf <$> do
-      MaybeT $ Gtk.themeLoadIcon theme panelName pixelSize loadFlags
+    directPath themePath name =
+      ByGIcon <$> do
+        themeDir <- Gio.fileNewForPath themePath
+        iconPath <- #getChild themeDir (T.unpack name)
+        fileIcon <- new Gio.FileIcon [#file := iconPath]
+        pure (fileIcon `asA` Gio.Icon)
+    setPixbuf theme =
+      ByPixbuf <$> do
+        MaybeT $ Gtk.themeLoadIcon theme panelName pixelSize loadFlags
 
 -- NB: Why does `id` work? SNI is ARGB, GTK is RGBA.
 imgInfoSet :: Int32 -> [(Int32, Int32, BS.ByteString)] -> MaybeT IO IconData

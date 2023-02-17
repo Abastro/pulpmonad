@@ -128,10 +128,12 @@ createTrayItem client info@HS.ItemInfo{..} mainView eNormalUp = do
   itemView <- liftIO $ takeMVar =<< Gtk.uiCreate (new ItemView.AsView [])
 
   menuVar <- liftIO . Gtk.uiCreate $ for menuPath $ \mPath ->
-    DMenu.menuNew (T.pack . formatBusName $ itemServiceName) (T.pack . formatObjectPath $ mPath)
+    Gtk.toMenu =<< DMenu.menuNew (T.pack . formatBusName $ itemServiceName) (T.pack . formatObjectPath $ mPath)
 
   (eClick, kill1) <- sourceEventWA (ItemView.clickSource itemView)
   (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource itemView)
+
+  -- TODO Doing too much in execute might not be desirable
 
   -- Run updates; Not putting in Behavior now, as it could incur memory cost.
   liftIO $ ItemView.setIcon itemView (iconOf info)
@@ -194,14 +196,11 @@ updateTooltip view = \case
       (t, "") -> t
       (t, f) -> t <> ": " <> f
 
-handleClick :: Client -> HS.ItemInfo -> Maybe DMenu.Menu -> ItemView.View -> ItemView.MouseClick -> IO ()
-handleClick client HS.ItemInfo{..} mayMenu view (ItemView.MouseClickOf xRoot yRoot mouse) = case mouse of
+handleClick :: Client -> HS.ItemInfo -> Maybe Gtk.Menu -> ItemView.View -> ItemView.MouseClick -> IO ()
+handleClick client HS.ItemInfo{..} mayMenu view (ItemView.MouseClickOf event xRoot yRoot mouse) = case mouse of
   ItemView.MouseLeft | not itemIsMenu -> void $ IC.activate client itemServiceName itemServicePath xRoot yRoot
   ItemView.MouseMiddle -> void $ IC.secondaryActivate client itemServiceName itemServicePath xRoot yRoot
-  _ -> traverse_ (popupAt view) mayMenu
-  where
-    -- Popup could only be opened with GTK events, this is a workaround for this.
-    popupAt view menu = Gtk.menuPopupAtWidget menu view Gtk.GravitySouthWest Gtk.GravityNorthWest Nothing
+  _ -> traverse_ (ItemView.showPopup view . (event,)) mayMenu
 
 handleScroll :: Client -> HS.ItemInfo -> ItemView.ScrollDir -> IO ()
 handleScroll client HS.ItemInfo{..} = \case
