@@ -119,7 +119,8 @@ entrySpec = do
 
       expectVsActual expected actual
 
-    -- FIXME This test does not check concurrent behaviors
+    -- FIXME This test does not check concurrent behaviors.
+    -- The sources are synchronous!
     prop "preserves behavior on delay" . withMaxSuccess 20 $ \(Fn2 update) x mayYs -> monadicIO $ do
       let asPure (out, _delay) = pure out
           asDelay (out, Small delay) = out <$ liftIO (threadDelay delay)

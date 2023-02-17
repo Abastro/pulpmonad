@@ -147,19 +147,20 @@ setTooltip view tooltip = Gtk.uiSingleRun $ do
 
 data IconData = ByGIcon Gio.Icon | ByPixbuf Gtk.Pixbuf
 
+-- Zulip called multiple times?
 setTrayIcon :: Bool -> Gtk.Image -> TrayItemIcon -> IO ()
 setTrayIcon showMissing image icon = do
-  iconSize :: Gtk.IconSize <- toEnum . fromIntegral <$> get image #iconSize
-  itemIconAsSet iconSize icon >>= \case
+  pixelSize <- get image #pixelSize
+  itemIconAsSet pixelSize icon >>= \case
     Just (ByGIcon gic) -> set image [#gicon := gic]
     Just (ByPixbuf pbuf) -> set image [#pixbuf := pbuf]
     Nothing -> when showMissing $ set image [#iconName := T.pack "image-missing"]
 
-itemIconAsSet :: Gtk.IconSize -> TrayItemIcon -> IO (Maybe IconData)
-itemIconAsSet iconSize TrayItemIcon{..} =
+itemIconAsSet :: Int32 -> TrayItemIcon -> IO (Maybe IconData)
+itemIconAsSet pixelSize TrayItemIcon{..} =
   runMaybeT $
-    maybe empty (imgNameSet iconSize itemThemePath) itemIconName
-      <|> imgInfoSet iconSize itemIconInfo
+    maybe empty (imgNameSet pixelSize itemThemePath) itemIconName
+      <|> imgInfoSet pixelSize itemIconInfo
 
 -- MaybeT due to caller
 customIconTheme :: String -> MaybeT IO Gtk.IconTheme
@@ -172,8 +173,8 @@ customIconTheme themePath = do
   #getSearchPath defTheme >>= traverse_ (#appendSearchPath custom)
   pure custom
 
-imgNameSet :: Gtk.IconSize -> Maybe String -> T.Text -> MaybeT IO IconData
-imgNameSet size mayTheme name = do
+imgNameSet :: Int32 -> Maybe String -> T.Text -> MaybeT IO IconData
+imgNameSet pixelSize mayTheme name = do
   guard $ not (T.null name)
   -- Icon should be freedesktop-compliant icon name.
   case mayTheme of
@@ -189,12 +190,12 @@ imgNameSet size mayTheme name = do
       fileIcon <- Gio.fileIconNew fpath
       ByGIcon <$> Gio.toIcon fileIcon
     setPixbuf theme = do
-      fmap ByPixbuf . MaybeT $ Gtk.themeLoadIcon theme panelName (Gtk.iconSizePx size) loadFlags
+      fmap ByPixbuf . MaybeT $ Gtk.themeLoadIcon theme panelName pixelSize loadFlags
 
 -- NB: Why does `id` work? SNI is ARGB, GTK is RGBA.
-imgInfoSet :: Gtk.IconSize -> [(Int32, Int32, BS.ByteString)] -> MaybeT IO IconData
-imgInfoSet size imgs = do
-  fmap ByPixbuf . MaybeT $ Gtk.iconsChoosePixbuf (Gtk.iconSizePx size) id icons
+imgInfoSet :: Int32 -> [(Int32, Int32, BS.ByteString)] -> MaybeT IO IconData
+imgInfoSet pixelSize imgs = do
+  fmap ByPixbuf . MaybeT $ Gtk.iconsChoosePixbuf pixelSize id icons
   where
     icons = asRawIcon <$> imgs
     asRawIcon (iconWidth, iconHeight, iconColors) = Gtk.RawIcon{..}
