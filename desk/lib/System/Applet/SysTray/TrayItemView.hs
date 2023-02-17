@@ -42,6 +42,7 @@ import Gtk.Pixbufs qualified as Gtk
 import Gtk.Reactive qualified as Gtk
 import Gtk.Task qualified as Gtk
 import System.Pulp.PulpPath
+import Data.GI.Base.Constructible
 newtype View = AsView (ManagedPtr View)
 
 instance TypedObject View where
@@ -106,6 +107,7 @@ data TrayItemIcon = TrayItemIcon
   , itemIconInfo :: [(Int32, Int32, BS.ByteString)]
   }
 
+-- | This one comes with Gdk Event for implementation reasons.
 clickSource :: View -> Source MouseClick
 clickSource view =
   Gtk.onSource (view `asA` Gtk.Widget) #buttonPressEvent $ \handler event -> do
@@ -163,7 +165,7 @@ itemIconAsSet pixelSize TrayItemIcon{..} =
 -- MaybeT due to caller
 customIconTheme :: String -> MaybeT IO Gtk.IconTheme
 customIconTheme themePath = do
-  custom <- Gtk.iconThemeNew
+  custom <- new Gtk.IconTheme []
   Gdk.screenGetDefault >>= traverse_ (#setScreen custom)
   #appendSearchPath custom themePath
 
@@ -184,12 +186,13 @@ imgNameSet pixelSize mayTheme name = do
     -- Uses pixbuf, because somehow lookup directory is different.
     withDefTheme = Gtk.iconThemeGetDefault >>= setPixbuf
     forCustomTheme themePath = customIconTheme themePath >>= setPixbuf
-    directPath themePath name = do
-      fpath <- Gio.fileNewForPath themePath >>= flip Gio.fileGetChild (T.unpack name)
-      fileIcon <- Gio.fileIconNew fpath
-      ByGIcon <$> Gio.toIcon fileIcon
-    setPixbuf theme = do
-      fmap ByPixbuf . MaybeT $ Gtk.themeLoadIcon theme panelName pixelSize loadFlags
+    directPath themePath name = ByGIcon <$> do
+      themeDir <- Gio.fileNewForPath themePath
+      iconPath <- #getChild themeDir (T.unpack name)
+      fileIcon <- new Gio.FileIcon [#file := iconPath]
+      pure (fileIcon `asA` Gio.Icon)
+    setPixbuf theme = ByPixbuf <$> do
+      MaybeT $ Gtk.themeLoadIcon theme panelName pixelSize loadFlags
 
 -- NB: Why does `id` work? SNI is ARGB, GTK is RGBA.
 imgInfoSet :: Int32 -> [(Int32, Int32, BS.ByteString)] -> MaybeT IO IconData

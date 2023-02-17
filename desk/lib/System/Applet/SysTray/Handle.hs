@@ -106,7 +106,7 @@ modifyItems client mainView eNormalUp colOp = \m -> do
     after old = case (colOp, old) of
       -- Will update view here as well
       (Insert newItem, Nothing) -> do
-        -- Filters the event
+        -- Filters the update event
         new <- createTrayItem client newItem mainView (filterE isThisUpdate eNormalUp)
         pure (Just new)
       (Delete _, Just old) -> do
