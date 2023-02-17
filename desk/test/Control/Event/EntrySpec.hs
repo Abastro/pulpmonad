@@ -74,6 +74,11 @@ networkReactEvent event = do
   mapEventIO (const $ detectUnreachable det) eDetect -- Detect if it is freed.
   where
     detectUnreachable det = do
+      -- reactEvent calls forkIO to call network and decouple event from reactimate.
+      -- It is fine if it was delayed, but to test it we need to wait for the other thread to finish.
+      -- This is achieved by calling 'yield'.
+      yield
+      -- Sadly, detecting if a reference can be freed requires major GC.
       performMajorGC
       isNothing <$> deRefWeak det
 
