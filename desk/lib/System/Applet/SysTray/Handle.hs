@@ -78,6 +78,7 @@ sniSource HS.Host{..} wait = sourceWithUnreg $ \handler -> do
   pure $ removeUpdateHandler handlerId
 
 data NormalUpdateType = IconUpdate | OverlayIconUpdate | TooltipUpdate
+  deriving (Show)
 data NormalUpdate = NormalUpdateOf !NormalUpdateType !HS.ItemInfo
 
 -- Use ColOp because it exists

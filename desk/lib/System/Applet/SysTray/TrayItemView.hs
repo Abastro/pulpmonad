@@ -42,7 +42,6 @@ import Gtk.Pixbufs qualified as Gtk
 import Gtk.Reactive qualified as Gtk
 import Gtk.Task qualified as Gtk
 import System.Pulp.PulpPath
-
 newtype View = AsView (ManagedPtr View)
 
 instance TypedObject View where
@@ -147,7 +146,6 @@ setTooltip view tooltip = Gtk.uiSingleRun $ do
 
 data IconData = ByGIcon Gio.Icon | ByPixbuf Gtk.Pixbuf
 
--- Zulip called multiple times?
 setTrayIcon :: Bool -> Gtk.Image -> TrayItemIcon -> IO ()
 setTrayIcon showMissing image icon = do
   pixelSize <- get image #pixelSize
@@ -183,6 +181,7 @@ imgNameSet pixelSize mayTheme name = do
   where
     panelName = name <> T.pack "-panel" -- Looks up first with "-panel" suffix
     loadFlags = [Gtk.IconLookupFlagsUseBuiltin, Gtk.IconLookupFlagsGenericFallback]
+    -- Uses pixbuf, because somehow lookup directory is different.
     withDefTheme = Gtk.iconThemeGetDefault >>= setPixbuf
     forCustomTheme themePath = customIconTheme themePath >>= setPixbuf
     directPath themePath name = do
