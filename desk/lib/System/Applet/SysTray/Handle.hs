@@ -7,6 +7,7 @@ import Control.Concurrent.MVar
 import Control.Event.Entry
 import Control.Event.State
 import Control.Monad
+import Control.Monad.IO.Unlift
 import DBus
 import DBus.Client
 import Data.Foldable
@@ -21,8 +22,9 @@ import StatusNotifier.Host.Service qualified as HS
 import StatusNotifier.Item.Client qualified as IC
 import System.Applet.SysTray.SystemTrayView qualified as MainView
 import System.Applet.SysTray.TrayItemView qualified as ItemView
-import System.IO
+import System.Log.LogPrint
 import System.Posix.Process (getProcessID)
+import System.Pulp.PulpEnv
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !Gtk.Orientation
@@ -33,12 +35,12 @@ data SysTrayArgs = SysTrayArgs
 -- | Starts system tray and presents it as widget.
 --
 -- Throws if the host cannot be started.
-systemTray :: SysTrayArgs -> IO Gtk.Widget
-systemTray SysTrayArgs{..} = do
+systemTray :: SysTrayArgs -> PulpIO Gtk.Widget
+systemTray SysTrayArgs{..} = withRunInIO $ \unlift -> do
   client <- connectSession
   procID <- getProcessID
   host <-
-    maybe (fail "Cannot create host") pure
+    maybe (fail "Cannot create host for system tray") pure
       =<< HS.build
         HS.defaultParams
           { HS.dbusClient = Just client
@@ -55,7 +57,7 @@ systemTray SysTrayArgs{..} = do
     eAllUpdates <- sourceEvent (sniSource host actuated)
     let eUpdate = filterJust (uncurry splitUpdate <$> eAllUpdates)
         (eColChange, eNormalUp) = split eUpdate
-    (_, bItems) <- exeAccumD M.empty (modifyItems client eNormalUp <$> eColChange)
+    (_, bItems) <- exeAccumD M.empty (modifyItems unlift client eNormalUp <$> eColChange)
 
     -- Use changes to apply to MainView collection.
     eItemDiffs <- diffEvent (-->) (AsCacheMap . M.map itemView <$> bItems)
@@ -98,24 +100,28 @@ data TrayItem = MkTrayItem
   }
 
 modifyItems ::
+  (forall a. PulpIO a -> IO a) ->
   Client ->
   Event NormalUpdate ->
   ColOp HS.ItemInfo ->
   M.Map BusName TrayItem ->
   MomentIO (M.Map BusName TrayItem)
-modifyItems client eNormalUp colOp = M.alterF after serviceName
+modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
   where
     after old = case (colOp, old) of
       (Insert newItem, Nothing) -> do
         -- Filters the update event
-        new <- createTrayItem client newItem (filterE isThisUpdate eNormalUp)
+        new <- createTrayItem client (filterE isThisUpdate eNormalUp) newItem
         pure (Just new)
       (Delete _, Just old) -> do
         liftIO (deleteTrayItem old)
         pure Nothing
-      -- Error cases - TODO: Warn user properly
-      (Insert _, old) -> old <$ liftIO (hPutStrLn stderr "Tried to insert when item already exist")
-      (Delete _, old) -> old <$ liftIO (hPutStrLn stderr "Tried to delete when item did not exist")
+      (Insert _, old) -> old <$ do
+        liftIO . unlift $
+          logS (T.pack "SysTray") LevelWarn (logStrf "Tried to insert existing item ($1)." $ show serviceName)
+      (Delete _, old) -> old <$ do
+        liftIO . unlift $
+          logS (T.pack "SysTray") LevelWarn (logStrf "Tried to delete nonexistent item ($1)." $ show serviceName)
 
     isThisUpdate (NormalUpdateOf _ HS.ItemInfo{itemServiceName}) = serviceName == itemServiceName
 
@@ -123,9 +129,8 @@ modifyItems client eNormalUp colOp = M.alterF after serviceName
       Insert HS.ItemInfo{itemServiceName} -> itemServiceName
       Delete HS.ItemInfo{itemServiceName} -> itemServiceName
 
--- Lifecycle event?
-createTrayItem :: Client -> HS.ItemInfo -> Event NormalUpdate -> MomentIO TrayItem
-createTrayItem client info@HS.ItemInfo{..} eNormalUp = do
+createTrayItem :: Client -> Event NormalUpdate -> HS.ItemInfo -> MomentIO TrayItem
+createTrayItem client eNormalUp info@HS.ItemInfo{..} = do
   -- Needs the view right away.
   itemView <- liftIO $ takeMVar =<< Gtk.uiCreate (new ItemView.AsView [])
 
@@ -136,6 +141,7 @@ createTrayItem client info@HS.ItemInfo{..} eNormalUp = do
   (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource itemView)
 
   -- TODO Doing too much in execute might not be desirable.
+  -- Maybe Lifecycle event could fix this.
 
   -- TODO Make these a Behavior, because they theoretically are.
   -- There is no syncBehavior for this yet.

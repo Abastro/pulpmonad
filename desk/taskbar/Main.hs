@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-import Control.Monad.IO.Unlift
 import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
@@ -132,7 +131,7 @@ app isTest = do
     rightBox _win = do
       box <- Gtk.boxNew Gtk.OrientationHorizontal 2
       #setName box (T.pack "pulp-systemtray")
-      addToEnd box =<< liftIO (App.systemTray sysTrayArgs)
+      addToEnd box =<< App.systemTray sysTrayArgs
       Gtk.toWidget box
       where
         sysTrayArgs =

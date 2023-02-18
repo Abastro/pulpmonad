@@ -27,9 +27,11 @@ data PulpArg = MkPulpArg
   }
 
 instance MonadLog PulpIO where
+  askLog :: PulpIO LevelLogger
   askLog = PulpIO $ asks (\MkPulpEnv{pulpLogger} -> pulpLogger)
 
 instance MonadXHand PulpIO where
+  askXHand :: PulpIO (XHandling ())
   askXHand = PulpIO $ asks (\MkPulpEnv{pulpXHandling} -> pulpXHandling)
 
 -- | Run an PulpIO action. Recommended to call only once.

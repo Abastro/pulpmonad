@@ -368,7 +368,7 @@ appInfoImgSetter appCol classes = do
   allDat <- liftIO $ getAppInfos appCol
   let findWith matcher = V.find (\dat -> any (matcher dat) classes) allDat
   appDat@AppInfoData{appId} <- MaybeT . pure $ findWith classMatch <|> findWith identMatch <|> findWith execMatch
-  lift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "AppInfo: $1 -> $2" (show classes) appId
+  lift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "AppInfo: ($1) -> ($2)" (show classes) appId
   appInfo <- MaybeT . liftIO $ appGetIns appDat
   MaybeT $ Gio.appInfoGetIcon appInfo
   where
