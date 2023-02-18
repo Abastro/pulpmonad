@@ -31,7 +31,6 @@ data SysTrayArgs = SysTrayArgs
   }
 
 -- | Starts system tray and presents it as widget.
--- Has undefined behavior if there are more than one such instance for a process.
 --
 -- Throws if the host cannot be started.
 systemTray :: SysTrayArgs -> IO Gtk.Widget
@@ -43,7 +42,7 @@ systemTray SysTrayArgs{..} = do
       =<< HS.build
         HS.defaultParams
           { HS.dbusClient = Just client
-          , HS.uniqueIdentifier = "pulp-system-tray-" <> show procID
+          , HS.uniqueIdentifier = "PulpSystemTray." <> show procID
           }
   trayView <- new MainView.AsView []
   MainView.setOrientation trayView trayOrientation
@@ -104,11 +103,9 @@ modifyItems ::
   ColOp HS.ItemInfo ->
   M.Map BusName TrayItem ->
   MomentIO (M.Map BusName TrayItem)
-modifyItems client eNormalUp colOp = \m -> do
-  M.alterF after serviceName m
+modifyItems client eNormalUp colOp = M.alterF after serviceName
   where
     after old = case (colOp, old) of
-      -- Will update view here as well
       (Insert newItem, Nothing) -> do
         -- Filters the update event
         new <- createTrayItem client newItem (filterE isThisUpdate eNormalUp)
@@ -126,6 +123,7 @@ modifyItems client eNormalUp colOp = \m -> do
       Insert HS.ItemInfo{itemServiceName} -> itemServiceName
       Delete HS.ItemInfo{itemServiceName} -> itemServiceName
 
+-- Lifecycle event?
 createTrayItem :: Client -> HS.ItemInfo -> Event NormalUpdate -> MomentIO TrayItem
 createTrayItem client info@HS.ItemInfo{..} eNormalUp = do
   -- Needs the view right away.
@@ -137,11 +135,10 @@ createTrayItem client info@HS.ItemInfo{..} eNormalUp = do
   (eClick, kill1) <- sourceEventWA (ItemView.clickSource itemView)
   (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource itemView)
 
-  -- TODO Doing too much in execute might not be desirable
-  -- Stages? Though having single function is good..
+  -- TODO Doing too much in execute might not be desirable.
 
-  -- Run updates; Not putting in Behavior now, as it could incur memory cost.
-  -- In fact, it seems like Event costs memory anyway.
+  -- TODO Make these a Behavior, because they theoretically are.
+  -- There is no syncBehavior for this yet.
   liftIO $ ItemView.setIcon itemView (iconOf info)
   kill3 <- reactEvent $ ItemView.setIcon itemView <$> filterJust (iconPart <$> eNormalUp)
 
