@@ -6,6 +6,7 @@ import Control.Concurrent
 import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Exception
+import Control.Monad.IO.Unlift
 import Data.Function hiding (on)
 import Data.GI.Base.Attributes
 import Data.GI.Base.Signals
@@ -25,13 +26,13 @@ import Status.X11.XHandle
 import System.FilePath
 import System.IO
 import System.Process
-import XMonad.Util.Run (safeSpawn)
+import System.Pulp.PulpEnv
 import System.Pulp.PulpPath
-import Control.Monad.IO.Unlift
+import XMonad.Util.Run (safeSpawn)
 
 -- | Window manager control button.
 -- Shows the system control dialog.
-wmCtrlBtn :: (MonadUnliftIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
+wmCtrlBtn :: Gtk.Window -> PulpIO Gtk.Widget
 wmCtrlBtn parent = withRunInIO $ \unlift -> do
   watch <- unlift $ runXHand wmCtrlListen
   uiFile <- dataPath ("ui" </> "wmctl.ui")
@@ -52,7 +53,6 @@ wmCtrlBtn parent = withRunInIO $ \unlift -> do
     syncBehavior tab $ Gtk.uiSingleRun . setTab
     syncBehavior buildTxt $ Gtk.uiSingleRun . setBuildText
   actuate network -- Not concurrent, "actuate" call only sets a variable
-
   pure ctrlButton
   where
     onBuild = do

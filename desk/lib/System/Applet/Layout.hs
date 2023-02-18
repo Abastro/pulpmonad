@@ -17,13 +17,14 @@ import Status.X11.XHandle
 import System.FilePath
 import System.Pulp.PulpPath
 import Control.Monad.IO.Unlift
+import System.Pulp.PulpEnv
 
 newtype LayoutArg = LayoutArg
   { layoutPrettyName :: T.Text -> T.Text
   }
 
 -- | Applet showing current window layout.
-layout :: (MonadUnliftIO m, MonadXHand m) => LayoutArg -> m Gtk.Widget
+layout :: LayoutArg -> PulpIO Gtk.Widget
 layout LayoutArg{..} = withRunInIO $ \unlift -> do
   LayoutComm{..} <- unlift $ runXHand layoutInitiate
   uiFile <- dataPath ("ui" </> "layout.ui")

@@ -19,6 +19,7 @@ import XMonad.Util.Run
 import Control.Monad
 import qualified GI.Gdk.Structs.EventButton as Gdk
 import System.Pulp.PulpPath
+import System.Pulp.PulpEnv
 
 data VolumeLevel = Muted | VolLow | VolMid | VolHigh
   deriving (Eq, Ord, Enum, Bounded)
@@ -41,7 +42,7 @@ volIconName = \case
 -- TODO Warn when "Nothing" is received (proper logging)
 
 -- | Volume display. First argument is mixer name, second is control name.
-volumeDisplay :: (MonadIO m) => String -> String -> m Gtk.Widget
+volumeDisplay :: String -> String -> PulpIO Gtk.Widget
 volumeDisplay mixerName controlName = liftIO $ do
   uiFile <- dataPath ("ui" </> "volume.ui")
   View{..} <- view (T.pack uiFile)

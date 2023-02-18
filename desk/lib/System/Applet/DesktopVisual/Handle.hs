@@ -39,6 +39,7 @@ import System.Applet.DesktopVisual.DesktopItemView qualified as DeskView
 import System.Applet.DesktopVisual.DesktopVisual qualified as MainView
 import System.Applet.DesktopVisual.WindowItemView qualified as WinView
 import System.Log.LogPrint
+import System.Pulp.PulpEnv
 
 type NumWindows = Word
 
@@ -60,11 +61,7 @@ newtype WindowSetup = WindowSetup
   -- Whether to go with this one or not is only dependent on the window class.
   }
 
-deskVisualizer ::
-  (MonadUnliftIO m, MonadLog m, MonadXHand m) =>
-  DesktopSetup ->
-  WindowSetup ->
-  m Gtk.Widget
+deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO Gtk.Widget
 deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   DeskVisRcvs{..} <- unlift $ runXHand deskVisInitiate
   appInfoCol <- trackAppInfo
@@ -306,12 +303,11 @@ iconSpecifier updateSpecify eWinInfo = do
 
 -- | Update specifier of window icon, gives Nothing to not update.
 specifyWindowIcon ::
-  (MonadUnliftIO m, MonadLog m) =>
   WindowSetup ->
   AppInfoCol ->
   (Bool, WindowInfo) ->
   IconSpecify ->
-  m (Maybe IconSpecify)
+  PulpIO (Maybe IconSpecify)
 specifyWindowIcon WindowSetup{..} appCol (classChanged, winInfo) oldSpecify = withRunInIO $ \unlift -> do
   if classChanged then Just <$> onClassChange unlift else pure onInfoChange
   where
@@ -347,7 +343,7 @@ applySpecifiedIcon getRaw view = \case
   FromEWMH -> WinView.setRawIcons view =<< getRaw
 
 -- Wraps the raw icon getter so that exception is cared for.
-wrapGetRaw :: (MonadUnliftIO m, MonadLog m) => GetXIcon -> m [Gtk.RawIcon]
+wrapGetRaw :: GetXIcon -> PulpIO [Gtk.RawIcon]
 wrapGetRaw getXIcon =
   liftIO getXIcon >>= \case
     -- MAYBE Warning level?
@@ -363,7 +359,7 @@ wrapGetRaw getXIcon =
                           Application Info
 --------------------------------------------------------------------}
 
-appInfoImgSetter :: (MonadUnliftIO m, MonadLog m) => AppInfoCol -> V.Vector T.Text -> MaybeT m Gio.Icon
+appInfoImgSetter :: AppInfoCol -> V.Vector T.Text -> MaybeT PulpIO Gio.Icon
 appInfoImgSetter appCol classes = do
   allDat <- liftIO $ getAppInfos appCol
   let findWith matcher = V.find (\dat -> any (matcher dat) classes) allDat

@@ -12,6 +12,7 @@ import Gtk.Commons qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Reactive.Banana.Frameworks
 import System.FilePath
+import System.Pulp.PulpEnv
 import System.Pulp.PulpPath
 
 -- | Text clock with given format. Queries time every second.
@@ -19,7 +20,7 @@ import System.Pulp.PulpPath
 -- For format reference, look at 'Data.Time.formatTime' for details.
 --
 -- Currently button functionality is not implemented.
-textClock :: (MonadIO m) => String -> m Gtk.Widget
+textClock :: String -> PulpIO Gtk.Widget
 textClock format = liftIO $ do
   uiFile <- dataPath ("ui" </> "clock.ui")
   View{..} <- view (T.pack uiFile)

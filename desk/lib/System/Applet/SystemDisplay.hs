@@ -26,6 +26,7 @@ import Reactive.Banana.Frameworks
 import Status.HWStatus
 import System.FilePath
 import System.Log.LogPrint
+import System.Pulp.PulpEnv
 import System.Pulp.PulpPath
 import Text.Printf
 import XMonad.Util.Run (safeSpawn)
@@ -51,7 +52,7 @@ tempClass = \case
                             Battery
 --------------------------------------------------------------------}
 
-batDisplay :: (MonadUnliftIO m, MonadLog m) => Gtk.IconSize -> m Gtk.Widget
+batDisplay :: Gtk.IconSize -> PulpIO Gtk.Widget
 batDisplay _iconSize = withRunInIO $ \unlift -> do
   uiFile <- dataPath ("ui" </> "battery.ui")
   BatView{..} <- batView (T.pack uiFile)
@@ -104,7 +105,7 @@ batView uiFile = Gtk.buildFromFile uiFile $ do
 
 -- TODO Warning colors when too full
 
-mainboardDisplay :: (MonadUnliftIO m, MonadLog m) => Gtk.IconSize -> Int32 -> m Gtk.Widget
+mainboardDisplay :: Gtk.IconSize -> Int32 -> PulpIO Gtk.Widget
 mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
   uiFile <- dataPath ("ui" </> "mainboard.ui")
   MainboardView{..} <- mainboardView (T.pack uiFile)

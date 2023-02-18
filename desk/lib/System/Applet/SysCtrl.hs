@@ -21,10 +21,11 @@ import System.FilePath
 import XMonad.Util.Run (safeSpawn)
 import System.Pulp.PulpPath
 import Control.Monad.IO.Unlift
+import System.Pulp.PulpEnv
 
 -- | System control button with shutdown symbol icon.
 -- Shows the system control dialog.
-sysCtrlBtn :: (MonadUnliftIO m, MonadXHand m) => Gtk.Window -> m Gtk.Widget
+sysCtrlBtn :: Gtk.Window -> PulpIO Gtk.Widget
 sysCtrlBtn parent = withRunInIO $ \unlift -> do
   watch <- unlift $ runXHand sysCtrlListen
   uiFile <- dataPath ("ui" </> "sysctl.ui")
