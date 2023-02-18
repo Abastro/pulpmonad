@@ -13,9 +13,6 @@ import Data.Foldable
 import Data.GI.Base.Constructible
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
-import Data.Traversable
-import GI.DbusmenuGtk3.Objects.Menu qualified as DMenu
-import GI.Gtk.Objects.Menu qualified as Gtk
 import Gtk.Commons qualified as Gtk
 import Gtk.Task qualified as Gtk
 import Reactive.Banana.Combinators
@@ -127,13 +124,14 @@ createTrayItem client info@HS.ItemInfo{..} mainView eNormalUp = do
   -- Needs the view right away.
   itemView <- liftIO $ takeMVar =<< Gtk.uiCreate (new ItemView.AsView [])
 
-  menuVar <- liftIO . Gtk.uiCreate $ for menuPath $ \mPath ->
-    Gtk.toMenu =<< DMenu.menuNew (T.pack . formatBusName $ itemServiceName) (T.pack . formatObjectPath $ mPath)
+  for_ menuPath $ \path -> liftIO $ do
+    ItemView.setMenu itemView (T.pack . formatBusName $ itemServiceName, T.pack . formatObjectPath $ path)
 
   (eClick, kill1) <- sourceEventWA (ItemView.clickSource itemView)
   (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource itemView)
 
   -- TODO Doing too much in execute might not be desirable
+  -- Stages? Though single function is good..
 
   -- Run updates; Not putting in Behavior now, as it could incur memory cost.
   liftIO $ ItemView.setIcon itemView (iconOf info)
@@ -146,8 +144,7 @@ createTrayItem client info@HS.ItemInfo{..} mainView eNormalUp = do
   kill5 <- reactEvent $ updateTooltip itemView <$> filterJust (tooltipPart <$> eNormalUp)
 
   -- Reacts to the events here as well.
-  mayMenu <- liftIO $ takeMVar menuVar
-  kill6 <- reactEvent $ handleClick client info mayMenu itemView <$> eClick
+  kill6 <- reactEvent $ handleClick client info itemView <$> eClick
   kill7 <- reactEvent $ handleScroll client info <$> eScroll
 
   -- Main view operations.
@@ -196,11 +193,11 @@ updateTooltip view = \case
       (t, "") -> t
       (t, f) -> t <> ": " <> f
 
-handleClick :: Client -> HS.ItemInfo -> Maybe Gtk.Menu -> ItemView.View -> ItemView.MouseClick -> IO ()
-handleClick client HS.ItemInfo{..} mayMenu view (ItemView.MouseClickOf event xRoot yRoot mouse) = case mouse of
+handleClick :: Client -> HS.ItemInfo -> ItemView.View -> ItemView.MouseClick -> IO ()
+handleClick client HS.ItemInfo{..} view (ItemView.MouseClickOf event xRoot yRoot mouse) = case mouse of
   ItemView.MouseLeft | not itemIsMenu -> void $ IC.activate client itemServiceName itemServicePath xRoot yRoot
   ItemView.MouseMiddle -> void $ IC.secondaryActivate client itemServiceName itemServicePath xRoot yRoot
-  _ -> traverse_ (ItemView.showPopup view . (event,)) mayMenu
+  _ -> ItemView.showPopup view event
 
 handleScroll :: Client -> HS.ItemInfo -> ItemView.ScrollDir -> IO ()
 handleScroll client HS.ItemInfo{..} = \case

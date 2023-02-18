@@ -14,6 +14,7 @@ module System.Applet.SysTray.TrayItemView (
   setIcon,
   setOverlay,
   setTooltip,
+  setMenu,
   showPopup,
 ) where
 
@@ -31,6 +32,7 @@ import Data.GI.Base.Overloading
 import Data.Int
 import Data.Text qualified as T
 import GHC.OverloadedLabels
+import GI.DbusmenuGtk3.Objects.Menu qualified as DMenu
 import GI.Gdk.Objects.Screen qualified as Gdk
 import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gio.Interfaces.File qualified as Gio
@@ -69,6 +71,7 @@ instance
 data TrayItemPrivate = TrayItemPrivate
   { trayIcon :: !Gtk.Image
   , trayOverlay :: !Gtk.Image
+  , trayMenu :: Maybe Gtk.Menu
   }
 
 instance DerivedGObject View where
@@ -98,7 +101,7 @@ instance DerivedGObject View where
     -- Make scrollable, eventbox is not scrollable by default
     #addEvents inst [Gtk.EventMaskScrollMask]
 
-    pure TrayItemPrivate{..}
+    pure TrayItemPrivate{trayMenu = Nothing, ..}
 
 data MouseButton = MouseLeft | MouseMiddle | MouseRight
 data MouseClick = MouseClickOf (Maybe Gdk.Event) !Int32 !Int32 !MouseButton
@@ -149,9 +152,16 @@ setTooltip :: View -> Sink (Maybe T.Text)
 setTooltip view tooltip = Gtk.uiSingleRun $ do
   #setTooltipText (view `asA` Gtk.Widget) tooltip
 
-showPopup :: View -> Sink (Maybe Gdk.Event, Gtk.Menu)
-showPopup view (event, menu) = Gtk.uiSingleRun $ do
-  #popupAtWidget menu view Gtk.GravitySouthWest Gtk.GravityNorthWest event
+setMenu :: View -> Sink (T.Text, T.Text)
+setMenu view (bus, path) = Gtk.uiSingleRun $ do
+  menu <- DMenu.menuNew bus path
+  gobjectModifyPrivateData view $ \priv -> priv{trayMenu = Just $ menu `asA` Gtk.Menu}
+
+showPopup :: View -> Sink (Maybe Gdk.Event)
+showPopup view event = Gtk.uiSingleRun $ do
+  TrayItemPrivate{trayMenu} <- gobjectGetPrivateData view
+  for_ trayMenu $ \menu -> do
+    #popupAtWidget menu view Gtk.GravitySouthWest Gtk.GravityNorthWest event
 
 {- Internal procedures here -}
 
