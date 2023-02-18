@@ -110,18 +110,22 @@ modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
   where
     after old = case (colOp, old) of
       (Insert newItem, Nothing) -> do
+        liftIO . unlift $
+          logS (T.pack "SysTray") LevelDebug (logStrf "Inserting item ($1)" $ show serviceName)
         -- Filters the update event
         new <- createTrayItem client (filterE isThisUpdate eNormalUp) newItem
         pure (Just new)
       (Delete _, Just old) -> do
+        liftIO . unlift $
+          logS (T.pack "SysTray") LevelDebug (logStrf "Deleting item ($1)" $ show serviceName)
         liftIO (deleteTrayItem old)
         pure Nothing
       (Insert _, old) -> old <$ do
         liftIO . unlift $
-          logS (T.pack "SysTray") LevelWarn (logStrf "Tried to insert existing item ($1)." $ show serviceName)
+          logS (T.pack "SysTray") LevelWarn (logStrf "Tried to insert existing item ($1)" $ show serviceName)
       (Delete _, old) -> old <$ do
         liftIO . unlift $
-          logS (T.pack "SysTray") LevelWarn (logStrf "Tried to delete nonexistent item ($1)." $ show serviceName)
+          logS (T.pack "SysTray") LevelWarn (logStrf "Tried to delete nonexistent item ($1)" $ show serviceName)
 
     isThisUpdate (NormalUpdateOf _ HS.ItemInfo{itemServiceName}) = serviceName == itemServiceName
 
