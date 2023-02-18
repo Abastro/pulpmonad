@@ -73,7 +73,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
 
   let getRawIcon = unlift . wrapGetRaw . winGetIcon
       specifyIcon = fmap unlift . specifyWindowIcon winSetup appInfoCol
-      updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new DeskView.DesktopItemView [])
+      updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new DeskView.AsView [])
       updateWin = updateWindow (Gtk.uiCreate $ Glib.new WinView.AsView []) trackWinInfo getRawIcon specifyIcon
 
   actuated <- newEmptyMVar

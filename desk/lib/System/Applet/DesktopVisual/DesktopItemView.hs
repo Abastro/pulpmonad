@@ -40,11 +40,11 @@ import System.Applet.DesktopVisual.WindowItemView qualified as WinView
 import System.Pulp.PulpPath
 
 -- Desktop item which has windows sorted via priority
-newtype View = DesktopItemView (ManagedPtr View)
+newtype View = AsView (ManagedPtr View)
 
 instance TypedObject View where
   glibType :: IO GType
-  glibType = registerGType DesktopItemView
+  glibType = registerGType AsView
 instance GObject View
 
 type instance ParentTypes View = Gtk.EventBox ': ParentTypes Gtk.EventBox
