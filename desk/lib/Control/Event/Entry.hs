@@ -129,20 +129,13 @@ syncBehavior behav sink = do
 -- but allows the action itself to be discarded with event.
 reactEvent :: Event (IO ()) -> MomentIO (IO ())
 reactEvent event = do
-  (eFree, free) <- do
-    freeRef <- liftIO . newIORef $ pure ()
-    eFree <- sourceEvent (freeSource freeRef)
-    free <- liftIO $ readIORef freeRef
-    pure (eFree, free)
+  (eFree, free) <- newEvent
   -- Hopefully this allows eFree to be freed.
   eFreeOnce <- once eFree
   eLimited <- switchE event (never <$ eFreeOnce)
   reactimate eLimited
   -- Forks to avoid deadlock when called inside `execute`.
-  pure (void $ forkIO free)
-  where
-    -- Without unregister call, as unregister could be problematic.
-    freeSource freeRef = sourceSimple $ \handler -> writeIORef freeRef $ handler ()
+  pure (void $ forkIO $ free ())
 
 -- | Looping source from performing action with cleanup.
 -- Forks a thread on each register call, so each handler would receive calls separately.
