@@ -146,9 +146,6 @@ createTrayItem client eNormalUp info@HS.ItemInfo{..} = do
   (eClick, kill1) <- sourceEventWA (ItemView.clickSource itemView)
   (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource itemView)
 
-  -- TODO Doing too much in execute might not be desirable.
-  -- Maybe Lifecycle event could fix this.
-
   -- TODO Make these a Behavior, because they theoretically are.
   -- There is no syncBehavior for this yet.
   liftIO $ ItemView.setIcon itemView (iconOf info)

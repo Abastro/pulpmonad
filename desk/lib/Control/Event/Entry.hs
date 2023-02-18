@@ -1,4 +1,5 @@
 {-# LANGUAGE RecursiveDo #-}
+
 module Control.Event.Entry (
   Source,
   Sink,
@@ -27,9 +28,9 @@ import Control.Concurrent
 import Control.Concurrent.Task
 import Control.Event.Handler
 import Control.Monad
+import Data.IORef
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
-import Data.IORef
 
 -- | Source receives a callback, and send the data to callback when signal occurs.
 type Source a = AddHandler a
@@ -87,13 +88,13 @@ diffEvent compute bOrigin = do
   where
     liftedCompute old = fmap (compute old)
 
--- NOTE: Likely `execute` call holds a lock to behavior until event value is evaluated.
-
 -- | mapAccum which accumulates by executing momentous action.
 --
 -- WARNING: Either the event or the behavior needs to be used.
 --
 -- If they are discarded, it will invoke GC and result in unpredicted behavior.
+--
+-- NOTE: reactive-banana's `execute` call holds a lock to network, preventing any update.
 exeMapAccum :: acc -> Event (acc -> MomentIO (sig, acc)) -> MomentIO (Event sig, Behavior acc)
 exeMapAccum initial eFn = do
   rec bAcc <- stepper initial eAcc
@@ -169,7 +170,7 @@ taskToBehaviorWA :: Task a -> MomentIO (Behavior a, IO ())
 taskToBehaviorWA task = do
   init <- liftIO (taskNextWait task)
   (eTask, unreg) <- sourceEventWA (taskToSource task)
-  (, unreg) <$> stepper init eTask
+  (,unreg) <$> stepper init eTask
 
 -- Potential Problem: The looping source have to use time for calling callbacks.
 -- This might lead to delay issues.
