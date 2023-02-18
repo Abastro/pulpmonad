@@ -61,6 +61,8 @@ newtype WindowSetup = WindowSetup
   -- Whether to go with this one or not is only dependent on the window class.
   }
 
+logName = T.pack "DeskVis"
+
 deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO Gtk.Widget
 deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   DeskVisRcvs{..} <- unlift $ runXHand deskVisInitiate
@@ -347,12 +349,12 @@ wrapGetRaw :: GetXIcon -> PulpIO [Gtk.RawIcon]
 wrapGetRaw getXIcon =
   liftIO getXIcon >>= \case
     -- MAYBE Warning level?
-    Left err -> [] <$ logS (T.pack "DeskVis") LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
+    Left err -> [] <$ logS logName LevelDebug (logStrf "Cannot recognize icon due to: $1" err)
     Right icons -> pure icons
 
 {-
   TODO Consider: Log desktop changes?
-  unlift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "[$1] desktop $2 -> $3" windowId deskOld deskNew
+  unlift $ logS (T.pack logName) LevelDebug $ logStrf "[$1] desktop $2 -> $3" windowId deskOld deskNew
 -}
 
 {-------------------------------------------------------------------
@@ -364,7 +366,7 @@ appInfoImgSetter appCol classes = do
   allDat <- liftIO $ getAppInfos appCol
   let findWith matcher = V.find (\dat -> any (matcher dat) classes) allDat
   appDat@AppInfoData{appId} <- MaybeT . pure $ findWith classMatch <|> findWith identMatch <|> findWith execMatch
-  lift $ logS (T.pack "DeskVis") LevelDebug $ logStrf "AppInfo: ($1) -> ($2)" (show classes) appId
+  lift $ logS logName LevelDebug $ logStrf "AppInfo: ($1) -> ($2)" (show classes) appId
   appInfo <- MaybeT . liftIO $ appGetIns appDat
   MaybeT $ Gio.appInfoGetIcon appInfo
   where
