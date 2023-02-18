@@ -42,7 +42,7 @@ systemTray SysTrayArgs{..} = do
       =<< HS.build
         HS.defaultParams
           { HS.dbusClient = Just client
-          , HS.uniqueIdentifier = "PulpSystemTray." <> show procID
+          , HS.uniqueIdentifier = "PulpSystemTray" <> show procID
           }
   trayView <- new MainView.AsView []
   MainView.setOrientation trayView trayOrientation
