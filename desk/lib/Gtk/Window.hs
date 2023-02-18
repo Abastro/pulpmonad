@@ -141,8 +141,8 @@ windowSetDock window DockArg{..} = do
 
   -- Strut: send over "_NET_WM_STRUT_PARTIAL" on map event
   let sizeEl = (fromEnum dockPos, scaleTo fullSize dockSizeRatio)
-  let beginEl = (4 + 2 * fromEnum dockPos, scaleTo fullSpan $ dockBegin dockSpan)
-  let endEl = (4 + 2 * fromEnum dockPos + 1, scaleTo fullSpan $ dockEnd dockSpan)
+  let beginEl = (4 + 2 * fromEnum dockPos, scaleTo fullSpan $ dockSpan.dockBegin)
+  let endEl = (4 + 2 * fromEnum dockPos + 1, scaleTo fullSpan $ dockSpan.dockEnd)
   let strutVec = (scaleFactor *) <$> V.replicate 12 0 V.// [sizeEl, beginEl, endEl]
 
   -- Note: On Gtk4, getting surface is the first

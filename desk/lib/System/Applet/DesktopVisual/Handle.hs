@@ -84,8 +84,8 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
     (eDesktops, bDesktops) <- desktopList updateDesk eDesktopList
     (eWindows, bWindows) <- windowMap updateWin eWindowList
     bActiveWindow <- stepper Nothing eActiveWindow
-    let bDeskViews = V.map desktopView <$> bDesktops
-        bWinViews = M.map windowView <$> bWindows
+    let bDeskViews = V.map (\desk -> desk.view) <$> bDesktops
+        bWinViews = M.map (\win -> win.view) <$> bWindows
         -- Can change when window list changes, for window list change could lag behind.
         -- The Maybe-bind is intended.
         bActiveView = (\views win -> (views M.!?) =<< win) <$> bWinViews <*> bActiveWindow
@@ -122,7 +122,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   Gtk.toWidget mainView
   where
     asWinDeskPairs :: M.Map Window WinItem -> Behavior (S.Set (Window, Int))
-    asWinDeskPairs = fmap (S.fromList . M.toList) . traverse bWindowDesktop
+    asWinDeskPairs = fmap (S.fromList . M.toList) . traverse (\desk -> desk.bWindowDesktop)
 
     -- Pair with desktop counts.
     pairDeskCnt :: S.Set (Window, Int) -> V.Vector a -> V.Vector (NumWindows, a)
@@ -132,19 +132,19 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
         deskHisto = IM.fromListWith (+) . map pairToCnt $ S.toList pairMap
 
 data DeskItem = DeskItem
-  { desktopView :: !DeskView.View
+  { view :: !DeskView.View
   , desktopStat :: !DesktopStat
   , eDesktopClick :: !(Event ())
-  , deskDelete :: !(IO ())
+  , delete :: !(IO ())
   }
 
 data WinItem = WinItem
-  { windowView :: !WinView.View
+  { view :: !WinView.View
   , winIndex :: !Int
   -- ^ Index in the window list.
   , bWindowDesktop :: !(Behavior Int)
   , eWindowClick :: !(Event ())
-  , winDelete :: !(IO ())
+  , delete :: !(IO ())
   }
 
 type ViewPair = (WinView.View, DeskView.View)
@@ -186,7 +186,7 @@ desktopList update eStat = exeAccumD V.empty (updateFn <$> eStat)
   where
     updateFn stats olds = do
       news <- zipToRightM update olds stats
-      news <$ onRemainderRight (liftIO . deskDelete) news olds
+      news <$ onRemainderRight (\desk -> liftIO desk.delete) news olds
 
 updateDesktop ::
   DesktopSetup ->
@@ -200,9 +200,9 @@ updateDesktop setup mkView old desktopStat = do
   pure desktop
   where
     createDesktop = do
-      desktopView <- liftIO (mkView >>= takeMVar)
-      (eDesktopClick, free1) <- sourceEventWA (DeskView.clickSource desktopView)
-      let deskDelete = free1
+      view <- liftIO (mkView >>= takeMVar)
+      (eDesktopClick, free1) <- sourceEventWA (DeskView.clickSource view)
+      let delete = free1
       pure DeskItem{..}
     updated desktop = desktop{desktopStat}
 
@@ -217,7 +217,7 @@ windowMap update eList = do
     asMapWithIdx list = M.mapWithKey (,) . M.fromList $ zip (V.toList list) [0 ..]
     updateFn winIdxs olds = do
       news <- M.traverseMaybeWithKey (const id) $ zipToRight update olds winIdxs
-      news <$ onRemainderRight (liftIO . winDelete) news olds
+      news <$ onRemainderRight (\win -> liftIO win.delete) news olds
 
 updateWindow ::
   IO (MVar WinView.View) ->
@@ -241,13 +241,13 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
         eSpecify <- iconSpecifier updateSpecify eWinInfo
 
         -- Take window view as late as possible.
-        windowView <- liftIO $ takeMVar varWindowView
-        (eWindowClick, free3) <- sourceEventWA (WinView.clickSource windowView)
+        view <- liftIO $ takeMVar varWindowView
+        (eWindowClick, free3) <- sourceEventWA (WinView.clickSource view)
 
         -- Apply the received information on the window.
-        free4 <- reactEvent $ applyWindowState windowView <$> eWinInfo
-        free5 <- reactEvent $ applySpecifiedIcon (winGetRaw windowId) windowView <$> eSpecify
-        let winDelete = free1 <> free2 <> free3 <> free4 <> free5
+        free4 <- reactEvent $ applyWindowState view <$> eWinInfo
+        free5 <- reactEvent $ applySpecifiedIcon (winGetRaw windowId) view <$> eSpecify
+        let delete = free1 <> free2 <> free3 <> free4 <> free5
 
         pure WinItem{..}
     updated = MaybeT $ pure (setIndex <$> old)
@@ -259,8 +259,8 @@ applyWindowPriority desktops windows = do
   -- MAYBE Too complex? Perhaps better to embed inside window
 
   -- Needs to be run in UI thread.
-  for_ windows $ \WinItem{..} -> Gtk.uiSingleRun $ WinView.setPriority windowView winIndex
-  for_ desktops $ \DeskItem{desktopView} -> DeskView.reflectPriority desktopView
+  for_ windows $ \WinItem{..} -> Gtk.uiSingleRun $ WinView.setPriority view winIndex
+  for_ desktops $ \DeskItem{view} -> DeskView.reflectPriority view
 
 -- Patch only used to represent both old & new
 applyActiveWindow :: PatchOf (ColOp WinView.View) -> IO ()
@@ -270,12 +270,12 @@ applyActiveWindow = applyImpure $ \case
 
 applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
 applyDesktopState DesktopSetup{..} DeskItem{desktopStat = DesktopStat{..}, ..} = do
-  DeskView.setLabel desktopView (desktopLabeling desktopName)
-  DeskView.setState desktopView desktopState
+  DeskView.setLabel view (desktopLabeling desktopName)
+  DeskView.setState view desktopState
 
 applyDesktopVisible :: DesktopSetup -> NumWindows -> DeskItem -> IO ()
 applyDesktopVisible DesktopSetup{..} numWin DeskItem{..} = do
-  DeskView.setVisible desktopView (showDesktop desktopStat numWin)
+  DeskView.setVisible view (showDesktop desktopStat numWin)
 
 applyWindowState :: WinView.View -> WindowInfo -> IO ()
 applyWindowState view WindowInfo{..} = do
@@ -299,7 +299,7 @@ iconSpecifier updateSpecify eWinInfo = do
     isClassChange newInfo =
       (,newInfo) . \case
         Nothing -> True
-        Just oldInfo -> windowClasses newInfo /= windowClasses oldInfo
+        Just oldInfo -> newInfo.windowClasses /= oldInfo.windowClasses
     nextSpecs oldSpec mayNewSpec = (mayNewSpec, fromMaybe oldSpec mayNewSpec)
     update newCI oldSpec = nextSpecs oldSpec <$> liftIO (updateSpecify newCI oldSpec)
 

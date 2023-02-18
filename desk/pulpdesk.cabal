@@ -14,6 +14,9 @@ common pulp-gtk
     RecordWildCards
     DerivingStrategies
     DerivingVia
+    NoFieldSelectors
+    DuplicateRecordFields
+    OverloadedRecordDot
   default-language:    GHC2021
   ghc-options:         -W
   build-depends:

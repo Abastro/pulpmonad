@@ -85,7 +85,7 @@ instance DerivedGObject View where
         , setter = \widget v -> gobjectModifyPrivateData widget $
             \dat -> dat{priority = fromIntegral v}
         , getter = \widget -> do
-            fromIntegral . priority <$> gobjectGetPrivateData widget
+            (\priv -> fromIntegral priv.priority) <$> gobjectGetPrivateData widget
         , flags = Nothing
         , minValue = Just 0
         , maxValue = Nothing
@@ -108,7 +108,7 @@ instance DerivedGObject View where
 
 -- | Gets priority, should be called from UI thread.
 getPriority :: View -> IO Int
-getPriority view = priority <$> gobjectGetPrivateData view
+getPriority view = (\priv -> priv.priority) <$> gobjectGetPrivateData view
 
 -- | Sets priority, should be called from UI thread.
 setPriority :: View -> Int -> IO ()

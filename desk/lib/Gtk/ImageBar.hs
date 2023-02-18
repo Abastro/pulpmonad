@@ -101,7 +101,7 @@ imageBarClassInit gClass = withClassAs WidgetClass gClass $ \widgetClass -> do
       , setter = \widget v -> gobjectModifyPrivateData widget $
           \dat -> dat{barOrientation = (toEnum . fromIntegral) v}
       , getter = \widget -> do
-          (fromIntegral . fromEnum) . barOrientation <$> gobjectGetPrivateData widget
+          (\priv -> (fromIntegral . fromEnum) priv.barOrientation) <$> gobjectGetPrivateData widget
       , flags = Nothing
       , minValue = Just 0
       , maxValue = Just 1
@@ -117,7 +117,7 @@ imageBarClassInit gClass = withClassAs WidgetClass gClass $ \widgetClass -> do
       , setter = \widget v -> gobjectModifyPrivateData widget $
           \dat -> dat{barScale = fromIntegral v}
       , getter = \widget -> do
-          fromIntegral . barScale <$> gobjectGetPrivateData widget
+          (\priv -> fromIntegral priv.barScale) <$> gobjectGetPrivateData widget
       , flags = Nothing
       , minValue = Just 1
       , maxValue = Just 256
@@ -131,9 +131,9 @@ imageBarClassInit gClass = withClassAs WidgetClass gClass $ \widgetClass -> do
       , blurb = T.pack "Left spacing of the portion"
       , defaultValue = 0
       , setter = \widget v -> gobjectModifyPrivateData widget $
-          \dat -> dat{barPortion = (barPortion dat){rect_x = fromIntegral v}}
+          \dat -> dat{barPortion = dat.barPortion{rect_x = fromIntegral v}}
       , getter = \widget -> do
-          fromIntegral . rect_x . barPortion <$> gobjectGetPrivateData widget
+          (\priv -> (fromIntegral . rect_x) priv.barPortion) <$> gobjectGetPrivateData widget
       , flags = Nothing
       , minValue = Just 0
       , maxValue = Just 256
@@ -147,9 +147,9 @@ imageBarClassInit gClass = withClassAs WidgetClass gClass $ \widgetClass -> do
       , blurb = T.pack "Top spacing of the portion"
       , defaultValue = 0
       , setter = \widget v -> gobjectModifyPrivateData widget $
-          \dat -> dat{barPortion = (barPortion dat){rect_y = fromIntegral v}}
+          \dat -> dat{barPortion = dat.barPortion{rect_y = fromIntegral v}}
       , getter = \widget -> do
-          fromIntegral . rect_y . barPortion <$> gobjectGetPrivateData widget
+          (\priv -> (fromIntegral . rect_y) priv.barPortion) <$> gobjectGetPrivateData widget
       , flags = Nothing
       , minValue = Just 0
       , maxValue = Just 256
@@ -163,9 +163,9 @@ imageBarClassInit gClass = withClassAs WidgetClass gClass $ \widgetClass -> do
       , blurb = T.pack "Width of the portion"
       , defaultValue = 0
       , setter = \widget v -> gobjectModifyPrivateData widget $
-          \dat -> dat{barPortion = (barPortion dat){rect_width = fromIntegral v}}
+          \dat -> dat{barPortion = dat.barPortion{rect_width = fromIntegral v}}
       , getter = \widget -> do
-          fromIntegral . rect_width . barPortion <$> gobjectGetPrivateData widget
+          (\priv -> (fromIntegral . rect_width) priv.barPortion) <$> gobjectGetPrivateData widget
       , flags = Nothing
       , minValue = Just 0
       , maxValue = Just 256
@@ -179,9 +179,9 @@ imageBarClassInit gClass = withClassAs WidgetClass gClass $ \widgetClass -> do
       , blurb = T.pack "Height of the portion"
       , defaultValue = 0
       , setter = \widget v -> gobjectModifyPrivateData widget $
-          \dat -> dat{barPortion = (barPortion dat){rect_height = fromIntegral v}}
+          \dat -> dat{barPortion = dat.barPortion{rect_height = fromIntegral v}}
       , getter = \widget -> do
-          fromIntegral . rect_height . barPortion <$> gobjectGetPrivateData widget
+          (\priv -> (fromIntegral . rect_height) priv.barPortion) <$> gobjectGetPrivateData widget
       , flags = Nothing
       , minValue = Just 0
       , maxValue = Just 256

@@ -62,7 +62,7 @@ systemTray SysTrayArgs{..} = withRunInIO $ \unlift -> do
     (_, bItems) <- exeAccumD M.empty (modifyItems unlift client eNormalUp <$> eColChange)
 
     -- Use changes to apply to MainView collection.
-    eItemDiffs <- diffEvent (-->) (AsCacheMap . M.map itemView <$> bItems)
+    eItemDiffs <- diffEvent (-->) (AsCacheMap . M.map (\item -> item.view) <$> bItems)
     reactimate' $ fmap @Future (applyItemDiffs trayView) <$> eItemDiffs
 
   actuate network
@@ -97,8 +97,8 @@ splitUpdate = \case
   _ -> const Nothing
 
 data TrayItem = MkTrayItem
-  { itemView :: ItemView.View
-  , deleteTrayItem :: IO ()
+  { view :: ItemView.View
+  , delete :: IO ()
   }
 
 modifyItems ::
@@ -120,7 +120,7 @@ modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
       (Delete _, Just old) -> do
         liftIO . unlift $
           logS logName LevelDebug (logStrf "Deleting item ($1)" $ show serviceName)
-        liftIO (deleteTrayItem old)
+        liftIO old.delete
         pure Nothing
       (Insert _, old) -> old <$ do
         liftIO . unlift $
@@ -129,7 +129,7 @@ modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
         liftIO . unlift $
           logS logName LevelWarn (logStrf "Tried to delete nonexistent item ($1)" $ show serviceName)
 
-    isThisUpdate (NormalUpdateOf _ HS.ItemInfo{itemServiceName}) = serviceName == itemServiceName
+    isThisUpdate (NormalUpdateOf _ updItem) = serviceName == updItem.itemServiceName
 
     serviceName = case colOp of
       Insert HS.ItemInfo{itemServiceName} -> itemServiceName
@@ -138,30 +138,30 @@ modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
 createTrayItem :: Client -> Event NormalUpdate -> HS.ItemInfo -> MomentIO TrayItem
 createTrayItem client eNormalUp info@HS.ItemInfo{..} = do
   -- Needs the view right away.
-  itemView <- liftIO $ takeMVar =<< Gtk.uiCreate (new ItemView.AsView [])
+  view <- liftIO $ takeMVar =<< Gtk.uiCreate (new ItemView.AsView [])
 
   for_ menuPath $ \path -> liftIO $ do
-    ItemView.setMenu itemView (T.pack . formatBusName $ itemServiceName, T.pack . formatObjectPath $ path)
+    ItemView.setMenu view (T.pack . formatBusName $ itemServiceName, T.pack . formatObjectPath $ path)
 
-  (eClick, kill1) <- sourceEventWA (ItemView.clickSource itemView)
-  (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource itemView)
+  (eClick, kill1) <- sourceEventWA (ItemView.clickSource view)
+  (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource view)
 
   -- TODO Make these a Behavior, because they theoretically are.
   -- There is no syncBehavior for this yet.
-  liftIO $ ItemView.setIcon itemView (iconOf info)
-  kill3 <- reactEvent $ ItemView.setIcon itemView <$> filterJust (iconPart <$> eNormalUp)
+  liftIO $ ItemView.setIcon view (iconOf info)
+  kill3 <- reactEvent $ ItemView.setIcon view <$> filterJust (iconPart <$> eNormalUp)
 
-  liftIO $ ItemView.setOverlay itemView (overlayOf info)
-  kill4 <- reactEvent $ ItemView.setOverlay itemView <$> filterJust (overlayPart <$> eNormalUp)
+  liftIO $ ItemView.setOverlay view (overlayOf info)
+  kill4 <- reactEvent $ ItemView.setOverlay view <$> filterJust (overlayPart <$> eNormalUp)
 
-  liftIO $ updateTooltip itemView itemToolTip
-  kill5 <- reactEvent $ updateTooltip itemView <$> filterJust (tooltipPart <$> eNormalUp)
+  liftIO $ updateTooltip view itemToolTip
+  kill5 <- reactEvent $ updateTooltip view <$> filterJust (tooltipPart <$> eNormalUp)
 
   -- Reacts to the events here as well.
-  kill6 <- reactEvent $ handleClick client info itemView <$> eClick
+  kill6 <- reactEvent $ handleClick client info view <$> eClick
   kill7 <- reactEvent $ handleScroll client info <$> eScroll
 
-  let deleteTrayItem = kill1 <> kill2 <> kill3 <> kill4 <> kill5 <> kill6 <> kill7
+  let delete = kill1 <> kill2 <> kill3 <> kill4 <> kill5 <> kill6 <> kill7
   pure MkTrayItem{..}
   where
     iconPart = \case
