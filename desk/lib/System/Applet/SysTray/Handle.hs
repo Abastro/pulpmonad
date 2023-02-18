@@ -56,11 +56,11 @@ systemTray SysTrayArgs{..} = do
     eAllUpdates <- sourceEvent (sniSource host actuated)
     let eUpdate = filterJust (uncurry splitUpdate <$> eAllUpdates)
         (eColChange, eNormalUp) = split eUpdate
-    -- Discards results for now.
-    (eCh, _) <- exeMapAccum M.empty (fmap (fmap ((),)) . modifyItems client trayView eNormalUp <$> eColChange)
-    -- TODO This is a convenient place to insert a log.
-    reactimate (hPutStrLn stderr "[System Tray] Item Added or Removed" <$ eCh)
-    pure ()
+    (_, bItems) <- exeAccumD M.empty (modifyItems client eNormalUp <$> eColChange)
+
+    -- Use changes to apply to MainView collection.
+    eItemDiffs <- diffEvent (-->) (AsCacheMap . M.map itemView <$> bItems)
+    reactimate' $ fmap @Future (applyItemDiffs trayView) <$> eItemDiffs
 
   actuate network
   putMVar actuated ()
@@ -73,6 +73,11 @@ sniSource HS.Host{..} wait = sourceWithUnreg $ \handler -> do
     () <- readMVar wait -- Waits until network could handle. Takes some overhead every loop, but eh.
     handler (typ, info)
   pure $ removeUpdateHandler handlerId
+
+applyItemDiffs :: MainView.View -> PatchCol ItemView.View -> IO ()
+applyItemDiffs main = applyImpure $ \case
+  Insert item -> MainView.addItem main item
+  Delete item -> MainView.removeItem main item
 
 data NormalUpdateType = IconUpdate | OverlayIconUpdate | TooltipUpdate
   deriving (Show)
@@ -88,23 +93,25 @@ splitUpdate = \case
   HS.ToolTipUpdated -> Just . Right . NormalUpdateOf TooltipUpdate
   _ -> const Nothing
 
-newtype TrayItem = MkTrayItem {deleteTrayItem :: IO ()}
+data TrayItem = MkTrayItem
+  { itemView :: ItemView.View
+  , deleteTrayItem :: IO ()
+  }
 
 modifyItems ::
   Client ->
-  MainView.View ->
   Event NormalUpdate ->
   ColOp HS.ItemInfo ->
   M.Map BusName TrayItem ->
   MomentIO (M.Map BusName TrayItem)
-modifyItems client mainView eNormalUp colOp = \m -> do
+modifyItems client eNormalUp colOp = \m -> do
   M.alterF after serviceName m
   where
     after old = case (colOp, old) of
       -- Will update view here as well
       (Insert newItem, Nothing) -> do
         -- Filters the update event
-        new <- createTrayItem client newItem mainView (filterE isThisUpdate eNormalUp)
+        new <- createTrayItem client newItem (filterE isThisUpdate eNormalUp)
         pure (Just new)
       (Delete _, Just old) -> do
         liftIO (deleteTrayItem old)
@@ -119,8 +126,8 @@ modifyItems client mainView eNormalUp colOp = \m -> do
       Insert HS.ItemInfo{itemServiceName} -> itemServiceName
       Delete HS.ItemInfo{itemServiceName} -> itemServiceName
 
-createTrayItem :: Client -> HS.ItemInfo -> MainView.View -> Event NormalUpdate -> MomentIO TrayItem
-createTrayItem client info@HS.ItemInfo{..} mainView eNormalUp = do
+createTrayItem :: Client -> HS.ItemInfo -> Event NormalUpdate -> MomentIO TrayItem
+createTrayItem client info@HS.ItemInfo{..} eNormalUp = do
   -- Needs the view right away.
   itemView <- liftIO $ takeMVar =<< Gtk.uiCreate (new ItemView.AsView [])
 
@@ -131,9 +138,10 @@ createTrayItem client info@HS.ItemInfo{..} mainView eNormalUp = do
   (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource itemView)
 
   -- TODO Doing too much in execute might not be desirable
-  -- Stages? Though single function is good..
+  -- Stages? Though having single function is good..
 
   -- Run updates; Not putting in Behavior now, as it could incur memory cost.
+  -- In fact, it seems like Event costs memory anyway.
   liftIO $ ItemView.setIcon itemView (iconOf info)
   kill3 <- reactEvent $ ItemView.setIcon itemView <$> filterJust (iconPart <$> eNormalUp)
 
@@ -147,12 +155,7 @@ createTrayItem client info@HS.ItemInfo{..} mainView eNormalUp = do
   kill6 <- reactEvent $ handleClick client info itemView <$> eClick
   kill7 <- reactEvent $ handleScroll client info <$> eScroll
 
-  -- Main view operations.
-  let addItem = MainView.addItem mainView itemView
-      removeItem = MainView.removeItem mainView itemView
-
-  liftIO addItem
-  let deleteTrayItem = kill1 <> kill2 <> kill3 <> kill4 <> kill5 <> kill6 <> kill7 <> removeItem
+  let deleteTrayItem = kill1 <> kill2 <> kill3 <> kill4 <> kill5 <> kill6 <> kill7
   pure MkTrayItem{..}
   where
     iconPart = \case

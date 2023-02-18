@@ -87,7 +87,7 @@ diffEvent compute bOrigin = do
   where
     liftedCompute old = fmap (compute old)
 
--- FIXME !! Need to check behavior on race !!
+-- NOTE: Likely `execute` call holds a lock to behavior until event value is evaluated.
 
 -- | mapAccum which accumulates by executing momentous action.
 --

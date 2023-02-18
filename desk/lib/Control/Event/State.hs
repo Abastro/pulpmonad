@@ -17,8 +17,9 @@ module Control.Event.State (
   PatchOf (..),
   applyPatches,
   applyImpure,
-  CacheStack (..),
   ColOp (..),
+  PatchCol,
+  CacheStack (..),
   CacheMap (..),
 ) where
 
