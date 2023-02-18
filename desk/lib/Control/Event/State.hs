@@ -30,6 +30,7 @@ import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Data.Vector qualified as V
+import qualified Data.Vector.Generic as VG
 
 -- | Aligns and zips to fit the right collection, padding left ones with Nothing. (c.f. SemiAlign acts like union)
 --
@@ -166,9 +167,11 @@ instance Eq a => Act (PatchCol a) (V.Vector a) where
   (<:) :: Eq a => PatchCol a -> V.Vector a -> V.Vector a
   (<:) = applyPatches $ \case
     Insert x -> (`V.snoc` x)
-    Delete x -> rmOneFromAfter . V.break (== x)
+    Delete x -> deleteOneFromRight x
     where
-      rmOneFromAfter (beforeX, afterX) = beforeX <> V.drop 1 afterX
+      deleteOneFromRight x vec = case VG.findIndexR (== x) vec of
+        Nothing -> vec
+        Just idx -> V.take idx vec <> V.drop (succ idx) vec
 
 -- Rudimentary difference evaluation.
 instance Eq a => Diff (PatchCol a) (V.Vector a) where

@@ -8,12 +8,12 @@ import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 
+-- FIXME This requires the desktop env, better spec needed
 hwSpec :: Spec
 hwSpec = do
   describe "HWStatus" $ do
     describe "cpuStat" $ do
       it "does not throw" $ void cpuStat
-    -- TODO Count number of CPUs
     describe "cpuDelta" $ do
       prop "does not throw for positive delays" . withMaxSuccess 10 $
         \(Positive t) -> void $ cpuDelta t

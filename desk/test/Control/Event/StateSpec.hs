@@ -67,17 +67,16 @@ instance (Ord k, Arbitrary k) => Arbitrary (CacheMap k k) where
 
 stateSpec :: Spec
 stateSpec = do
-  describe "Entry.State" $ do
-    describe "ZipToRight" $ do
-      describe "Vector" $ zipToRightSpec (Proxy @V.Vector)
-      describe "Map.Strict" $ zipToRightSpec (Proxy @(M.Map Integer))
+  describe "ZipToRight" $ do
+    describe "Vector" $ zipToRightSpec (Proxy @V.Vector)
+    describe "Map.Strict" $ zipToRightSpec (Proxy @(M.Map Integer))
 
-    describe "Patch" $ do
-      describe "Set" $ patchSpec (Proxy @(S.Set Integer))
-      -- FIXME Duplicate entries are removed altogether!
-      describe "Vector" $ patchSpec (Proxy @(V.Vector Integer))
+  -- Uses Int: Seems better at testing duplicate values
+  describe "Patch" $ do
+    describe "Set" $ patchSpec (Proxy @(S.Set Int))
+    describe "Vector" $ patchSpec (Proxy @(V.Vector Int))
 
-    describe "DiffPatching" $ do
-      describe "Maybe->Set" $ diffPatchingSpec (Proxy @(Maybe Integer)) (Proxy @(S.Set Integer))
-      describe "Vector->Set" $ diffPatchingSpec (Proxy @(CacheStack Int)) (Proxy @(V.Vector Int))
-      describe "CacheMap->Set" $ diffPatchingSpec (Proxy @(CacheMap Integer Integer)) (Proxy @(S.Set Integer))
+  describe "DiffPatching" $ do
+    describe "Maybe->Set" $ diffPatchingSpec (Proxy @(Maybe Int)) (Proxy @(S.Set Int))
+    describe "Vector->Set" $ diffPatchingSpec (Proxy @(CacheStack Int)) (Proxy @(V.Vector Int))
+    describe "CacheMap->Set" $ diffPatchingSpec (Proxy @(CacheMap Int Int)) (Proxy @(S.Set Int))
