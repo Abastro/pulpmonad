@@ -46,7 +46,7 @@ jobs:
           "$HOME/.ghcup/bin/ghcup" install ghc "$HCVER" || (cat "$HOME"/.ghcup/logs/*.* && false)
           "$HOME/.ghcup/bin/ghcup" install cabal 3.9.0.0 || (cat "$HOME"/.ghcup/logs/*.* && false)
           apt-get update
-          apt-get install -y libgtk-3-dev
+          apt-get install -y gobject-introspection libgtk-3-dev
         env:
           HCKIND: ${{ matrix.compilerKind }}
           HCNAME: ${{ matrix.compiler }}
