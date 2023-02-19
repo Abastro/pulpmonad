@@ -8,6 +8,8 @@ author:             Abastro
 maintainer:         abab9579@gmail.com
 copyright:          2022 Abastro
 
+tested-with: GHC ==9.2.5
+
 common pulp-xmonad
   default-extensions:
     LambdaCase
