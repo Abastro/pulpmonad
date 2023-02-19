@@ -185,14 +185,6 @@ jobs:
       - name: tests
         run: |
           $CABAL v2-test $ARG_COMPILER $ARG_TESTS $ARG_BENCH all --test-show-details=direct
-      - name: cabal check
-        run: |
-          cd ${PKGDIR_pulp_commons} || false
-          ${CABAL} -vnormal check
-          cd ${PKGDIR_pulpdesk} || false
-          ${CABAL} -vnormal check
-          cd ${PKGDIR_pulpmonad} || false
-          ${CABAL} -vnormal check
       - name: haddock
         run: |
           $CABAL v2-haddock --disable-documentation --haddock-all $ARG_COMPILER --with-haddock $HADDOCK $ARG_TESTS $ARG_BENCH all

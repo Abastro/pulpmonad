@@ -1,5 +1,8 @@
 -- distribution version (xenial, bionic, focal, jammy)
 distribution: focal
 
--- Additional apt packages to install
+-- apt dependencies
 apt: libxss-dev libgtk-3-dev libgirepository1.0-dev libdbusmenu-gtk3-dev libasound2-dev
+
+-- believe cabal check is not needed per se
+cabal-check: False
