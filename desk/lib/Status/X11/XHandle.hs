@@ -143,18 +143,18 @@ xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
     withNewWin XHandle{..} = XHandle{xhWindow = newWin, ..}
 
 -- TODO Prevent waits while running X handling?
-newtype XHandling r = XHandling (forall a. XIO a -> IO a)
-runXHandling :: XHandling r -> XIO a -> IO a
+newtype XHandling = XHandling (forall a. XIO a -> IO a)
+runXHandling :: XHandling -> XIO a -> IO a
 runXHandling (XHandling xHandle) = xHandle
 
 class MonadIO m => MonadXHand m where
-  askXHand :: m (XHandling ())
+  askXHand :: m XHandling
   runXHand :: XIO a -> m a
   runXHand act = askXHand >>= \handling -> liftIO (runXHandling handling act)
 
 -- | Starts X handler and return X handling to register listeners/senders.
 -- NOTE: non-fatal X error is ignored.
-startXIO :: IO (XHandling ())
+startXIO :: IO XHandling
 startXIO = do
   theHandling <- newEmptyMVar
   _ <- forkOS . bracket (openDisplay "") closeDisplay $ \xhDisplay -> do
@@ -200,7 +200,7 @@ xQueueJob job = do
 -- MAYBE Use streaming library here
 
 -- | X handling to queue & listen to the jobs. Waits for the result.
-xHandling :: XIO (XHandling r)
+xHandling :: XIO XHandling
 xHandling = withRunInIO $ \unliftX -> pure $
   XHandling $ \act -> do
     actQueue <- unliftX xActQueue

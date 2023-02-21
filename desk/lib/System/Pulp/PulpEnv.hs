@@ -14,7 +14,7 @@ import System.Pulp.PulpPath
 -- | Pulp environment.
 data PulpEnv = MkPulpEnv
   { pulpLogger :: !LevelLogger
-  , pulpXHandling :: !(XHandling ())
+  , pulpXHandling :: !XHandling
   }
 
 newtype PulpIO a = PulpIO (ReaderT PulpEnv IO a)
@@ -31,7 +31,7 @@ instance MonadLog PulpIO where
   askLog = PulpIO $ asks (\MkPulpEnv{pulpLogger} -> pulpLogger)
 
 instance MonadXHand PulpIO where
-  askXHand :: PulpIO (XHandling ())
+  askXHand :: PulpIO XHandling
   askXHand = PulpIO $ asks (\MkPulpEnv{pulpXHandling} -> pulpXHandling)
 
 -- | Run an PulpIO action. Recommended to call only once.
