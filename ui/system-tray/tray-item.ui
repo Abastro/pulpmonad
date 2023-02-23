@@ -7,11 +7,13 @@
         <child>
           <object class="GtkImage" id="tray-icon">
             <property name="icon-size">3</property>
+            <property name="pixel-size">24</property>
           </object>
         </child>
         <child type="overlay">
           <object class="GtkImage" id="tray-overlay">
             <property name="icon-size">3</property>
+            <property name="pixel-size">24</property>
           </object>
           <packing>
             <property name="pass-through">1</property>
