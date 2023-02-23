@@ -1,5 +1,4 @@
 module Status.X11.XHandle (
-  X11Env (..),
   ActX11 (..),
   liftDWIO,
   XIO,
@@ -30,13 +29,6 @@ import Data.Set qualified as S
 import Data.Unique
 import Graphics.X11.Xlib
 import Graphics.X11.Xlib.Extras
-
-data X11Env r = X11Env
-  { theDisplay :: !Display
-  , targetWindow :: !Window
-  , extData :: !r
-  }
-  deriving (Functor)
 
 -- | Common actions for X11 monad. IO access is NOT assumed.
 class Functor m => ActX11 m where
@@ -101,10 +93,10 @@ insertListen key listen@(XListen _ win _) XListeners{..} =
 deleteListen :: Unique -> XListeners -> XListeners
 deleteListen key XListeners{..}
   | (Just (XListen _ win _), xListens') <- M.updateLookupWithKey (\_ _ -> Nothing) key xListens =
-    XListeners
-      { xListens = xListens'
-      , perWinListens = M.alter (>>= emptyToNot . S.delete key) win perWinListens
-      }
+      XListeners
+        { xListens = xListens'
+        , perWinListens = M.alter (>>= emptyToNot . S.delete key) win perWinListens
+        }
   | otherwise = XListeners{..}
   where
     emptyToNot set = set <$ guard (S.null set)
@@ -114,33 +106,33 @@ deleteListen key XListeners{..}
 --------------------------------------------------------------------}
 
 data XHandle = XHandle
-  { xhDisplay :: !Display
-  , xhWindow :: !Window
-  , xhListeners :: !(IORef XListeners)
-  , xhActQueue :: TQueue (IO ())
+  { display :: !Display
+  , window :: !Window
+  , listeners :: !(IORef XListeners)
+  , actQueue :: TQueue (IO ())
   }
 
 newtype XIO a = XIO (ReaderT XHandle IO a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadUnliftIO)
 
 instance ActX11 XIO where
-  xDisplay = XIO . asks $ \XHandle{xhDisplay} -> xhDisplay
-  xWindow = XIO . asks $ \XHandle{xhWindow} -> xhWindow
+  xDisplay = XIO . asks $ \handle -> handle.display
+  xWindow = XIO . asks $ \handle -> handle.window
   xAtom name = liftDWIO $ \d _ -> liftIO $ internAtom d name False
 
 -- Internal
 xListeners :: XIO (IORef XListeners)
-xListeners = XIO . asks $ \XHandle{xhListeners} -> xhListeners
+xListeners = XIO . asks $ \handle -> handle.listeners
 
 -- Internal
 xActQueue :: XIO (TQueue (IO ()))
-xActQueue = XIO . asks $ \XHandle{xhActQueue} -> xhActQueue
+xActQueue = XIO . asks $ \handle -> handle.actQueue
 
 -- | Run on certain window. It is advised not to directly use this function.
 xOnWindow :: Window -> XIO a -> XIO a
 xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
   where
-    withNewWin XHandle{..} = XHandle{xhWindow = newWin, ..}
+    withNewWin handle = handle{window = newWin}
 
 -- TODO Prevent waits while running X handling?
 newtype XHandling = XHandling (forall a. XIO a -> IO a)
@@ -157,15 +149,15 @@ class MonadIO m => MonadXHand m where
 startXIO :: IO XHandling
 startXIO = do
   theHandling <- newEmptyMVar
-  _ <- forkOS . bracket (openDisplay "") closeDisplay $ \xhDisplay -> do
-      let xhScreen = defaultScreen xhDisplay
-      xhWindow <- rootWindow xhDisplay xhScreen
-      xhActQueue <- newTQueueIO
-      xhListeners <- newIORef (XListeners M.empty M.empty)
-      let runX (XIO act) = runReaderT act XHandle{..}
-      runX $ do
-        xHandling >>= liftIO . putMVar theHandling
-        startingX
+  _ <- forkOS . bracket (openDisplay "") closeDisplay $ \display -> do
+    let xhScreen = defaultScreen display
+    window <- rootWindow display xhScreen
+    listeners <- newIORef (XListeners M.empty M.empty)
+    actQueue <- newTQueueIO
+    let runX (XIO act) = runReaderT act XHandle{..}
+    runX $ do
+      xHandling >>= liftIO . putMVar theHandling
+      startingX
   takeMVar theHandling
   where
     startingX = withRunInIO $ \unliftX -> do
@@ -174,7 +166,7 @@ startXIO = do
         atomically (flushTQueue actQueue) >>= sequenceA_
         -- .^. Before handling next X event, performs tasks in need of handling.
         unliftX $ listenLeft evPtr
-        -- Waits for 1ms, because otherwise we are overloading stuffs
+        -- Waits for 1ms, because otherwise we are overloading CPU
         threadDelay 1000
 
     listenLeft evPtr = withRunInIO $ \unliftX -> do
