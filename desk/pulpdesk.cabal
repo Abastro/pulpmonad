@@ -39,6 +39,7 @@ common pulp-gtk
     , X11
     , unix
     , time
+    , async
     , process
     , generic-data ==0.9.*
     , stm ==2.5.*
