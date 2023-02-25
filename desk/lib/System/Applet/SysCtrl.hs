@@ -27,7 +27,7 @@ import System.Pulp.PulpEnv
 -- Shows the system control dialog.
 sysCtrlBtn :: Gtk.Window -> PulpIO Gtk.Widget
 sysCtrlBtn parent = withRunInIO $ \unlift -> do
-  watch <- unlift $ runXHand sysCtrlListen
+  watch <- unlift $ runXHook sysCtrlListen
   uiFile <- dataPath ("ui" </> "sysctl.ui")
   View{..} <- view (T.pack uiFile) parent
 

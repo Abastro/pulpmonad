@@ -13,8 +13,8 @@ import System.Pulp.PulpPath
 
 -- | Pulp environment.
 data PulpEnv = MkPulpEnv
-  { pulpLogger :: !LevelLogger
-  , pulpXHandling :: !XHandling
+  { logger :: !LevelLogger
+  , xHook :: !XHook
   }
 
 newtype PulpIO a = PulpIO (ReaderT PulpEnv IO a)
@@ -28,17 +28,17 @@ data PulpArg = MkPulpArg
 
 instance MonadLog PulpIO where
   askLog :: PulpIO LevelLogger
-  askLog = PulpIO $ asks (\env -> env.pulpLogger)
+  askLog = PulpIO $ asks (\env -> env.logger)
 
-instance MonadXHand PulpIO where
-  askXHand :: PulpIO XHandling
-  askXHand = PulpIO $ asks (\env -> env.pulpXHandling)
+instance MonadXHook PulpIO where
+  askXHook :: PulpIO XHook
+  askXHook = PulpIO $ asks (\env -> env.xHook)
 
 -- | Run an PulpIO action. Recommended to call only once.
 runPulpIO :: PulpArg -> PulpIO a -> IO a
-runPulpIO MkPulpArg{..} (PulpIO act) = logStderr $ \logger -> do
+runPulpIO MkPulpArg{..} (PulpIO act) = logStderr $ \inLogger -> do
   -- Path is set as global
   initDataDir argDataDir
-  let pulpLogger = withVerbosity loggerVerbosity $ withFormat loggerFormat logger
-  withXHandling $ \pulpXHandling -> do
+  let logger = withVerbosity loggerVerbosity $ withFormat loggerFormat inLogger
+  withXHook $ \xHook -> do
     runReaderT act MkPulpEnv{..}

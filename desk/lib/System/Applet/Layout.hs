@@ -26,7 +26,7 @@ newtype LayoutArg = LayoutArg
 -- | Applet showing current window layout.
 layout :: LayoutArg -> PulpIO Gtk.Widget
 layout LayoutArg{..} = withRunInIO $ \unlift -> do
-  LayoutComm{..} <- unlift $ runXHand layoutInitiate
+  LayoutComm{..} <- unlift $ runXHook layoutInitiate
   uiFile <- dataPath ("ui" </> "layout.ui")
   View{..} <- view (T.pack uiFile)
   let onLayout layout = setLabel (layoutPrettyName layout)

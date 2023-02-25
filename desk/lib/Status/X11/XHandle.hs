@@ -3,9 +3,10 @@ module Status.X11.XHandle (
   liftDWIO,
   XIO,
   xOnWindow,
-  withXHandling,
-  XHandling,
-  MonadXHand (..),
+  withXHook,
+  XHook,
+  MonadXHook (..),
+  runXHook,
   xQueryOnce,
   xListenTo,
   xSendTo,
@@ -131,29 +132,31 @@ xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
     withNewWin handle = handle{window = newWin}
 
 -- TODO Prevent waits while running X handling?
-newtype XHandling = XHandling (forall a. XIO a -> IO a)
+newtype XHook = XHook (forall a. XIO a -> IO a)
 
-class MonadIO m => MonadXHand m where
-  askXHand :: m XHandling
-  runXHand :: XIO a -> m a
-  runXHand act = askXHand >>= \(XHandling handling) -> liftIO (handling act)
+class MonadIO m => MonadXHook m where
+  askXHook :: m XHook
+
+-- | Hook into X and run the action on the thread.
+runXHook :: MonadXHook m => XIO a -> m a
+runXHook act = askXHook >>= \(XHook hook) -> liftIO (hook act)
 
 -- | Starts X handler and provides X handling to the action.
 --
 -- The X handling allows to register listeners and senders from any thread.
 --
 -- NOTE: non-fatal X errors are ignored.
-withXHandling :: (XHandling -> IO a) -> IO a
-withXHandling runWith = do
-  handlingVar <- newEmptyMVar
-  bracket (xHandlerThread handlingVar) killThread $ \_ -> do
-    runWith =<< takeMVar handlingVar
+withXHook :: (XHook -> IO a) -> IO a
+withXHook runWith = do
+  hookVar <- newEmptyMVar
+  bracket (xHandlerThread hookVar) killThread $ \_ -> do
+    runWith =<< takeMVar hookVar
 
 -- | Spawns X handler thread.
-xHandlerThread :: MVar XHandling -> IO ThreadId
-xHandlerThread handlingVar = forkOS . bracket (openDisplay "") closeDisplay $ \display -> do
+xHandlerThread :: MVar XHook -> IO ThreadId
+xHandlerThread hookVar = forkOS . bracket (openDisplay "") closeDisplay $ \display -> do
   handle <- createHandle display
-  putMVar handlingVar (getXHandling handle)
+  putMVar hookVar (getXHook handle)
   xHandlerLoop handle
 
 createHandle :: Display -> IO XHandle
@@ -184,8 +187,8 @@ xHandlerLoop handle = allocaXEvent $ \evPtr -> forever $ do
         recurse
 
 -- | Converts XHandle to XHandling (implicit unlifting).
-getXHandling :: XHandle -> XHandling
-getXHandling handle = XHandling $ \act -> do
+getXHook :: XHandle -> XHook
+getXHook handle = XHook $ \act -> do
   handleResult <- newEmptyMVar
   let action = runXIO handle act >>= putMVar handleResult
   atomically (writeTQueue handle.actQueue action)
@@ -197,8 +200,8 @@ getXHandling handle = XHandling $ \act -> do
 -- The `query` should not throw.
 xQueryOnce :: (a -> XIO b) -> XIO (a -> IO b)
 xQueryOnce query = do
-  XHandling handling <- getXHandling <$> XIO ask
-  pure $ \arg -> handling (query arg)
+  XHook hook <- getXHook <$> XIO ask
+  pure $ \arg -> hook (query arg)
 
 -- | Listen with certain event mask at certain window.
 -- Task variable should be cared of as soon as possible, as it would put the event loop in halt.

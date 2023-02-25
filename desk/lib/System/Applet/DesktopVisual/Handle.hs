@@ -65,7 +65,7 @@ logName = T.pack "DeskVis"
 
 deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO Gtk.Widget
 deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
-  DeskVisRcvs{..} <- unlift $ runXHand deskVisInitiate
+  DeskVisRcvs{..} <- unlift $ runXHook deskVisInitiate
   appInfoCol <- trackAppInfo
   -- UI thread here
   mainView <- Glib.new MainView.AsView []

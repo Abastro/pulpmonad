@@ -34,7 +34,7 @@ import XMonad.Util.Run (safeSpawn)
 -- Shows the system control dialog.
 wmCtrlBtn :: Gtk.Window -> PulpIO Gtk.Widget
 wmCtrlBtn parent = withRunInIO $ \unlift -> do
-  watch <- unlift $ runXHand wmCtrlListen
+  watch <- unlift $ runXHook wmCtrlListen
   uiFile <- dataPath ("ui" </> "wmctl.ui")
   View{..} <- view (T.pack uiFile) parent
 
