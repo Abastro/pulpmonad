@@ -56,7 +56,7 @@ systemTray SysTrayArgs{..} = withRunInIO $ \unlift -> do
   network <- compile $ do
     -- We have no reason to unregister this one.
     -- NOTE: ItemAdded event seems to invoke for existing items on host register.
-    eAllUpdates <- sourceEvent (sniSource host actuated)
+    eAllUpdates <- sourceEvent (sourceWaitTill actuated $ sniSource host)
     let eUpdate = filterJust (uncurry splitUpdate <$> eAllUpdates)
         (eColChange, eNormalUp) = split eUpdate
     (_, bItems) <- exeAccumD M.empty (modifyItems unlift client eNormalUp <$> eColChange)
@@ -70,11 +70,9 @@ systemTray SysTrayArgs{..} = withRunInIO $ \unlift -> do
 
   Gtk.toWidget trayView
 
-sniSource :: HS.Host -> MVar () -> Source (HS.UpdateType, HS.ItemInfo)
-sniSource HS.Host{..} wait = sourceWithUnreg $ \handler -> do
-  handlerId <- addUpdateHandler $ \typ info -> do
-    () <- readMVar wait -- Waits until network could handle. Takes some overhead every loop, but eh.
-    handler (typ, info)
+sniSource :: HS.Host -> Source (HS.UpdateType, HS.ItemInfo)
+sniSource HS.Host{..} = sourceWithUnreg $ \handler -> do
+  handlerId <- addUpdateHandler (curry handler)
   pure $ removeUpdateHandler handlerId
 
 applyItemDiffs :: MainView.View -> PatchCol ItemView.View -> IO ()

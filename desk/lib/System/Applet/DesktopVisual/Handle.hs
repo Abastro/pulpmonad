@@ -77,9 +77,9 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
 
   actuated <- newEmptyMVar
   network <- compile $ do
-    eDesktopList <- sourceEvent (taskToSourceAfter desktopStats actuated)
-    eWindowList <- sourceEvent (taskToSourceAfter windowsList actuated)
-    eActiveWindow <- sourceEvent (taskToSourceAfter windowActive actuated)
+    eDesktopList <- sourceEvent (sourceWaitTill actuated $ taskToSource desktopStats)
+    eWindowList <- sourceEvent (sourceWaitTill actuated $ taskToSource windowsList)
+    eActiveWindow <- sourceEvent (sourceWaitTill actuated $ taskToSource windowActive)
 
     (eDesktops, bDesktops) <- desktopList updateDesk eDesktopList
     (eWindows, bWindows) <- windowMap updateWin eWindowList

@@ -7,6 +7,7 @@ module Control.Event.Entry (
   sourceSimple,
   sourceWithUnreg,
   sourceSink,
+  sourceWaitTill,
   sourceEvent,
   sourceEventWA,
   diffEvent,
@@ -16,7 +17,6 @@ module Control.Event.Entry (
   reactEvent,
   loopSource,
   taskToSource,
-  taskToSourceAfter,
   taskToBehavior,
   taskToBehaviorWA,
   periodicSource,
@@ -54,6 +54,13 @@ sourceSimple src = sourceWithUnreg $ \handler -> pure () <$ src handler
 -- | Source paired with sink to call.
 sourceSink :: IO (Source a, Sink a)
 sourceSink = newAddHandler
+
+-- | Modified source that waits until the given 'MVar' is set to emit new value.
+sourceWaitTill :: MVar () -> Source a -> Source a
+sourceWaitTill wait src = AddHandler $ \handler -> do
+  register src $ \val -> do
+    () <- readMVar wait
+    handler val
 
 -- FIXME Reactive-banana does not call "unregister" of AddHandler on GC.
 -- Unregistering action by finalizer is not reliable.
@@ -150,14 +157,6 @@ loopSource act cleanup = sourceWithUnreg $ \handler -> do
 -- A task should not be shared between many sources - This need to be fixed later.
 taskToSource :: Task a -> Source a
 taskToSource task = loopSource task.emit task.stop
-
--- | Workaround for reactive-banana passing through events when not actuated.
-taskToSourceAfter :: Task a -> MVar () -> Source a
-taskToSourceAfter task wait = sourceWithUnreg $ \handler -> do
-  tid <- forkIO $ do
-    () <- readMVar wait
-    forever $ task.emit >>= handler
-  pure (task.stop <> killThread tid)
 
 -- | Waits for first task to finish, so that we get a behavior.
 taskToBehavior :: Task a -> MomentIO (Behavior a)

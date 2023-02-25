@@ -188,11 +188,16 @@ xListenTo mask window initial emitWith = do
         beginListen = modListen handle (insertListen window key MkXListen{..})
         endListen = modListen handle (deleteListen window key)
     beginListen
-    pure $ MkTask{stop = endListen, emit = atomically $ readTQueue listenQueue}
+    pure $
+      MkTask
+        { stop = atomically $ writeTQueue handle.actQueue endListen
+        , emit = atomically $ readTQueue listenQueue
+        }
   where
     -- Atomic modification, so can be called from any thread.
     modListen handle modify = do
-      mask <- atomicModifyIORef' handle.listeners $ \old -> let new = modify old in (new, maskFor window new)
+      mask <- atomicModifyIORef' handle.listeners $
+        \old -> let new = modify old in (new, maskFor window new)
       runXIO handle . liftDWIO $ \disp _ -> selectInput disp window mask
 
 -- | Send event with certain mask to certain window, through the X11 thread.
