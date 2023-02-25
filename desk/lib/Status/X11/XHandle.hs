@@ -188,7 +188,7 @@ xListenTo mask window initial emitWith = do
         beginListen = modListen handle (insertListen window key MkXListen{..})
         endListen = modListen handle (deleteListen window key)
     beginListen
-    pure $ taskCreate listenQueue endListen
+    pure $ MkTask{stop = endListen, emit = atomically $ readTQueue listenQueue}
   where
     -- Atomic modification, so can be called from any thread.
     modListen handle modify = do

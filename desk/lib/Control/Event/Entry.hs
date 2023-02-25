@@ -147,34 +147,30 @@ loopSource act cleanup = sourceWithUnreg $ \handler -> do
 
 -- | Temporary solution before phasing out Task.
 --
--- Should not be called multiple times.
+-- A task should not be shared between many sources - This need to be fixed later.
 taskToSource :: Task a -> Source a
-taskToSource task = loopSource (taskNextWait task) (taskStop task)
+taskToSource task = loopSource task.emit task.stop
 
 -- | Workaround for reactive-banana passing through events when not actuated.
 taskToSourceAfter :: Task a -> MVar () -> Source a
 taskToSourceAfter task wait = sourceWithUnreg $ \handler -> do
   tid <- forkIO $ do
     () <- readMVar wait
-    forever $ taskNextWait task >>= handler
-  pure (taskStop task <> killThread tid)
+    forever $ task.emit >>= handler
+  pure (task.stop <> killThread tid)
 
 -- | Waits for first task to finish, so that we get a behavior.
 taskToBehavior :: Task a -> MomentIO (Behavior a)
 taskToBehavior task = do
-  init <- liftIO (taskNextWait task)
+  init <- liftIO task.emit
   eTask <- sourceEvent (taskToSource task)
   stepper init eTask
 
 taskToBehaviorWA :: Task a -> MomentIO (Behavior a, IO ())
 taskToBehaviorWA task = do
-  init <- liftIO (taskNextWait task)
+  init <- liftIO task.emit
   (eTask, unreg) <- sourceEventWA (taskToSource task)
   (,unreg) <$> stepper init eTask
-
--- Potential Problem: The looping source have to use time for calling callbacks.
--- This might lead to delay issues.
--- Reactimates might better run tasks on other threads.
 
 -- | Simple periodic source with given period (in millisecond).
 periodicSource :: Int -> Source ()
