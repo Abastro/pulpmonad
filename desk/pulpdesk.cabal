@@ -82,6 +82,7 @@ library
     Parse.ParseHor
 
     Status.HWStatus
+    Status.X11.XListen
     Status.X11.XHandle
     Status.X11.WMStatus
     Status.AppInfos

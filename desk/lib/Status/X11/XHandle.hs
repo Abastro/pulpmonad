@@ -19,16 +19,13 @@ import Control.Exception
 import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
-import Data.Bits
 import Data.Foldable
 import Data.Functor.Compose
 import Data.IORef
-import Data.Map.Strict qualified as M
-import Data.Maybe
-import Data.Set qualified as S
 import Data.Unique
 import Graphics.X11.Xlib
 import Graphics.X11.Xlib.Extras
+import Status.X11.XListen
 
 -- | Common actions for X11 monad. IO access is NOT assumed.
 class Functor m => ActX11 m where
@@ -62,44 +59,6 @@ liftDWIO io = do
   disp <- xDisplay
   win <- xWindow
   liftIO $ io disp win
-
-{-------------------------------------------------------------------
-                            Listeners
---------------------------------------------------------------------}
-
-data XListeners = XListeners
-  { xListens :: !(M.Map Unique XListen)
-  , perWinListens :: !(M.Map Window (S.Set Unique))
-  }
-
-data XListen = XListen !EventMask !Window (Event -> IO ())
-
--- Internal
-getWinListen :: Window -> XListeners -> [XListen]
-getWinListen window XListeners{..} =
-  mapMaybe (xListens M.!?) $ maybe [] S.toList $ perWinListens M.!? window
-
--- Internal
-insertListen :: Unique -> XListen -> XListeners -> XListeners
-insertListen key listen@(XListen _ win _) XListeners{..} =
-  XListeners
-    { xListens = M.insert key listen xListens
-    , perWinListens = M.alter (Just . S.insert key . notToEmpty) win perWinListens
-    }
-  where
-    notToEmpty = fromMaybe S.empty
-
--- Internal
-deleteListen :: Unique -> XListeners -> XListeners
-deleteListen key XListeners{..}
-  | (Just (XListen _ win _), xListens') <- M.updateLookupWithKey (\_ _ -> Nothing) key xListens =
-      XListeners
-        { xListens = xListens'
-        , perWinListens = M.alter (>>= emptyToNot . S.delete key) win perWinListens
-        }
-  | otherwise = XListeners{..}
-  where
-    emptyToNot set = set <$ guard (S.null set)
 
 {-------------------------------------------------------------------
                             XIO Monad
@@ -163,7 +122,7 @@ createHandle :: Display -> IO XHandle
 createHandle display = do
   let screen = defaultScreen display
   window <- rootWindow display screen
-  listeners <- newIORef (XListeners M.empty M.empty)
+  listeners <- newIORef newXListeners
   actQueue <- newTQueueIO
   pure XHandle{..}
 
@@ -182,8 +141,8 @@ xHandlerLoop handle = allocaXEvent $ \evPtr -> forever $ do
         event <- getEvent evPtr
         evWindow <- get_Window evPtr
 
-        listens <- getWinListen evWindow <$> readIORef handle.listeners
-        for_ listens $ \(XListen _ _ listen) -> listen event
+        listens <- listensForWindow evWindow <$> readIORef handle.listeners
+        for_ listens $ \listen -> listen.onEvent event
         recurse
 
 -- | Converts XHandle to XHandling (implicit unlifting).
@@ -219,20 +178,19 @@ xListenTo mask window initial handler = do
     listenQueue <- newTQueueIO
     let writeListen val = atomically $ writeTQueue listenQueue val
     traverse_ writeListen initial
-    let listen = XListen mask window $ \event ->
-          (runXIO handle . xOnWindow window) (handler event) >>= traverse_ writeListen
+    let listen = MkXListen mask $ \event ->
+          runXIO handle (xOnWindow window $ handler event) >>= traverse_ writeListen
     let beginListen = do
-          modifyIORef' handle.listeners $ insertListen key listen
-          (runXIO handle . xOnWindow window) (updateMask handle.listeners)
+          modifyIORef' handle.listeners $ insertListen window key listen
+          runXIO handle (updateMask handle.listeners)
     let endListen = do
-          modifyIORef' handle.listeners $ deleteListen key
-          (runXIO handle . xOnWindow window) (updateMask handle.listeners)
+          modifyIORef' handle.listeners $ deleteListen window key
+          runXIO handle (updateMask handle.listeners)
     taskCreate listenQueue (atomically $ writeTQueue handle.actQueue endListen) <$ beginListen
   where
-    updateMask listeners = liftDWIO $ \disp win -> do
-      newMask <- foldl' (.|.) 0 . fmap maskOf . getWinListen win <$> readIORef listeners
-      selectInput disp win newMask
-    maskOf (XListen mask _ _) = mask
+    updateMask listeners = liftDWIO $ \disp _ -> do
+      newMask <- maskFor window <$> readIORef listeners
+      selectInput disp window newMask
 
 -- | Send event with certain mask to certain window, through the X11 thread.
 --
