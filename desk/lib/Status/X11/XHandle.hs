@@ -72,6 +72,7 @@ data XHandle = XHandle
   -- ^ Queue to execute actions on next cycle.
   }
 
+-- | X11 action monad, should be run in X thread.
 newtype XIO a = XIO (ReaderT XHandle IO a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
@@ -96,7 +97,7 @@ newtype XHook = XHook (forall a. XIO a -> IO a)
 class MonadIO m => MonadXHook m where
   askXHook :: m XHook
 
--- | Hook into X and run the action on the thread.
+-- | Hook into X and run the action on the X thread.
 runXHook :: MonadXHook m => XIO a -> m a
 runXHook act = askXHook >>= \(XHook hook) -> liftIO (hook act)
 
@@ -145,7 +146,7 @@ xHandlerLoop handle = allocaXEvent $ \evPtr -> forever $ do
         for_ listens $ \listen -> listen.onEvent event
         recurse
 
--- | Converts XHandle to XHandling (implicit unlifting).
+-- | Converts XHandle to XHook (implicit unlifting).
 getXHook :: XHandle -> XHook
 getXHook handle = XHook $ \act -> do
   handleResult <- newEmptyMVar
@@ -155,15 +156,19 @@ getXHook handle = XHook $ \act -> do
 
 -- | Take X query commands, give the action to query the result.
 -- The query will be performed in the X thread.
+--
 -- WARNING: the returned action can block while querying the result.
--- The `query` should not throw.
+--
+-- The query should not throw.
 xQueryOnce :: (a -> XIO b) -> XIO (a -> IO b)
 xQueryOnce query = do
   XHook hook <- getXHook <$> XIO ask
   pure $ \arg -> hook (query arg)
 
 -- | Listen with certain event mask at certain window.
+--
 -- Task variable should be cared of as soon as possible, as it would put the event loop in halt.
+--
 -- Begins with optional starting value, emits task when the handling yields something.
 xListenTo ::
   EventMask ->
@@ -171,26 +176,24 @@ xListenTo ::
   Maybe a ->
   (Event -> XIO (Maybe a)) ->
   XIO (Task a)
-xListenTo mask window initial handler = do
+xListenTo mask window initial emitWith = do
   handle <- XIO ask
   liftIO $ do
     key <- newUnique
     listenQueue <- newTQueueIO
-    let writeListen val = atomically $ writeTQueue listenQueue val
-    traverse_ writeListen initial
-    let listen = MkXListen mask $ \event ->
-          runXIO handle (xOnWindow window $ handler event) >>= traverse_ writeListen
-    let beginListen = do
-          modifyIORef' handle.listeners $ insertListen window key listen
-          runXIO handle (updateMask handle.listeners)
-    let endListen = do
-          modifyIORef' handle.listeners $ deleteListen window key
-          runXIO handle (updateMask handle.listeners)
-    taskCreate listenQueue (atomically $ writeTQueue handle.actQueue endListen) <$ beginListen
+    let writeIfPresent = traverse_ @Maybe (atomically . writeTQueue listenQueue)
+    writeIfPresent initial
+
+    let onEvent event = runXIO handle (xOnWindow window $ emitWith event) >>= writeIfPresent
+        beginListen = modListen handle (insertListen window key MkXListen{..})
+        endListen = modListen handle (deleteListen window key)
+    beginListen
+    pure $ taskCreate listenQueue endListen
   where
-    updateMask listeners = liftDWIO $ \disp _ -> do
-      newMask <- maskFor window <$> readIORef listeners
-      selectInput disp window newMask
+    -- Atomic modification, so can be called from any thread.
+    modListen handle modify = do
+      mask <- atomicModifyIORef' handle.listeners $ \old -> let new = modify old in (new, maskFor window new)
+      runXIO handle . liftDWIO $ \disp _ -> selectInput disp window mask
 
 -- | Send event with certain mask to certain window, through the X11 thread.
 --
@@ -205,9 +208,10 @@ xSendTo ::
   XIO (a -> IO ())
 -- MAYBE Further flesh this out when I got time
 xSendTo mask window factory = do
-  handle <- XIO ask
-  pure $ \arg -> atomically $ writeTQueue handle.actQueue $ do
+  XHook hook <- getXHook <$> XIO ask
+  pure $ \arg -> hook $ do
+    handle <- XIO ask
     -- This action is being queued for later.
-    allocaXEvent $ \event -> runXIO handle . xOnWindow window $ do
+    liftIO . allocaXEvent $ \event -> runXIO handle . xOnWindow window $ do
       factory event arg
       liftDWIO $ \d w -> sendEvent d w True mask event
