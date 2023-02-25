@@ -3,9 +3,8 @@ module Status.X11.XHandle (
   liftDWIO,
   XIO,
   xOnWindow,
-  startXIO,
+  withXHandling,
   XHandling,
-  runXHandling,
   MonadXHand (..),
   xQueryOnce,
   xListenTo,
@@ -110,6 +109,7 @@ data XHandle = XHandle
   , window :: !Window
   , listeners :: !(IORef XListeners)
   , actQueue :: TQueue (IO ())
+  -- ^ Queue to execute actions on next cycle.
   }
 
 newtype XIO a = XIO (ReaderT XHandle IO a)
@@ -124,10 +124,6 @@ instance ActX11 XIO where
 runXIO :: XHandle -> XIO a -> IO a
 runXIO handle (XIO act) = runReaderT act handle
 
--- Internal
-xActQueue :: XIO (TQueue (IO ()))
-xActQueue = XIO . asks $ \handle -> handle.actQueue
-
 -- | Run on certain window. It is advised not to directly use this function.
 xOnWindow :: Window -> XIO a -> XIO a
 xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
@@ -136,24 +132,29 @@ xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
 
 -- TODO Prevent waits while running X handling?
 newtype XHandling = XHandling (forall a. XIO a -> IO a)
-runXHandling :: XHandling -> XIO a -> IO a
-runXHandling (XHandling xHandle) = xHandle
 
 class MonadIO m => MonadXHand m where
   askXHand :: m XHandling
   runXHand :: XIO a -> m a
-  runXHand act = askXHand >>= \handling -> liftIO (runXHandling handling act)
+  runXHand act = askXHand >>= \(XHandling handling) -> liftIO (handling act)
 
--- | Starts X handler and return X handling to register listeners/senders.
--- NOTE: non-fatal X error is ignored.
-startXIO :: IO XHandling
-startXIO = do
-  theHandling <- newEmptyMVar
-  _ <- forkOS . bracket (openDisplay "") closeDisplay $ \display -> do
-    handle <- createHandle display
-    putMVar theHandling (getXHandling handle)
-    xHandlerLoop handle
-  takeMVar theHandling
+-- | Starts X handler and provides X handling to the action.
+--
+-- The X handling allows to register listeners and senders from any thread.
+--
+-- NOTE: non-fatal X errors are ignored.
+withXHandling :: (XHandling -> IO a) -> IO a
+withXHandling runWith = do
+  handlingVar <- newEmptyMVar
+  bracket (xHandlerThread handlingVar) killThread $ \_ -> do
+    runWith =<< takeMVar handlingVar
+
+-- | Spawns X handler thread.
+xHandlerThread :: MVar XHandling -> IO ThreadId
+xHandlerThread handlingVar = forkOS . bracket (openDisplay "") closeDisplay $ \display -> do
+  handle <- createHandle display
+  putMVar handlingVar (getXHandling handle)
+  xHandlerLoop handle
 
 createHandle :: Display -> IO XHandle
 createHandle display = do
@@ -190,20 +191,14 @@ getXHandling handle = XHandling $ \act -> do
   atomically (writeTQueue handle.actQueue action)
   takeMVar handleResult
 
--- | Queues a job to execute on next cycle.
-xQueueJob :: IO () -> XIO ()
-xQueueJob job = do
-  actQueue <- xActQueue
-  liftIO $ atomically (writeTQueue actQueue job)
-
 -- | Take X query commands, give the action to query the result.
 -- The query will be performed in the X thread.
 -- WARNING: the returned action can block while querying the result.
 -- The `query` should not throw.
 xQueryOnce :: (a -> XIO b) -> XIO (a -> IO b)
 xQueryOnce query = do
-  handle <- XIO ask
-  pure $ \arg -> runXHandling (getXHandling handle) (query arg)
+  XHandling handling <- getXHandling <$> XIO ask
+  pure $ \arg -> handling (query arg)
 
 -- | Listen with certain event mask at certain window.
 -- Task variable should be cared of as soon as possible, as it would put the event loop in halt.
@@ -229,7 +224,7 @@ xListenTo mask window initial handler = do
     let endListen = do
           modifyIORef' handle.listeners $ deleteListen key
           (runXIO handle . xOnWindow window) (updateMask handle.listeners)
-    taskCreate listenQueue (runXIO handle $ xQueueJob endListen) <$ beginListen
+    taskCreate listenQueue (atomically $ writeTQueue handle.actQueue endListen) <$ beginListen
   where
     updateMask listeners = liftDWIO $ \disp win -> do
       newMask <- foldl' (.|.) 0 . fmap maskOf . getWinListen win <$> readIORef listeners
@@ -250,7 +245,8 @@ xSendTo ::
 -- MAYBE Further flesh this out when I got time
 xSendTo mask window factory = do
   handle <- XIO ask
-  pure $ \arg -> runXIO handle . xQueueJob $ do
+  pure $ \arg -> atomically $ writeTQueue handle.actQueue $ do
+    -- This action is being queued for later.
     allocaXEvent $ \event -> runXIO handle . xOnWindow window $ do
       factory event arg
       liftDWIO $ \d w -> sendEvent d w True mask event

@@ -28,11 +28,11 @@ data PulpArg = MkPulpArg
 
 instance MonadLog PulpIO where
   askLog :: PulpIO LevelLogger
-  askLog = PulpIO $ asks (\MkPulpEnv{pulpLogger} -> pulpLogger)
+  askLog = PulpIO $ asks (\env -> env.pulpLogger)
 
 instance MonadXHand PulpIO where
   askXHand :: PulpIO XHandling
-  askXHand = PulpIO $ asks (\MkPulpEnv{pulpXHandling} -> pulpXHandling)
+  askXHand = PulpIO $ asks (\env -> env.pulpXHandling)
 
 -- | Run an PulpIO action. Recommended to call only once.
 runPulpIO :: PulpArg -> PulpIO a -> IO a
@@ -40,5 +40,5 @@ runPulpIO MkPulpArg{..} (PulpIO act) = logStderr $ \logger -> do
   -- Path is set as global
   initDataDir argDataDir
   let pulpLogger = withVerbosity loggerVerbosity $ withFormat loggerFormat logger
-  pulpXHandling <- liftIO startXIO
-  runReaderT act MkPulpEnv{..}
+  withXHandling $ \pulpXHandling -> do
+    runReaderT act MkPulpEnv{..}
