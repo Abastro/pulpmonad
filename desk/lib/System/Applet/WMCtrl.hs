@@ -3,7 +3,6 @@
 module System.Applet.WMCtrl (wmCtrlBtn) where
 
 import Control.Concurrent
-import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Exception
 import Control.Monad.IO.Unlift
@@ -39,7 +38,7 @@ wmCtrlBtn parent = withRunInIO $ \unlift -> do
   View{..} <- view (T.pack uiFile) parent
 
   network <- compile $ do
-    callEvent <- sourceEvent (taskToSource watch)
+    callEvent <- sourceEvent watch
     buildEvent <- sourceEvent toBuild
     refreshEvent <- sourceEvent toRefresh
 
@@ -158,12 +157,12 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
 data WMCtrlCall = WMCtrlCall
 
-wmCtrlListen :: XIO (Task WMCtrlCall)
+wmCtrlListen :: XIO (Source WMCtrlCall)
 wmCtrlListen = do
   rootWin <- xWindow
   ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"
   ctrlSys <- xAtom "_XMONAD_CTRL_WM"
-  xListenTo structureNotifyMask rootWin Nothing $ \case
+  xListenSource structureNotifyMask rootWin $ \case
     ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
       | msgTyp == ctrlTyp
       , fromIntegral subTyp == ctrlSys -> do

@@ -3,6 +3,7 @@
 module Control.Event.Entry (
   Source,
   Sink,
+  Steps (..),
   Discrete,
   sourceSimple,
   sourceWithUnreg,
@@ -10,10 +11,15 @@ module Control.Event.Entry (
   sourceWaitTill,
   sourceEvent,
   sourceEventWA,
+  stepsDiscrete,
+  stepsDiscreteWA,
+  stepsBehavior,
+  stepsBehaviorWA,
   diffEvent,
   exeMapAccum,
   exeAccumD,
   syncBehavior,
+  syncBehaviorDiff,
   reactEvent,
   loopSource,
   taskToSource,
@@ -37,6 +43,9 @@ type Source a = AddHandler a
 
 -- | Sink is, effectively, a callback.
 type Sink a = Handler a
+
+-- | Steps reprsents a step function which consists of initial value and update source.
+data Steps a = MkSteps !a !(Source a)
 
 -- | Discrete behavior paired with its own update event.
 type Discrete a = (Event a, Behavior a)
@@ -62,9 +71,6 @@ sourceWaitTill wait src = AddHandler $ \handler -> do
     () <- readMVar wait
     handler val
 
--- FIXME Reactive-banana does not call "unregister" of AddHandler on GC.
--- Unregistering action by finalizer is not reliable.
-
 sourceEvent :: Source a -> MomentIO (Event a)
 sourceEvent = fromAddHandler
 
@@ -80,9 +86,27 @@ sourceEventWA src = do
       modifyIORef' ref (<> unregister)
       pure $ pure ()
 
--- We do not need sourceBehavior, easy enough to create Behavior
+stepsDiscrete :: Steps a -> MomentIO (Discrete a)
+stepsDiscrete (MkSteps initial later) = do
+  event <- sourceEvent later
+  behavior <- stepper initial event
+  pure (event, behavior)
 
--- MAYBE diffEvent should accept `a -> Future a -> b` for more descriptive types
+stepsDiscreteWA :: Steps a -> MomentIO (Discrete a, IO ())
+stepsDiscreteWA (MkSteps initial later) = do
+  (event, free) <- sourceEventWA later
+  behavior <- stepper initial event
+  pure ((event, behavior), free)
+
+stepsBehavior :: Steps a -> MomentIO (Behavior a)
+stepsBehavior steps = snd <$> stepsDiscrete steps
+
+stepsBehaviorWA :: Steps a -> MomentIO (Behavior a, IO ())
+stepsBehaviorWA (MkSteps initial later) = do
+  (event, free) <- sourceEventWA later
+  (, free) <$> stepper initial event
+
+-- MAYBE diffEvent should accept `a -> Future a -> Future b` for more descriptive types
 
 -- | Compute difference between old and new value of a behaviors on each change.
 diffEvent ::
@@ -131,6 +155,16 @@ syncBehavior behav sink = do
   chEvent <- changes behav
   reactimate' (fmap sink <$> chEvent)
 
+-- | Sync with behavior difference from the default value.
+--
+-- Old one comes first in compDiff, the first parameter.
+syncBehaviorDiff :: (a -> a -> b) -> a -> Behavior a -> Sink b -> MomentIO ()
+syncBehaviorDiff compDiff def behav sink = do
+  initial <- valueBLater behav
+  liftIOLater $ sink (compDiff def initial)
+  eDiff <- diffEvent compDiff behav
+  reactimate' (fmap sink <$> eDiff)
+
 -- | React based on event, returning freeing action.
 --
 -- Freeing does not remove the reactimate itself,
@@ -176,11 +210,16 @@ periodicSource :: Int -> Source ()
 periodicSource period = loopSource (threadDelay $ period * 1000) (pure ())
 
 -- | Polling behavior which updates at each event.
+--
+-- Simpler version of 'pollingDiscrete'.
 pollingBehavior :: IO a -> Event b -> MomentIO (Behavior a)
 pollingBehavior act evt = snd <$> pollingDiscrete act evt
 
 -- | Polling discrete behavior which updates at each event.
+--
 -- It is not guaranteed that result event is simultaneous with input event.
+--
+-- NOTE: This calls reactimate internally, which might cause overhead.
 pollingDiscrete :: IO a -> Event b -> MomentIO (Discrete a)
 pollingDiscrete act evt = do
   first <- liftIO act

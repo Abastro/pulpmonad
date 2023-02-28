@@ -31,7 +31,7 @@ module Status.X11.WMStatus (
 ) where
 
 import Control.Applicative
-import Control.Concurrent.Task
+import Control.Event.Entry
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Bitraversable
@@ -69,14 +69,14 @@ asSingle = \case
   [] -> throwError $ T.pack "empty list"
   x : _ -> pure x
 
--- | The format X emits is somewhat intricate
+-- | The format X emits is somewhat intricate.
 class Storable n => XPropRaw n where bitSize :: proxy n -> Int
 
 instance XPropRaw CChar where bitSize _ = 8
 instance XPropRaw CShort where bitSize _ = 16
 instance XPropRaw CLong where bitSize _ = 32 -- Yeah, I don't get why even is this..
 
--- | Property type that can be parsed from native.
+-- | Property type that can be parsed from raw native types.
 class XPropRaw n => XPropType n a | a -> n where
   parseProp :: [n] -> Either T.Text a
 
@@ -130,8 +130,8 @@ prepareForQuery prepare getQuery = XPQuery $ do
   let XPQuery query = getQuery prepared in query
 
 -- INTERNAL for query run
-runXInt :: XPQuery a -> XIO (Either [XQueryError] a, S.Set Atom)
-runXInt (XPQuery query) = do
+runXInternal :: XPQuery a -> XIO (Either [XQueryError] a, S.Set Atom)
+runXInternal (XPQuery query) = do
   watched <- liftIO (newIORef [])
   val <- runReaderT query watched
   watchSet <- S.fromList <$> liftIO (readIORef watched)
@@ -143,25 +143,28 @@ runXQuery (XPQuery query) = do
   placeholder <- liftIO (newIORef [])
   validToEither <$> runReaderT query placeholder
 
--- | Watch X query at the given window.
--- Note, allows some modifier process in between.
+-- | Watch X query at the given window, with modifier in between (for XIO access).
+--
 -- Immediately runs query to get current property right away.
 --
 -- Only the first query deliver error message,
--- and any other query which fail to produce result doesn't emit the task.
+-- and any other query which fail to produce result doesn't emit the value.
 watchXQuery ::
   Window ->
   XPQuery a ->
   (a -> ExceptT [XQueryError] XIO b) ->
-  XIO (Either [XQueryError] (Task b))
+  XIO (Either [XQueryError] (Steps b))
 watchXQuery window query modifier = do
-  (inited, watchSet) <- xOnWindow window $ runXInt query
-  applyModify inited >>= traverse \initial -> do
-    xListenTo propertyChangeMask window (Just initial) $ \case
+  (initRun, watchSet) <- xOnWindow window $ runXInternal query
+  applyModify initRun >>= traverse \initial -> do
+    source <- xListenSource propertyChangeMask window (emitWith watchSet)
+    pure (MkSteps initial source)
+  where
+    emitWith watchSet = \case
       PropertyEvent{ev_atom = prop}
         | prop `S.member` watchSet -> failing <$> (runXQuery query >>= applyModify)
       _ -> pure Nothing
-  where
+
     failing = either (fail . show) pure
     applyModify pre = runExceptT (either throwError modifier pre)
 
@@ -204,11 +207,11 @@ getDesktopStat =
           _ -> DeskHidden
 
 -- | Request current desktop to change. Must be called from root window.
-reqCurrentDesktop :: XIO (Int -> IO ())
+reqCurrentDesktop :: XIO (Sink Int)
 reqCurrentDesktop = do
   root <- xWindow
   typCurDesk <- xAtom "_NET_CURRENT_DESKTOP"
-  xSendTo structureNotifyMask root $ \event idx -> liftIO $ do
+  xSendSink structureNotifyMask root $ \event idx -> liftIO $ do
     setEventType event clientMessage
     setClientMessageEvent' event root typCurDesk 32 [fromIntegral idx, fromIntegral currentTime]
 
@@ -221,11 +224,11 @@ layoutDat = \case
   ResetLayout -> -1
 
 -- | Request setting desktop layout. Send 1 for next layout, -1 for default layout.
-reqDesktopLayout :: XIO (LayoutCmd -> IO ())
+reqDesktopLayout :: XIO (Sink LayoutCmd)
 reqDesktopLayout = do
   root <- xWindow
   typLayout <- xAtom "_XMONAD_CURRENT_LAYOUT"
-  xSendTo structureNotifyMask root $ \event cmd -> liftIO $ do
+  xSendSink structureNotifyMask root $ \event cmd -> liftIO $ do
     setEventType event clientMessage
     setClientMessageEvent' event root typLayout 32 [layoutDat cmd, fromIntegral currentTime]
 
@@ -239,11 +242,11 @@ getActiveWindow = find (> 0) <$> queryProp @[Window] "_NET_ACTIVE_WINDOW"
 
 -- | Request active window. flag should be True if you are a pager.
 -- Must be called from root window.
-reqActiveWindow :: Bool -> XIO (Window -> IO ())
+reqActiveWindow :: Bool -> XIO (Sink Window)
 reqActiveWindow flag = do
   root <- xWindow
   typActive <- xAtom "_NET_ACTIVE_WINDOW"
-  xSendTo structureNotifyMask root $ \event target -> liftIO $ do
+  xSendSink structureNotifyMask root $ \event target -> liftIO $ do
     let srcInd = if flag then 2 else 1
     setEventType event clientMessage
     -- Is this "currentTime" thing right?

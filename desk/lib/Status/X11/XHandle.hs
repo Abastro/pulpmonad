@@ -8,13 +8,13 @@ module Status.X11.XHandle (
   MonadXHook (..),
   runXHook,
   xQueryOnce,
-  xListenTo,
-  xSendTo,
+  xListenSource,
+  xSendSink,
 ) where
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Concurrent.Task
+import Control.Event.Entry
 import Control.Exception
 import Control.Monad.IO.Unlift
 import Control.Monad.Reader
@@ -72,7 +72,7 @@ data XHandle = XHandle
   -- ^ Queue to execute actions on next cycle.
   }
 
--- | X11 action monad, should be run in X thread.
+-- | X11 action monad, which should be run in X thread.
 newtype XIO a = XIO (ReaderT XHandle IO a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
@@ -167,38 +167,46 @@ xQueryOnce query = do
 
 -- | Listen with certain event mask at certain window.
 --
--- Task variable should be cared of as soon as possible, as it would put the event loop in halt.
+-- Emits value when the third parameter, emitter, yields something.
 --
--- Begins with optional starting value, emits task when the handling yields something.
-xListenTo ::
+-- Each register to the source is considered independent,
+-- and the emitting action will run for each registered handler.
+--
+-- Thus, avoid registering many times if possible.
+xListenSource ::
   EventMask ->
   Window ->
-  Maybe a ->
   (Event -> XIO (Maybe a)) ->
-  XIO (Task a)
-xListenTo mask window initial emitWith = do
-  handle <- XIO ask
-  liftIO $ do
-    key <- newUnique
-    listenQueue <- newTQueueIO
-    let writeIfPresent = traverse_ @Maybe (atomically . writeTQueue listenQueue)
-    writeIfPresent initial
-
-    let onEvent event = runXIO handle (xOnWindow window $ emitWith event) >>= writeIfPresent
-        beginListen = modListen handle (insertListen window key MkXListen{..})
-        endListen = modListen handle (deleteListen window key)
-    beginListen
-    pure $
-      MkTask
-        { stop = atomically $ writeTQueue handle.actQueue endListen
-        , emit = atomically $ readTQueue listenQueue
-        }
+  XIO (Source a)
+xListenSource mask window emitWith = do
+  XHook hook <- getXHook <$> XIO ask
+  pure $ sourceWithUnreg $ \srcHandler -> do
+    tid <- forkIO $
+      bracket (beginListen hook) (endListen hook) $ \(_key, queue) ->
+        forever $ atomically (readTQueue queue) >>= srcHandler
+    -- Killing the thread will trigger endListen, as the thread terminates.
+    pure $ killThread tid
   where
-    -- Atomic modification, so can be called from any thread.
-    modListen handle modify = do
-      mask <- atomicModifyIORef' handle.listeners $
-        \old -> let new = modify old in (new, maskFor window new)
-      runXIO handle . liftDWIO $ \disp _ -> selectInput disp window mask
+    modListen modify = do
+      handle <- XIO ask
+      liftIO $ modifyIORef' handle.listeners modify
+      mask <- maskFor window <$> liftIO (readIORef handle.listeners)
+      liftDWIO $ \disp _ -> selectInput disp window mask
+
+    beginListen hook = do
+      key <- newUnique
+      queue <- newTQueueIO
+      hook $ do
+        handle <- XIO ask
+        let onEvent event = runXIO handle (handleEvent queue event)
+        modListen (insertListen window key MkXListen{..})
+      pure (key, queue)
+
+    endListen hook (key, _queue) = hook $ modListen (deleteListen window key)
+
+    handleEvent queue event = xOnWindow window $ do
+      emitted <- emitWith event
+      liftIO $ traverse_ @Maybe (atomically . writeTQueue queue) emitted
 
 -- | Send event with certain mask to certain window, through the X11 thread.
 --
@@ -206,17 +214,16 @@ xListenTo mask window initial emitWith = do
 -- During the specifying process, the target window is set to the second parameter.
 --
 -- This one does not support event propagation.
-xSendTo ::
+xSendSink ::
   EventMask ->
   Window ->
   (XEventPtr -> a -> XIO ()) ->
-  XIO (a -> IO ())
--- MAYBE Further flesh this out when I got time
-xSendTo mask window factory = do
+  XIO (Sink a)
+xSendSink mask window eventFactory = do
   XHook hook <- getXHook <$> XIO ask
   pure $ \arg -> hook $ do
     handle <- XIO ask
     -- This action is being queued for later.
     liftIO . allocaXEvent $ \event -> runXIO handle . xOnWindow window $ do
-      factory event arg
+      eventFactory event arg
       liftDWIO $ \d w -> sendEvent d w True mask event

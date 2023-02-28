@@ -10,19 +10,21 @@ module Status.X11.XListen (
 ) where
 
 import Control.Monad
+import Data.Bits
+import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Unique
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Extras
-import Data.Foldable
-import Data.Bits
 
 newtype XListeners = MkXListeners (M.Map Window (M.Map Unique XListen))
 
 data XListen = MkXListen
   { mask :: !EventMask
   , onEvent :: Event -> IO ()
+  -- onEvent should be @Event -> XIO ()@,
+  -- but this introduces cyclic dependency between modules.
   }
 
 newXListeners :: XListeners

@@ -3,7 +3,6 @@
 
 module System.Applet.SysCtrl (sysCtrlBtn) where
 
-import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
@@ -32,7 +31,7 @@ sysCtrlBtn parent = withRunInIO $ \unlift -> do
   View{..} <- view (T.pack uiFile) parent
 
   network <- compile $ do
-    callEvent <- sourceEvent (taskToSource watch)
+    callEvent <- sourceEvent watch
     actEvent <- sourceEvent toAct
 
     -- Problem: Calling "openWindow" somehow does not grab focus correctly.
@@ -94,12 +93,12 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
 data SysCtrlCall = SysCtrlCall
 
-sysCtrlListen :: XIO (Task SysCtrlCall)
+sysCtrlListen :: XIO (Source SysCtrlCall)
 sysCtrlListen = do
   rootWin <- xWindow
   ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"
   ctrlSys <- xAtom "_XMONAD_CTRL_SYS"
-  xListenTo structureNotifyMask rootWin Nothing $ \case
+  xListenSource structureNotifyMask rootWin $ \case
     ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
       | msgTyp == ctrlTyp
       , fromIntegral subTyp == ctrlSys -> do
