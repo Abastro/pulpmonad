@@ -94,6 +94,7 @@ xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
 -- TODO Prevent waits while running X handling?
 newtype XHook = XHook (forall a. XIO a -> IO a)
 
+-- | Monad with a hook into X handling.
 class MonadIO m => MonadXHook m where
   askXHook :: m XHook
 
@@ -101,9 +102,9 @@ class MonadIO m => MonadXHook m where
 runXHook :: MonadXHook m => XIO a -> m a
 runXHook act = askXHook >>= \(XHook hook) -> liftIO (hook act)
 
--- | Starts X handler and provides X handling to the action.
+-- | Starts X handler and provides X hook to the action.
 --
--- The X handling allows to register listeners and senders from any thread.
+-- The X hook allows to register listeners and senders from any thread.
 --
 -- NOTE: non-fatal X errors are ignored.
 withXHook :: (XHook -> IO a) -> IO a
@@ -157,7 +158,7 @@ getXHook handle = XHook $ \act -> do
 -- | Take X query commands, give the action to query the result.
 -- The query will be performed in the X thread.
 --
--- WARNING: the returned action can block while querying the result.
+-- WARNING: the returned action will block until result is available.
 --
 -- The query should not throw.
 xQueryOnce :: (a -> XIO b) -> XIO (a -> IO b)

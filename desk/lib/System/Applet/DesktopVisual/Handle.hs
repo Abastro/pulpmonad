@@ -71,9 +71,8 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   -- UI thread here
   mainView <- Glib.new MainView.AsView []
 
-  let getRawIcon = unlift . wrapGetRaw . winGetIcon
-      updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new DeskView.AsView [])
-      updateWin = updateWindow unlift winSetup appInfoCol (Gtk.uiCreate $ Glib.new WinView.AsView []) trackWinInfo getRawIcon
+  let updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new DeskView.AsView [])
+      updateWin = updateWindow unlift winSetup appInfoCol (Gtk.uiCreate $ Glib.new WinView.AsView []) trackWinInfo
 
   actuated <- newEmptyMVar
   network <- compile $ do
@@ -231,11 +230,10 @@ updateWindow ::
   AppInfoCol ->
   IO (MVar WinView.View) ->
   (Window -> IO (Maybe PerWinRcvs)) ->
-  (Window -> IO [Gtk.RawIcon]) ->
   Maybe WinItem ->
   (Window, Int) ->
   MomentIO (Maybe WinItem)
-updateWindow unlift setup appInfoCol mkView trackInfo winGetRaw old (windowId, winIndex) = runMaybeT $ updated <|> createWindow
+updateWindow unlift setup appInfoCol mkView trackInfo old (windowId, winIndex) = runMaybeT $ updated <|> createWindow
   where
     createWindow = do
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
@@ -254,7 +252,7 @@ updateWindow unlift setup appInfoCol mkView trackInfo winGetRaw old (windowId, w
 
         -- Apply the received information on the window.
         free4 <- reactEvent $ applyWindowState view <$> fst dWinInfo
-        free5 <- syncBehaviorWA bSpecify $ applySpecifiedIcon (winGetRaw windowId) view
+        free5 <- syncBehaviorWA bSpecify $ applySpecifiedIcon (unlift $ wrapGetRaw getWinIcon) view
         let delete = free1 <> free2 <> free3 <> free4 <> free5
 
         pure WinItem{..}
@@ -402,12 +400,12 @@ data DeskVisRcvs = DeskVisRcvs
   , trackWinInfo :: Window -> IO (Maybe PerWinRcvs)
   , reqActivate :: Window -> IO ()
   , reqToDesktop :: Int -> IO ()
-  , winGetIcon :: Window -> GetXIcon
   }
 
 data PerWinRcvs = PerWinRcvs
   { winDesktop :: !(Steps Int)
   , winInfo :: !(Steps WindowInfo)
+  , getWinIcon :: !GetXIcon
   }
 
 -- | Desktop visualizer event handle initiate.
@@ -426,13 +424,12 @@ deskVisInitiate = do
   trackWinInfo <- xQueryOnce $ \window -> fmap eitherMay . runExceptT $ do
     winDesktop <- ExceptT $ watchXQuery window getWindowDesktop pure
     winInfo <- ExceptT $ watchXQuery window getWindowInfo pure
+    queryWinIcon <- lift . xQueryOnce $ \() -> xOnWindow window (runXQuery getWindowIcon)
+    let getWinIcon = first (formatXQError window) <$> queryWinIcon ()
     pure PerWinRcvs{..}
 
   reqActivate <- reqActiveWindow True
   reqToDesktop <- reqCurrentDesktop
-
-  winGetIcon <- xQueryOnce $ \window -> do
-    first (formatXQError window) <$> xOnWindow window (runXQuery getWindowIcon)
 
   pure DeskVisRcvs{..}
   where
