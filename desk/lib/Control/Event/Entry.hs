@@ -19,8 +19,10 @@ module Control.Event.Entry (
   exeMapAccum,
   exeAccumD,
   syncBehavior,
+  syncBehaviorWA,
   syncBehaviorDiff,
   reactEvent,
+  reactEvent',
   loopSource,
   taskToSource,
   taskToBehavior,
@@ -104,7 +106,7 @@ stepsBehavior steps = snd <$> stepsDiscrete steps
 stepsBehaviorWA :: Steps a -> MomentIO (Behavior a, IO ())
 stepsBehaviorWA (MkSteps initial later) = do
   (event, free) <- sourceEventWA later
-  (, free) <$> stepper initial event
+  (,free) <$> stepper initial event
 
 -- MAYBE diffEvent should accept `a -> Future a -> Future b` for more descriptive types
 
@@ -149,11 +151,16 @@ exeAccumD initial eFn = do
 -- | Sync with behavior using given sink.
 syncBehavior :: Behavior a -> Sink a -> MomentIO ()
 syncBehavior behav sink = do
-  -- Reflects initial value
-  initial <- valueBLater behav
-  liftIOLater $ sink initial
-  chEvent <- changes behav
-  reactimate' (fmap sink <$> chEvent)
+  let actB = sink <$> behav
+  liftIOLater =<< valueBLater actB -- Initial
+  reactimate' =<< changes actB -- Step
+
+-- | Sync with behavior using given sink, and returns a freeing action.
+syncBehaviorWA :: Behavior a -> Sink a -> MomentIO (IO ())
+syncBehaviorWA behav sink = do
+  let actB = sink <$> behav
+  liftIOLater =<< valueBLater actB -- Initial
+  reactEvent' =<< changes actB -- Step  
 
 -- | Sync with behavior difference from the default value.
 --
@@ -165,19 +172,26 @@ syncBehaviorDiff compDiff def behav sink = do
   eDiff <- diffEvent compDiff behav
   reactimate' (fmap sink <$> eDiff)
 
+reactWith :: (Event a -> MomentIO ()) -> Event a -> MomentIO (IO ())
+reactWith reacts event = do
+  (eFree, free) <- newEvent
+  -- Hopefully this allows eFree to be freed.
+  eFreeOnce <- once eFree
+  eLimited <- switchE event (never <$ eFreeOnce)
+  reacts eLimited
+  -- Forks to avoid deadlock when called inside `execute`.
+  pure (void $ forkIO $ free ())
+
 -- | React based on event, returning freeing action.
 --
 -- Freeing does not remove the reactimate itself,
 -- but allows the action itself to be discarded with event.
 reactEvent :: Event (IO ()) -> MomentIO (IO ())
-reactEvent event = do
-  (eFree, free) <- newEvent
-  -- Hopefully this allows eFree to be freed.
-  eFreeOnce <- once eFree
-  eLimited <- switchE event (never <$ eFreeOnce)
-  reactimate eLimited
-  -- Forks to avoid deadlock when called inside `execute`.
-  pure (void $ forkIO $ free ())
+reactEvent = reactWith reactimate
+
+-- | reactEvent, but can deal with 'Future' values.
+reactEvent' :: Event (Future (IO ())) -> MomentIO (IO ())
+reactEvent' = reactWith reactimate'
 
 -- | Looping source from performing action with cleanup.
 -- Forks a thread on each register call, so each handler would receive calls separately.

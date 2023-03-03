@@ -246,7 +246,7 @@ updateWindow unlift setup appInfoCol mkView trackInfo winGetRaw old (windowId, w
         (dWinInfo, free2) <- stepsDiscreteWA winInfo
 
         -- Specify the window icon.
-        dSpecify <- iconSpecifier unlift setup appInfoCol dWinInfo
+        (_, bSpecify) <- iconSpecifier unlift setup appInfoCol dWinInfo
 
         -- Take window view as late as possible.
         view <- liftIO $ takeMVar varWindowView
@@ -254,8 +254,7 @@ updateWindow unlift setup appInfoCol mkView trackInfo winGetRaw old (windowId, w
 
         -- Apply the received information on the window.
         free4 <- reactEvent $ applyWindowState view <$> fst dWinInfo
-        -- TODO Need to apply first value as well.
-        free5 <- reactEvent $ applySpecifiedIcon (winGetRaw windowId) view <$> fst dSpecify
+        free5 <- syncBehaviorWA bSpecify $ applySpecifiedIcon (winGetRaw windowId) view
         let delete = free1 <> free2 <> free3 <> free4 <> free5
 
         pure WinItem{..}
@@ -311,7 +310,8 @@ iconSpecifier unlift setup appInfoCol (eWinInfo, bWinInfo) = do
   rec initSpecify <- liftIO . unlift $ onClassChange (initClasses, initInfo)
       eSpecifyOnClass <- execute $ onClassChange <$> eClassChange
       let eSpecifyOnInfo = filterJust $ flip iconOnInfoChange <$> bSpecify <@> eInfoChange
-          -- eSpecifyOnClass takes priority - not that it matters, eInfoChange is disjoint
+          -- eSpecifyOnClass takes priority.
+          -- Not that it matters, as the two events are disjoint.
           eSpecify = unionWith const eSpecifyOnClass eSpecifyOnInfo
       bSpecify <- stepper initSpecify eSpecify
   pure (eSpecify, bSpecify)
