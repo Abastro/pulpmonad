@@ -201,8 +201,7 @@ imgNameSet pixelSize mayTheme name = do
     _ -> withDefTheme
   where
     panelName = name <> T.pack "-panel" -- Looks up first with "-panel" suffix
-    loadFlags = [Gtk.IconLookupFlagsUseBuiltin, Gtk.IconLookupFlagsGenericFallback]
-    -- Uses pixbuf, because somehow lookup directory is different.
+    loadFlags = [Gtk.IconLookupFlagsUseBuiltin, Gtk.IconLookupFlagsGenericFallback, Gtk.IconLookupFlagsForceSize]
     withDefTheme = Gtk.iconThemeGetDefault >>= setPixbuf
     forCustomTheme themePath = customIconTheme themePath >>= setPixbuf
     directPath themePath name =
