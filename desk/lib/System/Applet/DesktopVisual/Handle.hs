@@ -1,4 +1,5 @@
 {-# LANGUAGE RecursiveDo #-}
+
 module System.Applet.DesktopVisual.Handle (
   NumWindows,
   GetXIcon,
@@ -71,9 +72,8 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   mainView <- Glib.new MainView.AsView []
 
   let getRawIcon = unlift . wrapGetRaw . winGetIcon
-      specifyIcon = fmap unlift . specifyWindowIcon winSetup appInfoCol
       updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new DeskView.AsView [])
-      updateWin = updateWindow (Gtk.uiCreate $ Glib.new WinView.AsView []) trackWinInfo getRawIcon specifyIcon
+      updateWin = updateWindow unlift winSetup appInfoCol (Gtk.uiCreate $ Glib.new WinView.AsView []) trackWinInfo getRawIcon
 
   actuated <- newEmptyMVar
   network <- compile $ do
@@ -226,14 +226,16 @@ windowMap update (eList, bList) = do
       news <$ onRemainderRight (\win -> liftIO win.delete) news olds
 
 updateWindow ::
+  (forall a. PulpIO a -> IO a) ->
+  WindowSetup ->
+  AppInfoCol ->
   IO (MVar WinView.View) ->
   (Window -> IO (Maybe PerWinRcvs)) ->
   (Window -> IO [Gtk.RawIcon]) ->
-  ((Bool, WindowInfo) -> IconSpecify -> IO (Maybe IconSpecify)) ->
   Maybe WinItem ->
   (Window, Int) ->
   MomentIO (Maybe WinItem)
-updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) = runMaybeT $ updated <|> createWindow
+updateWindow unlift setup appInfoCol mkView trackInfo winGetRaw old (windowId, winIndex) = runMaybeT $ updated <|> createWindow
   where
     createWindow = do
       PerWinRcvs{..} <- MaybeT . liftIO $ trackInfo windowId
@@ -244,7 +246,7 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
         (dWinInfo, free2) <- stepsDiscreteWA winInfo
 
         -- Specify the window icon.
-        dSpecify <- iconSpecifier updateSpecify dWinInfo
+        dSpecify <- iconSpecifier unlift setup appInfoCol dWinInfo
 
         -- Take window view as late as possible.
         view <- liftIO $ takeMVar varWindowView
@@ -252,6 +254,7 @@ updateWindow mkView trackInfo winGetRaw updateSpecify old (windowId, winIndex) =
 
         -- Apply the received information on the window.
         free4 <- reactEvent $ applyWindowState view <$> fst dWinInfo
+        -- TODO Need to apply first value as well.
         free5 <- reactEvent $ applySpecifiedIcon (winGetRaw windowId) view <$> fst dSpecify
         let delete = free1 <> free2 <> free3 <> free4 <> free5
 
@@ -289,57 +292,62 @@ applyWindowState view WindowInfo{..} = do
   WinView.setStates view (S.toList windowState)
 
 -- From EWMH is the default
-data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !WindowInfo !(WindowInfo -> IO Gio.Icon) | FromEWMH
+data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !WindowInfo (WindowInfo -> IO Gio.Icon) | FromEWMH
 
 -- | Icon specifier event stream to update the icon.
 iconSpecifier ::
-  ((Bool, WindowInfo) -> IconSpecify -> IO (Maybe IconSpecify)) ->
-  Discrete WindowInfo ->
-  MomentIO (Discrete IconSpecify)
-iconSpecifier updateSpecify (eWinInfo, bWinInfo) = do
-  initInfo <- valueB bWinInfo
-  let eClassChangeWithInfo = classChangeWithInfo <$> bWinInfo <@> eWinInfo
-  -- TODO These changes are just for optimization.
-  -- How would I implement these efficiently?
-  (mayInitSpecify, _) <- update (True, initInfo) FromEWMH
-  let initSpecify = fromMaybe FromEWMH mayInitSpecify
-  (eMaySpecify, _) <- exeMapAccum initSpecify (update <$> eClassChangeWithInfo)
-  let eSpecify = filterJust eMaySpecify
-  bSpecify <- stepper initSpecify eSpecify
-  pure (eSpecify, bSpecify)
-  where
-    classChangeWithInfo oldInfo newInfo = (newInfo.windowClasses /= oldInfo.windowClasses, newInfo)
-    nextSpecs oldSpec mayNewSpec = (mayNewSpec, fromMaybe oldSpec mayNewSpec)
-    update newCI oldSpec = nextSpecs oldSpec <$> liftIO (updateSpecify newCI oldSpec)
-
--- | Update specifier of window icon, gives Nothing to not update.
-specifyWindowIcon ::
+  (forall a. PulpIO a -> IO a) ->
   WindowSetup ->
   AppInfoCol ->
-  (Bool, WindowInfo) ->
-  IconSpecify ->
-  PulpIO (Maybe IconSpecify)
-specifyWindowIcon WindowSetup{..} appCol (classChanged, winInfo) oldSpecify = withRunInIO $ \unlift -> do
-  if classChanged then Just <$> onClassChange unlift else pure onInfoChange
-  where
-    -- Class change: Re-evaluates from front to back.
-    -- Always updates. (EWMH: Will think later)
-    onClassChange unlift = do
-      spec <-
-        runMaybeT . getAlt . foldMap Alt $
-          [ mapMaybeT unlift (FromAppIcon <$> appInfoImgSetter appCol winInfo.windowClasses)
-          , (MaybeT . pure) (FromCustom winInfo <$> windowImgIcon winInfo.windowClasses)
-          ]
-      pure $ fromMaybe FromEWMH spec
+  Discrete WindowInfo ->
+  MomentIO (Discrete IconSpecify)
+iconSpecifier unlift setup appInfoCol (eWinInfo, bWinInfo) = do
+  initInfo <- valueB bWinInfo
+  let initClasses = initInfo.windowClasses
+      (eClassChange, eInfoChange) = split $ branchClassChange <$> bWinInfo <@> eWinInfo
 
-    -- No class change: Specific to each type.
-    onInfoChange = case oldSpecify of
-      -- App Icon is static.
-      FromAppIcon _ -> Nothing
-      -- Always update to match window info.
-      FromCustom _ getIcon -> Just $ FromCustom winInfo getIcon
-      -- Never updates EWMH specify depending on window info.
-      FromEWMH -> Nothing
+  -- TODO This is not ideal.
+  -- Application of such change would be better handled outside the network.
+  rec initSpecify <- liftIO . unlift $ onClassChange (initClasses, initInfo)
+      eSpecifyOnClass <- execute $ onClassChange <$> eClassChange
+      let eSpecifyOnInfo = filterJust $ flip iconOnInfoChange <$> bSpecify <@> eInfoChange
+          -- eSpecifyOnClass takes priority - not that it matters, eInfoChange is disjoint
+          eSpecify = unionWith const eSpecifyOnClass eSpecifyOnInfo
+      bSpecify <- stepper initSpecify eSpecify
+  pure (eSpecify, bSpecify)
+  where
+    onClassChange (classes, info) = liftIO . unlift $ iconOnClassChange setup appInfoCol classes info
+    branchClassChange oldInfo newInfo =
+      if newInfo.windowClasses /= oldInfo.windowClasses
+        then Left (newInfo.windowClasses, newInfo)
+        else Right newInfo
+
+-- | On class change, re-evaluates from front to back.
+-- Always invoke icon update.
+iconOnClassChange ::
+  WindowSetup ->
+  AppInfoCol ->
+  V.Vector T.Text ->
+  WindowInfo ->
+  PulpIO IconSpecify
+iconOnClassChange WindowSetup{..} appCol winClasses winInfo = withRunInIO $ \unlift -> do
+  spec <-
+    runMaybeT . getAlt . foldMap Alt $
+      [ mapMaybeT unlift (FromAppIcon <$> appInfoImgSetter appCol winClasses)
+      , (MaybeT . pure) (FromCustom winInfo <$> windowImgIcon winClasses)
+      ]
+  pure $ fromMaybe FromEWMH spec
+
+-- | Window info change without class change.
+-- Handling depends on type, may not update.
+iconOnInfoChange :: WindowInfo -> IconSpecify -> Maybe IconSpecify
+iconOnInfoChange newInfo = \case
+  -- App Icon is static.
+  FromAppIcon _ -> Nothing
+  -- Always update to match window info.
+  FromCustom _ getIcon -> Just $ FromCustom newInfo getIcon
+  -- Never updates EWMH specify depending on window info.
+  FromEWMH -> Nothing
 
 applySpecifiedIcon ::
   IO [Gtk.RawIcon] ->
