@@ -2,7 +2,6 @@
 
 module System.Applet.Layout (LayoutArg (..), layout) where
 
-import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
@@ -32,11 +31,11 @@ layout LayoutArg{..} = withRunInIO $ \unlift -> do
   let onLayout layout = setLabel (layoutPrettyName layout)
 
   network <- compile $ do
-    clickEvent <- sourceEvent clicks
-    layoutEvent <- sourceEvent (taskToSource curLayout)
+    eClick <- sourceEvent clicks
+    bLayout <- stepsBehavior curLayout
 
-    reactimate (reqToLayout . clickReq <$> clickEvent)
-    reactimate (Gtk.uiSingleRun . onLayout <$> layoutEvent)
+    reactimate (reqToLayout . clickReq <$> eClick)
+    syncBehavior bLayout (Gtk.uiSingleRun . onLayout)
   actuate network
 
   pure layoutWid
@@ -80,7 +79,7 @@ view uiFile = Gtk.buildFromFile uiFile $ do
 --------------------------------------------------------------------}
 
 data LayoutComm = LayoutComm
-  { curLayout :: Task T.Text
+  { curLayout :: Steps T.Text
   , reqToLayout :: Sink LayoutCmd
   }
 
