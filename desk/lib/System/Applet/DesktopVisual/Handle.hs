@@ -1,3 +1,4 @@
+{-# LANGUAGE RecursiveDo #-}
 module System.Applet.DesktopVisual.Handle (
   NumWindows,
   GetXIcon,
@@ -298,9 +299,14 @@ iconSpecifier ::
 iconSpecifier updateSpecify (eWinInfo, bWinInfo) = do
   initInfo <- valueB bWinInfo
   let eClassChangeWithInfo = classChangeWithInfo <$> bWinInfo <@> eWinInfo
-  (initSpecify, _) <- update (True, initInfo) FromEWMH
-  (eMaySpecify, _) <- exeMapAccum (fromMaybe FromEWMH initSpecify) (update <$> eClassChangeWithInfo)
-  pure (undefined $ filterJust eMaySpecify)
+  -- TODO These changes are just for optimization.
+  -- How would I implement these efficiently?
+  (mayInitSpecify, _) <- update (True, initInfo) FromEWMH
+  let initSpecify = fromMaybe FromEWMH mayInitSpecify
+  (eMaySpecify, _) <- exeMapAccum initSpecify (update <$> eClassChangeWithInfo)
+  let eSpecify = filterJust eMaySpecify
+  bSpecify <- stepper initSpecify eSpecify
+  pure (eSpecify, bSpecify)
   where
     classChangeWithInfo oldInfo newInfo = (newInfo.windowClasses /= oldInfo.windowClasses, newInfo)
     nextSpecs oldSpec mayNewSpec = (mayNewSpec, fromMaybe oldSpec mayNewSpec)
@@ -316,15 +322,13 @@ specifyWindowIcon ::
 specifyWindowIcon WindowSetup{..} appCol (classChanged, winInfo) oldSpecify = withRunInIO $ \unlift -> do
   if classChanged then Just <$> onClassChange unlift else pure onInfoChange
   where
-    WindowInfo{windowClasses} = winInfo
-
     -- Class change: Re-evaluates from front to back.
     -- Always updates. (EWMH: Will think later)
     onClassChange unlift = do
       spec <-
         runMaybeT . getAlt . foldMap Alt $
-          [ mapMaybeT unlift (FromAppIcon <$> appInfoImgSetter appCol windowClasses)
-          , (MaybeT . pure) (FromCustom winInfo <$> windowImgIcon windowClasses)
+          [ mapMaybeT unlift (FromAppIcon <$> appInfoImgSetter appCol winInfo.windowClasses)
+          , (MaybeT . pure) (FromCustom winInfo <$> windowImgIcon winInfo.windowClasses)
           ]
       pure $ fromMaybe FromEWMH spec
 
