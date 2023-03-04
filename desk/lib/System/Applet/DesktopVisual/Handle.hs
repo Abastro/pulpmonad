@@ -301,11 +301,11 @@ iconSpecifier ::
   AppInfoCol ->
   InitedEvent WindowInfo ->
   MomentIO (Behavior IconSpecify)
-iconSpecifier unlift setup appInfoCol ieWinInfo = do
-  bWinInfo <- initedBehavior ieWinInfo -- Tracks old WinInfo
-  let (eClassChange, eInfoChange) = split $ branchClassChange <$> bWinInfo <@> ieWinInfo.update
+iconSpecifier unlift setup appInfoCol iWinInfo = do
+  bWinInfo <- initedBehavior iWinInfo -- Tracks old WinInfo
+  let (eClassChange, eInfoChange) = split $ branchClassChange <$> bWinInfo <@> iWinInfo.update
 
-  rec initSpecify <- onClassChange ieWinInfo.initial
+  rec initSpecify <- onClassChange iWinInfo.initial
       eSpecifyOnClass <- execute $ onClassChange <$> eClassChange
       let eSpecifyOnInfo = filterJust $ flip iconOnInfoChange <$> bSpecify <@> eInfoChange
           -- eSpecifyOnClass takes priority.
