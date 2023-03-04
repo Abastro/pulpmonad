@@ -77,15 +77,15 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
 
   actuated <- newEmptyMVar
   -- TODO Require forkIO on network setup
+  -- TOOD Initialization event could be better approach than "inited" everywhere
   forkIO $ do
     network <- compile $ do
-      -- TODO Initiation?
-      dDesktopList <- stepsDiscrete desktopStats
-      dWindowList <- stepsDiscrete windowsList
+      iDesktopList <- stepsInited desktopStats
+      iWindowList <- stepsInited windowsList
       bActiveWindow <- stepsBehavior windowActive
 
-      (eDesktops, bDesktops) <- desktopList updateDesk dDesktopList
-      (eWindows, bWindows) <- windowMap updateWin dWindowList
+      (iDesktops, bDesktops) <- desktopList updateDesk iDesktopList
+      (iWindows, bWindows) <- windowMap updateWin iWindowList
       let bDeskViews = V.map (\desk -> desk.view) <$> bDesktops
           bWinViews = M.map (\win -> win.view) <$> bWindows
           -- Can change when window list changes, for window list change could lag behind.
@@ -93,7 +93,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
           bActiveView = (\views win -> (views M.!?) =<< win) <$> bWinViews <*> bActiveWindow
 
       -- Behavior updates at next step of eWindows, in sync with bWinView
-      bWinDeskPairs <- switchDB (asWinDeskPairs <$> eWindows, asWinDeskPairs <$> bWindows)
+      bWinDeskPairs <- switchIB (asWinDeskPairs <$> iWindows)
       let bWinDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> bWinDeskPairs
 
       -- Compute and apply container differences.
@@ -103,16 +103,17 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
       -- Sync with activated window.
       syncBehaviorDiff (-->) Nothing bActiveView applyActiveWindow
 
-      -- Window list update changes window order. We do not care of desktop changes.
-      reactimate $ applyWindowPriority <$> bDesktops <@> eWindows
+      -- Window list update changes window order in batch. We do not care of desktop changes.
+      liftIOLater $ applyWindowPriority iDesktops.initial iWindows.initial
+      reactimate $ applyWindowPriority <$> bDesktops <@> iWindows.update
 
       -- Visibility depends on both desktop state and window count.
       let deskWithWinCnt = pairDeskCnt <$> bWinDeskPairs <*> bDesktops
       syncBehavior deskWithWinCnt $ traverse_ (uncurry $ applyDesktopVisible deskSetup)
 
       -- Activations to send to X11.
-      eDesktopActivate <- switchDE (desktopActivates <$> eDesktops, desktopActivates <$> bDesktops)
-      eWindowActivate <- switchDE (windowActivates <$> eWindows, windowActivates <$> bWindows)
+      eDesktopActivate <- switchIE (desktopActivates <$> iDesktops)
+      eWindowActivate <- switchIE (windowActivates <$> iWindows)
 
       reactimate $ traverse_ reqToDesktop <$> eDesktopActivate
       reactimate $ traverse_ reqActivate <$> eWindowActivate
@@ -147,8 +148,6 @@ data WinItem = WinItem
   , delete :: !(IO ())
   }
 
--- MAYBE Try Tidings?
-
 type ViewPair = (WinView.View, DeskView.View)
 
 asViewPairMap ::
@@ -182,12 +181,13 @@ applyPairDiff = applyImpure $ \case
 -- TODO Need a test that same ID points towards the same View. Likely require restructure.
 desktopList ::
   (Maybe DeskItem -> DesktopStat -> MomentIO DeskItem) ->
-  Discrete (V.Vector DesktopStat) ->
-  MomentIO (Discrete (V.Vector DeskItem))
-desktopList update (eStat, bStat) = do
-  initStats <- valueB bStat
-  initList <- updateFn initStats V.empty -- Initial update.
-  exeAccumD initList (updateFn <$> eStat)
+  InitedEvent (V.Vector DesktopStat) ->
+  MomentIO (InitedEvent (V.Vector DeskItem), Behavior (V.Vector DeskItem))
+desktopList update iStat = do
+  let iUpdates = updateFn <$> iStat
+  initList <- iUpdates.initial V.empty
+  (eList, bList) <- exeAccumD initList iUpdates.update
+  pure (MkInited initList eList, bList)
   where
     updateFn stats olds = do
       news <- zipToRightM update olds stats
@@ -206,8 +206,6 @@ updateDesktop setup mkView old desktopStat = do
   where
     createDesktop = do
       view <- liftIO (mkView >>= takeMVar)
-      -- FIXME Somehow here we are having problem.
-      -- Actually.. am I spawning this from main thread?
       (eDesktopClick, free1) <- sourceEventWA (DeskView.clickSource view)
       let delete = free1
       pure DeskItem{..}
@@ -215,13 +213,13 @@ updateDesktop setup mkView old desktopStat = do
 
 windowMap ::
   (Maybe WinItem -> (Window, Int) -> MomentIO (Maybe WinItem)) ->
-  Discrete (V.Vector Window) ->
-  MomentIO (Discrete (M.Map Window WinItem))
-windowMap update (eList, bList) = do
-  initWins <- asMapWithIdx <$> valueB bList
-  let eWinIdx = asMapWithIdx <$> eList
-  initMap <- updateFn initWins M.empty
-  exeAccumD initMap (updateFn <$> eWinIdx)
+  InitedEvent (V.Vector Window) ->
+  MomentIO (InitedEvent (M.Map Window WinItem), Behavior (M.Map Window WinItem))
+windowMap update iList = do
+  let iUpdates = updateFn . asMapWithIdx <$> iList
+  initMap <- iUpdates.initial M.empty
+  (eMap, bMap) <- exeAccumD initMap iUpdates.update
+  pure (MkInited initMap eMap, bMap)
   where
     asMapWithIdx list = M.mapWithKey (,) . M.fromList $ zip (V.toList list) [0 ..]
     updateFn winIdxs olds = do
@@ -245,17 +243,18 @@ updateWindow unlift setup appInfoCol mkView trackInfo old (windowId, winIndex) =
       lift $ do
         -- Currently, actual listening to window is tied with UI.
         (bWindowDesktop, free1) <- stepsBehaviorWA winDesktop
-        (dWinInfo, free2) <- stepsDiscreteWA winInfo
+        (iWinInfo, free2) <- stepsInitedWA winInfo
+        bWinInfo <- initedBehavior iWinInfo
 
         -- Specify the window icon.
-        (_, bSpecify) <- iconSpecifier unlift setup appInfoCol dWinInfo
+        bSpecify <- iconSpecifier unlift setup appInfoCol iWinInfo
 
         -- Take window view as late as possible.
         view <- liftIO $ takeMVar varWindowView
         (eWindowClick, free3) <- sourceEventWA (WinView.clickSource view)
 
         -- Apply the received information on the window.
-        free4 <- syncBehaviorWA (snd dWinInfo) (applyWindowState view)
+        free4 <- syncBehaviorWA bWinInfo (applyWindowState view)
         free5 <- syncBehaviorWA bSpecify $ applySpecifiedIcon (unlift $ wrapGetRaw getWinIcon) view
         let delete = free1 <> free2 <> free3 <> free4 <> free5
 
@@ -300,28 +299,25 @@ iconSpecifier ::
   (forall a. PulpIO a -> IO a) ->
   WindowSetup ->
   AppInfoCol ->
-  Discrete WindowInfo ->
-  MomentIO (Discrete IconSpecify)
-iconSpecifier unlift setup appInfoCol (eWinInfo, bWinInfo) = do
-  initInfo <- valueB bWinInfo
-  let initClasses = initInfo.windowClasses
-      (eClassChange, eInfoChange) = split $ branchClassChange <$> bWinInfo <@> eWinInfo
+  InitedEvent WindowInfo ->
+  MomentIO (Behavior IconSpecify)
+iconSpecifier unlift setup appInfoCol ieWinInfo = do
+  bWinInfo <- initedBehavior ieWinInfo -- Tracks old WinInfo
+  let (eClassChange, eInfoChange) = split $ branchClassChange <$> bWinInfo <@> ieWinInfo.update
 
-  -- TODO This is not ideal.
-  -- Application of such change would be better handled outside the network.
-  rec initSpecify <- liftIO . unlift $ onClassChange (initClasses, initInfo)
+  rec initSpecify <- onClassChange ieWinInfo.initial
       eSpecifyOnClass <- execute $ onClassChange <$> eClassChange
       let eSpecifyOnInfo = filterJust $ flip iconOnInfoChange <$> bSpecify <@> eInfoChange
           -- eSpecifyOnClass takes priority.
           -- Not that it matters, as the two events are disjoint.
           eSpecify = unionWith const eSpecifyOnClass eSpecifyOnInfo
       bSpecify <- stepper initSpecify eSpecify
-  pure (eSpecify, bSpecify)
+  pure bSpecify
   where
-    onClassChange (classes, info) = liftIO . unlift $ iconOnClassChange setup appInfoCol classes info
+    onClassChange info = liftIO . unlift $ iconOnClassChange setup appInfoCol info.windowClasses info
     branchClassChange oldInfo newInfo =
       if newInfo.windowClasses /= oldInfo.windowClasses
-        then Left (newInfo.windowClasses, newInfo)
+        then Left newInfo
         else Right newInfo
 
 -- | On class change, re-evaluates from front to back.

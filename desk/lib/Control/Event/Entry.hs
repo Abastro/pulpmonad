@@ -5,21 +5,23 @@ module Control.Event.Entry (
   Sink,
   Steps (..),
   Discrete,
+  InitedEvent (..),
   sourceSimple,
   sourceWithUnreg,
   sourceSink,
   sourceWaitTill,
   sourceEvent,
   sourceEventWA,
-  stepsDiscrete,
-  stepsDiscreteWA,
+  stepsInited,
+  stepsInitedWA,
   stepsBehavior,
   stepsBehaviorWA,
+  initedBehavior,
   diffEvent,
   exeMapAccum,
   exeAccumD,
-  switchDE,
-  switchDB,
+  switchIE,
+  switchIB,
   syncBehavior,
   syncBehaviorWA,
   syncBehaviorDiff,
@@ -53,6 +55,14 @@ data Steps a = MkSteps !a !(Source a)
 
 -- | Discrete behavior paired with its own update event.
 type Discrete a = (Event a, Behavior a)
+
+-- | Event with initial value.
+-- Initial value can be also considered as "Event at initiation time".
+data InitedEvent a = MkInited
+  { initial :: !a
+  , update :: !(Event a)
+  }
+  deriving (Functor)
 
 -- | Source with capability of unregistering handlers.
 --
@@ -90,25 +100,28 @@ sourceEventWA src = do
       modifyIORef' ref (<> unregister)
       pure $ pure ()
 
-stepsDiscrete :: Steps a -> MomentIO (Discrete a)
-stepsDiscrete (MkSteps initial later) = do
-  event <- sourceEvent later
-  behavior <- stepper initial event
-  pure (event, behavior)
+stepsInited :: Steps a -> MomentIO (InitedEvent a)
+stepsInited (MkSteps initial later) = do
+  update <- sourceEvent later
+  pure MkInited{..}
 
-stepsDiscreteWA :: Steps a -> MomentIO (Discrete a, IO ())
-stepsDiscreteWA (MkSteps initial later) = do
-  (event, free) <- sourceEventWA later
-  behavior <- stepper initial event
-  pure ((event, behavior), free)
+stepsInitedWA :: Steps a -> MomentIO (InitedEvent a, IO ())
+stepsInitedWA (MkSteps initial later) = do
+  (update, free) <- sourceEventWA later
+  pure (MkInited{..}, free)
 
 stepsBehavior :: Steps a -> MomentIO (Behavior a)
-stepsBehavior steps = snd <$> stepsDiscrete steps
+stepsBehavior steps = do
+  inited <- stepsInited steps
+  initedBehavior inited
 
 stepsBehaviorWA :: Steps a -> MomentIO (Behavior a, IO ())
-stepsBehaviorWA (MkSteps initial later) = do
-  (event, free) <- sourceEventWA later
-  (,free) <$> stepper initial event
+stepsBehaviorWA steps = do
+  (inited, free) <- stepsInitedWA steps
+  (, free) <$> initedBehavior inited
+
+initedBehavior :: MonadMoment m => InitedEvent a -> m (Behavior a)
+initedBehavior MkInited{..} = stepper initial update
 
 -- MAYBE diffEvent should accept `a -> Future a -> Future b` for more descriptive types
 
@@ -150,17 +163,13 @@ exeAccumD initial eFn = do
     both x = (x, x)
     withSig fn = fmap both . fn
 
--- | Switch event using Discrete.
-switchDE :: MonadMoment m => Discrete (Event a) -> m (Event a)
-switchDE (eSwitch, bSwitch) = do
-  eInitial <- valueBLater bSwitch
-  switchE eInitial eSwitch
+-- | Switch event using 'InitedEvent'.
+switchIE :: MonadMoment m => InitedEvent (Event a) -> m (Event a)
+switchIE MkInited{..} = switchE initial update
 
--- | Switch behavior using Discrete.
-switchDB :: MonadMoment m => Discrete (Behavior a) -> m (Behavior a)
-switchDB (eSwitch, bSwitch) = do
-  bInitial <- valueBLater bSwitch
-  switchB bInitial eSwitch
+-- | Switch behavior using 'InitedEvent'.
+switchIB :: MonadMoment m => InitedEvent (Behavior a) -> m (Behavior a)
+switchIB MkInited{..} = switchB initial update
 
 -- | Sync with behavior using given sink.
 syncBehavior :: Behavior a -> Sink a -> MomentIO ()
@@ -174,7 +183,7 @@ syncBehaviorWA :: Behavior a -> Sink a -> MomentIO (IO ())
 syncBehaviorWA behav sink = do
   let actB = sink <$> behav
   liftIOLater =<< valueBLater actB -- Initial
-  reactEvent' =<< changes actB -- Step  
+  reactEvent' =<< changes actB -- Step
 
 -- | Sync with behavior difference from the default value.
 --
