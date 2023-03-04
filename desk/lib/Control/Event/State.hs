@@ -197,7 +197,7 @@ instance Ord a => DiffPatching (PatchCol a) (Maybe a) (S.Set a) where
 -- | Cache stack, where each element depends on its position.
 -- Right side is the top.
 newtype CacheStack a = AsCacheStack (V.Vector a)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Semigroup, Monoid)
 
 instance Diff (PatchCol a) (CacheStack a) where
   (<--) :: CacheStack a -> CacheStack a -> PatchCol a
@@ -213,7 +213,7 @@ instance Eq a => DiffPatching (PatchCol a) (CacheStack a) (V.Vector a) where
 
 -- | Cache map, where each element is uniquely determined by the key.
 newtype CacheMap k v = AsCacheMap (M.Map k v)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Semigroup, Monoid)
 
 -- CacheMap is mapped into the value set. It is what I use.
 instance Ord k => Diff (PatchCol v) (CacheMap k v) where

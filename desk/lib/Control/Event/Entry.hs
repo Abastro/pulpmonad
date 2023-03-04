@@ -18,6 +18,8 @@ module Control.Event.Entry (
   diffEvent,
   exeMapAccum,
   exeAccumD,
+  switchDE,
+  switchDB,
   syncBehavior,
   syncBehaviorWA,
   syncBehaviorDiff,
@@ -147,6 +149,18 @@ exeAccumD initial eFn = do
   where
     both x = (x, x)
     withSig fn = fmap both . fn
+
+-- | Switch event using Discrete.
+switchDE :: MonadMoment m => Discrete (Event a) -> m (Event a)
+switchDE (eSwitch, bSwitch) = do
+  eInitial <- valueBLater bSwitch
+  switchE eInitial eSwitch
+
+-- | Switch behavior using Discrete.
+switchDB :: MonadMoment m => Discrete (Behavior a) -> m (Behavior a)
+switchDB (eSwitch, bSwitch) = do
+  bInitial <- valueBLater bSwitch
+  switchB bInitial eSwitch
 
 -- | Sync with behavior using given sink.
 syncBehavior :: Behavior a -> Sink a -> MomentIO ()

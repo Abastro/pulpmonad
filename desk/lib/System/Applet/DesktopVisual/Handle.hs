@@ -41,6 +41,7 @@ import System.Applet.DesktopVisual.DesktopVisual qualified as MainView
 import System.Applet.DesktopVisual.WindowItemView qualified as WinView
 import System.Log.LogPrint
 import System.Pulp.PulpEnv
+import Control.Concurrent
 
 type NumWindows = Word
 
@@ -75,46 +76,47 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
       updateWin = updateWindow unlift winSetup appInfoCol (Gtk.uiCreate $ Glib.new WinView.AsView []) trackWinInfo
 
   actuated <- newEmptyMVar
-  network <- compile $ do
-    -- TODO Initiation?
-    dDesktopList <- stepsDiscrete desktopStats
-    dWindowList <- stepsDiscrete windowsList
-    bActiveWindow <- stepsBehavior windowActive
+  -- TODO Require forkIO on network setup
+  forkIO $ do
+    network <- compile $ do
+      -- TODO Initiation?
+      dDesktopList <- stepsDiscrete desktopStats
+      dWindowList <- stepsDiscrete windowsList
+      bActiveWindow <- stepsBehavior windowActive
 
-    (eDesktops, bDesktops) <- desktopList updateDesk dDesktopList
-    (eWindows, bWindows) <- windowMap updateWin dWindowList
-    let bDeskViews = V.map (\desk -> desk.view) <$> bDesktops
-        bWinViews = M.map (\win -> win.view) <$> bWindows
-        -- Can change when window list changes, for window list change could lag behind.
-        -- The Maybe-bind is intended, for the view might not exist yet.
-        bActiveView = (\views win -> (views M.!?) =<< win) <$> bWinViews <*> bActiveWindow
+      (eDesktops, bDesktops) <- desktopList updateDesk dDesktopList
+      (eWindows, bWindows) <- windowMap updateWin dWindowList
+      let bDeskViews = V.map (\desk -> desk.view) <$> bDesktops
+          bWinViews = M.map (\win -> win.view) <$> bWindows
+          -- Can change when window list changes, for window list change could lag behind.
+          -- The Maybe-bind is intended, for the view might not exist yet.
+          bActiveView = (\views win -> (views M.!?) =<< win) <$> bWinViews <*> bActiveWindow
 
-    -- Behavior updates at next step of eWindows, in sync with bWinView
-    winDeskPairs <- switchB (pure S.empty) (asWinDeskPairs <$> eWindows)
-    let bWinDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> winDeskPairs
+      -- Behavior updates at next step of eWindows, in sync with bWinView
+      bWinDeskPairs <- switchDB (asWinDeskPairs <$> eWindows, asWinDeskPairs <$> bWindows)
+      let bWinDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> bWinDeskPairs
 
-    -- Compute and apply container differences.
-    eDeskDiffs <- diffEvent (-->) (AsCacheStack <$> bDeskViews)
-    ePairDiffs <- diffEvent (-->) bWinDeskPairMap
-    reactimate' $ fmap @Future (applyDeskDiff mainView) <$> eDeskDiffs
-    reactimate' $ fmap @Future applyPairDiff <$> ePairDiffs
+      -- Compute and apply container differences.
+      syncBehaviorDiff (-->) mempty (AsCacheStack <$> bDeskViews) (applyDeskDiff mainView)
+      syncBehaviorDiff (-->) mempty bWinDeskPairMap applyPairDiff
 
-    -- Sync with activated window.
-    syncBehaviorDiff (-->) Nothing bActiveView applyActiveWindow
+      -- Sync with activated window.
+      syncBehaviorDiff (-->) Nothing bActiveView applyActiveWindow
 
-    -- Window list update changes window order. We do not care of desktop changes.
-    reactimate $ applyWindowPriority <$> bDesktops <@> eWindows
+      -- Window list update changes window order. We do not care of desktop changes.
+      reactimate $ applyWindowPriority <$> bDesktops <@> eWindows
 
-    -- Visibility depends on both desktop state and window count.
-    let deskWithWinCnt = pairDeskCnt <$> winDeskPairs <*> bDesktops
-    syncBehavior deskWithWinCnt $ traverse_ (uncurry $ applyDesktopVisible deskSetup)
+      -- Visibility depends on both desktop state and window count.
+      let deskWithWinCnt = pairDeskCnt <$> bWinDeskPairs <*> bDesktops
+      syncBehavior deskWithWinCnt $ traverse_ (uncurry $ applyDesktopVisible deskSetup)
 
-    -- Activations to send to X11.
-    eDesktopActivate <- switchE never (desktopActivates <$> eDesktops)
-    eWindowActivate <- switchE never (windowActivates <$> eWindows)
-    reactimate $ traverse_ reqToDesktop <$> eDesktopActivate
-    reactimate $ traverse_ reqActivate <$> eWindowActivate
-  actuate network
+      -- Activations to send to X11.
+      eDesktopActivate <- switchDE (desktopActivates <$> eDesktops, desktopActivates <$> bDesktops)
+      eWindowActivate <- switchDE (windowActivates <$> eWindows, windowActivates <$> bWindows)
+
+      reactimate $ traverse_ reqToDesktop <$> eDesktopActivate
+      reactimate $ traverse_ reqActivate <$> eWindowActivate
+    actuate network
   putMVar actuated ()
 
   Gtk.toWidget mainView
@@ -204,6 +206,8 @@ updateDesktop setup mkView old desktopStat = do
   where
     createDesktop = do
       view <- liftIO (mkView >>= takeMVar)
+      -- FIXME Somehow here we are having problem.
+      -- Actually.. am I spawning this from main thread?
       (eDesktopClick, free1) <- sourceEventWA (DeskView.clickSource view)
       let delete = free1
       pure DeskItem{..}
@@ -251,7 +255,7 @@ updateWindow unlift setup appInfoCol mkView trackInfo old (windowId, winIndex) =
         (eWindowClick, free3) <- sourceEventWA (WinView.clickSource view)
 
         -- Apply the received information on the window.
-        free4 <- reactEvent $ applyWindowState view <$> fst dWinInfo
+        free4 <- syncBehaviorWA (snd dWinInfo) (applyWindowState view)
         free5 <- syncBehaviorWA bSpecify $ applySpecifiedIcon (unlift $ wrapGetRaw getWinIcon) view
         let delete = free1 <> free2 <> free3 <> free4 <> free5
 
