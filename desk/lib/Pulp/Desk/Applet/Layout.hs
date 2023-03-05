@@ -14,8 +14,8 @@ import Pulp.Desk.Reactive.Entry
 import Pulp.Desk.System.X11.WMStatus
 import Pulp.Desk.System.X11.XHandle
 import Pulp.Desk.UI.Commons qualified as Gtk
+import Pulp.Desk.UI.Reactive qualified as Gtk
 import Reactive.Banana.Frameworks
-import qualified Pulp.Desk.UI.Reactive as Gtk
 
 newtype LayoutArg = LayoutArg
   { layoutPrettyName :: T.Text -> T.Text

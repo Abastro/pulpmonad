@@ -12,13 +12,13 @@ import GI.Gdk.Structs.EventScroll qualified as Gdk
 import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gtk.Objects.Image qualified as Gtk
 import Pulp.Desk.Env.PulpEnv
+import Pulp.Desk.PulpPath
+import Pulp.Desk.Reactive.Entry
 import Pulp.Desk.System.AudioStatus
 import Pulp.Desk.UI.Commons qualified as Gtk
+import Pulp.Desk.UI.Reactive qualified as Gtk
 import Reactive.Banana.Frameworks
 import XMonad.Util.Run
-import Pulp.Desk.Reactive.Entry
-import Pulp.Desk.PulpPath
-import qualified Pulp.Desk.UI.Reactive as Gtk
 
 data VolumeLevel = Muted | VolLow | VolMid | VolHigh
   deriving (Eq, Ord, Enum, Bounded)

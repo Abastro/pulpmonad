@@ -9,17 +9,17 @@ module Pulp.Desk.System.AppInfos (
 
 import Control.Applicative
 import Control.Concurrent.STM
+import Control.Exception
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import GI.Gio qualified as Gio
-import Control.Monad.IO.Class
-import Control.Exception
 
 data AppInfoData = AppInfoData
   { appId :: !T.Text
-  , -- | Executable name, which is first word of "Exec"
-    appExecName :: !(Maybe T.Text)
+  , appExecName :: !(Maybe T.Text)
+  -- ^ Executable name, which is first word of "Exec"
   , appWmClass :: !(Maybe T.Text)
   }
 
@@ -28,8 +28,8 @@ appGetIns :: AppInfoData -> IO (Maybe Gio.DesktopAppInfo)
 appGetIns AppInfoData{appId} = Gio.desktopAppInfoNew appId
 
 data AppInfoCol = AppInfoCol
-  { -- | Current app info list, "Nothing" is invalidated state
-    curAppInfo :: !(TVar (Maybe (V.Vector AppInfoData)))
+  { curAppInfo :: !(TVar (Maybe (V.Vector AppInfoData)))
+  -- ^ Current app info list, "Nothing" is invalidated state
   , appsMonitor :: !Gio.AppInfoMonitor
   }
 

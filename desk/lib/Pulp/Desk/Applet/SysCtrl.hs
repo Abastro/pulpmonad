@@ -17,10 +17,10 @@ import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
 import Pulp.Desk.System.X11.XHandle
 import Pulp.Desk.UI.Commons qualified as Gtk
+import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Window qualified as Gtk
 import Reactive.Banana.Frameworks
 import XMonad.Util.Run (safeSpawn)
-import qualified Pulp.Desk.UI.Reactive as Gtk
 
 -- | System control button with shutdown symbol icon.
 -- Shows the system control dialog.

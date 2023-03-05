@@ -1,10 +1,10 @@
 module Pulp.Desk.UI.Pixbufs (
-  module GI.GdkPixbuf.Objects.Pixbuf
-  , iconSizePx
-  , RawIcon (..)
-  , themeLoadIcon
-  , iconsChoosePixbuf
-  , argbTorgba
+  module GI.GdkPixbuf.Objects.Pixbuf,
+  iconSizePx,
+  RawIcon (..),
+  themeLoadIcon,
+  iconsChoosePixbuf,
+  argbTorgba,
 ) where
 
 import Control.Exception (try)

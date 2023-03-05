@@ -24,8 +24,8 @@ import Data.IORef
 import Data.Unique
 import Graphics.X11.Xlib
 import Graphics.X11.Xlib.Extras
-import Pulp.Desk.System.X11.XListen
 import Pulp.Desk.Reactive.Entry
+import Pulp.Desk.System.X11.XListen
 
 -- | Common actions for X11 monad. IO access is NOT assumed.
 class Functor m => ActX11 m where

@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
 {-# HLINT ignore "Redundant lambda" #-}
 
 -- | Thin logger facility on top of fast-logger, requires IO
@@ -20,15 +21,15 @@ module Pulp.Desk.Utils.LogPrint (
   logStderr,
 ) where
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.IO.Unlift
 import Data.Char
 import Data.Either
+import Data.Maybe
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import System.Log.FastLogger
-import Data.Maybe
-import Control.Monad
 
 type LogSrc = T.Text
 data LogLevel = LevelDebug | LevelInfo | LevelWarn | LevelError

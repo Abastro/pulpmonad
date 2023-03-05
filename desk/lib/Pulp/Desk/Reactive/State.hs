@@ -26,7 +26,7 @@ import Data.Map.Merge.Strict qualified as M
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Data.Vector qualified as V
-import qualified Data.Vector.Generic as VG
+import Data.Vector.Generic qualified as VG
 
 -- | Aligns and zips to fit the right collection, padding left ones with Nothing. (c.f. SemiAlign acts like union)
 --

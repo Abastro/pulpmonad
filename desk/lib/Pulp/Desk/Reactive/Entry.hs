@@ -41,9 +41,9 @@ import Control.Concurrent
 import Control.Event.Handler
 import Control.Monad
 import Data.IORef
+import Pulp.Desk.Reactive.Task
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
-import Pulp.Desk.Reactive.Task
 
 -- | Source receives a callback, and send the data to callback when signal occurs.
 type Source a = AddHandler a
@@ -126,7 +126,7 @@ stepsBehavior steps = do
 stepsBehaviorWA :: Steps a -> MomentIO (Behavior a, IO ())
 stepsBehaviorWA steps = do
   (inited, free) <- stepsInitedWA steps
-  (, free) <$> initedBehavior inited
+  (,free) <$> initedBehavior inited
 
 initedBehavior :: MonadMoment m => InitedEvent a -> m (Behavior a)
 initedBehavior MkInited{..} = stepper initial update
