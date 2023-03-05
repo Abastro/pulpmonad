@@ -2,20 +2,19 @@
 
 module Main (main) where
 
-import Control.Event.EntrySpec
-import Control.Event.StateSpec
 #ifdef USE_HARDWARE
-import Status.HWSpec
+import System.HWSpec
 #endif
+import Reactive.EntrySpec
+import Reactive.StateSpec
 import Test.Hspec
 
 main :: IO ()
 main = hspec $ do
-  describe "Control" $ do
-    describe "Event" $ do
+  describe "Reactive" $ do
       describe "Entry" entrySpec
       describe "State" stateSpec
 #ifdef USE_HARDWARE
-  describe "Status" $ do
+  describe "System" $ do
     hwSpec
 #endif

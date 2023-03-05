@@ -8,21 +8,21 @@ import Data.Text qualified as T
 import Defines
 import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Objects.Separator qualified as Gtk
-import Gtk.Commons qualified as Gtk
-import Gtk.Window qualified as Gtk
-import Status.X11.WMStatus (DesktopStat (..))
-import System.Applet.Clocks qualified as App
-import System.Applet.DesktopVisual qualified as App
-import System.Applet.Layout qualified as App
-import System.Applet.SysCtrl qualified as App
-import System.Applet.SysTray qualified as App
-import System.Applet.SystemDisplay qualified as App
-import System.Applet.Volume qualified as App
-import System.Applet.WMCtrl qualified as App
+import Pulp.Desk.Applet.Clocks qualified as App
+import Pulp.Desk.Applet.DesktopVisual qualified as App
+import Pulp.Desk.Applet.Layout qualified as App
+import Pulp.Desk.Applet.SysCtrl qualified as App
+import Pulp.Desk.Applet.SysTray qualified as App
+import Pulp.Desk.Applet.SystemDisplay qualified as App
+import Pulp.Desk.Applet.Volume qualified as App
+import Pulp.Desk.Applet.WMCtrl qualified as App
+import Pulp.Desk.Env.PulpEnv
+import Pulp.Desk.PulpBar
+import Pulp.Desk.System.X11.WMStatus
+import Pulp.Desk.UI.Commons qualified as Gtk
+import Pulp.Desk.UI.Window qualified as Gtk
+import Pulp.Desk.Utils.LogPrint
 import System.Environment
-import System.Log.LogPrint (LogLevel (..), defLogFormat)
-import System.Pulp.PulpBar
-import System.Pulp.PulpEnv
 import XMonad.Util.NamedScratchpad (scratchpadWorkspaceTag)
 
 workspaceMaps :: M.Map String String

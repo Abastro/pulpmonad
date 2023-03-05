@@ -74,53 +74,56 @@ library
     , gi-dbusmenugtk3 ==0.4.*
 
   exposed-modules:
-    Control.Concurrent.Task
-    Control.Event.Entry
-    Control.Event.State
-  
     Data.Validation
-    Parse.ParseHor
 
-    Status.HWStatus
-    Status.X11.XListen
-    Status.X11.XHandle
-    Status.X11.WMStatus
-    Status.AppInfos
-    Status.AudioStatus
+    Pulp.Desk.Utils.ParseHor
+    Pulp.Desk.Utils.LogPrint
 
-    Gtk.Commons
-    Gtk.Reactive
-    Gtk.Task
-    Gtk.Styles
-    Gtk.Pixbufs
-    Gtk.Containers
-    Gtk.Window
-    Gtk.Application
-    Gtk.ImageBar
+    Pulp.Desk.PulpPath
 
-    System.Log.LogPrint
+    Pulp.Desk.Reactive.Task
+    Pulp.Desk.Reactive.State
+    Pulp.Desk.Reactive.Entry
 
-    System.Applet.Clocks
-    System.Applet.SystemDisplay
-    System.Applet.Layout
-    System.Applet.SysCtrl
-    System.Applet.WMCtrl
-    System.Applet.Volume
+    Pulp.Desk.UI.Pixbufs
+    Pulp.Desk.UI.Styles
+    Pulp.Desk.UI.Application
+    Pulp.Desk.UI.Commons
+    Pulp.Desk.UI.ImageBar
+    Pulp.Desk.UI.Reactive
+    Pulp.Desk.UI.Containers
+    Pulp.Desk.UI.Task
+    Pulp.Desk.UI.Window
 
-    System.Applet.DesktopVisual.WindowItemView
-    System.Applet.DesktopVisual.DesktopItemView
-    System.Applet.DesktopVisual.DesktopVisual
-    System.Applet.DesktopVisual.Handle
-    System.Applet.DesktopVisual
+    Pulp.Desk.System.X11.XListen
+    Pulp.Desk.System.X11.XHandle
+    Pulp.Desk.System.X11.WMStatus
 
-    System.Applet.SysTray.TrayItemView
-    System.Applet.SysTray.SystemTrayView
-    System.Applet.SysTray.Handle
-    System.Applet.SysTray
+    Pulp.Desk.System.AudioStatus
+    Pulp.Desk.System.AppInfos
+    Pulp.Desk.System.HWStatus
 
-    System.Pulp.PulpPath
-    System.Pulp.PulpEnv
-    System.Pulp.PulpBar
+    Pulp.Desk.Env.PulpEnv
+
+    Pulp.Desk.Applet.WMCtrl
+    Pulp.Desk.Applet.Volume
+    Pulp.Desk.Applet.Clocks
+    Pulp.Desk.Applet.Layout
+    Pulp.Desk.Applet.SystemDisplay
+    Pulp.Desk.Applet.SysCtrl
+
+    Pulp.Desk.Applet.DesktopVisual
+    Pulp.Desk.Applet.DesktopVisual.WindowItemView
+    Pulp.Desk.Applet.DesktopVisual.DesktopItemView
+    Pulp.Desk.Applet.DesktopVisual.Handle
+    Pulp.Desk.Applet.DesktopVisual.DesktopVisual
+
+    Pulp.Desk.Applet.SysTray
+    Pulp.Desk.Applet.SysTray.SystemTrayView
+    Pulp.Desk.Applet.SysTray.Handle
+    Pulp.Desk.Applet.SysTray.TrayItemView
+
+    Pulp.Desk.PulpBar
 
 test-suite test-pulpdesk
   import:             pulp-gtk
@@ -132,9 +135,9 @@ test-suite test-pulpdesk
     , QuickCheck >=2.14
     , hspec ^>=2.10
   other-modules:
-    Control.Event.EntrySpec
-    Control.Event.StateSpec
-    Status.HWSpec
+    Reactive.EntrySpec
+    Reactive.StateSpec
+    System.HWSpec
 
   if flag(test-hardware)
     cpp-options:    -DUSE_HARDWARE
