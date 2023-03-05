@@ -10,6 +10,7 @@ module Pulp.Desk.UI.Commons (
   module GI.Gtk.Constants,
   module GI.Gdk.Constants,
   module GI.Gtk.Objects.Widget,
+  module GI.Gtk.Objects.Container,
   withClassAs,
   setTemplateFromGFile,
   templateChild,
@@ -40,6 +41,7 @@ import GI.Gtk.Enums
 import GI.Gtk.Flags
 import GI.Gtk.Functions
 import GI.Gtk.Objects.Builder
+import GI.Gtk.Objects.Container
 import GI.Gtk.Objects.Widget
 import GI.Gtk.Structs.WidgetClass
 

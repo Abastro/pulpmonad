@@ -21,10 +21,10 @@ import GHC.OverloadedLabels
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
-import qualified Pulp.Desk.UI.Commons as Gtk
-import qualified Pulp.Desk.UI.Task as Gtk
-import qualified Pulp.Desk.Applet.SysTray.TrayItemView as ItemView
+import Pulp.Desk.Applet.SysTray.TrayItemView qualified as ItemView
 import Pulp.Desk.PulpPath
+import Pulp.Desk.UI.Commons qualified as Gtk
+import Pulp.Desk.UI.Reactive qualified as Gtk
 
 newtype View = AsView (ManagedPtr View)
 

@@ -87,12 +87,9 @@ library
 
     Pulp.Desk.UI.Pixbufs
     Pulp.Desk.UI.Styles
-    Pulp.Desk.UI.Application
     Pulp.Desk.UI.Commons
     Pulp.Desk.UI.ImageBar
     Pulp.Desk.UI.Reactive
-    Pulp.Desk.UI.Containers
-    Pulp.Desk.UI.Task
     Pulp.Desk.UI.Window
 
     Pulp.Desk.System.X11.XListen

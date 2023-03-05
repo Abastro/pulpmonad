@@ -42,12 +42,11 @@ import GI.Gtk.Objects.IconTheme qualified as Gtk
 import GI.Gtk.Objects.Image qualified as Gtk
 import GI.Gtk.Objects.Menu qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
-import qualified Pulp.Desk.UI.Commons as Gtk
-import Pulp.Desk.Reactive.Entry
-import qualified Pulp.Desk.UI.Reactive as Gtk
-import qualified Pulp.Desk.UI.Task as Gtk
-import qualified Pulp.Desk.UI.Pixbufs as Gtk
 import Pulp.Desk.PulpPath
+import Pulp.Desk.Reactive.Entry
+import Pulp.Desk.UI.Commons qualified as Gtk
+import Pulp.Desk.UI.Pixbufs qualified as Gtk
+import Pulp.Desk.UI.Reactive qualified as Gtk
 
 newtype View = AsView (ManagedPtr View)
 

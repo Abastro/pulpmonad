@@ -34,7 +34,6 @@ import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Pixbufs qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Styles qualified as Gtk
-import Pulp.Desk.UI.Task qualified as Gtk
 
 -- MAYBE Use image internal to the button
 -- Essentially, a button with priority. Select in CSS by "button.windowitem".

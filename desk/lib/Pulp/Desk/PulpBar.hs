@@ -15,16 +15,16 @@ import GI.GLib.Constants qualified as Glib
 import GI.GLib.Functions qualified as Glib
 import GI.Gio.Flags qualified as Gio
 import GI.Gtk.Constants qualified as Gtk
+import GI.Gtk.Objects.Application qualified as Gtk
 import GI.Gtk.Objects.IconTheme qualified as Gtk
 import GI.Gtk.Objects.Widget qualified as Gtk
 import Pulp.Desk.Env.PulpEnv
-import Pulp.Desk.UI.Application qualified as Gtk
+import Pulp.Desk.PulpPath
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Styles qualified as Gtk
 import Pulp.Desk.UI.Window qualified as Gtk
 import System.Exit (ExitCode (..), exitWith)
 import System.Posix.Signals qualified as Sig
-import Pulp.Desk.PulpPath
 
 -- | For pulpbar application.
 data PulpApp = MkPulpApp
@@ -40,9 +40,9 @@ data PulpApp = MkPulpApp
 startPulpApp :: PulpApp -> IO ()
 startPulpApp MkPulpApp{..} = runPulpIO pulpArgs $ withRunInIO $ \unlift -> do
   Just app <- Gtk.applicationNew (Just pulpAppId) [Gio.ApplicationFlagsNonUnique]
-  Gtk.onApplicationActivate app (unlift $ activating app)
-  Glib.unixSignalAdd Glib.PRIORITY_DEFAULT (fromIntegral Sig.sigINT) $ True <$ Gtk.applicationQuit app
-  status <- Gtk.applicationRun app Nothing
+  on app #activate (unlift $ activating app)
+  Glib.unixSignalAdd Glib.PRIORITY_DEFAULT (fromIntegral Sig.sigINT) $ True <$ #quit app
+  status <- #run app Nothing
   when (status /= 0) $ exitWith (ExitFailure $ fromIntegral status)
   where
     activating app = withRunInIO $ \unlift -> do

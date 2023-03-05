@@ -37,7 +37,6 @@ import Pulp.Desk.System.X11.WMStatus
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Styles qualified as Gtk
-import Pulp.Desk.UI.Task qualified as Gtk
 
 -- Desktop item which has windows sorted via priority
 newtype View = AsView (ManagedPtr View)

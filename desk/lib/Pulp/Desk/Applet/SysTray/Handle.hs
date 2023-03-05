@@ -12,19 +12,19 @@ import Data.Foldable
 import Data.GI.Base.Constructible
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
+import Pulp.Desk.Applet.SysTray.SystemTrayView qualified as MainView
+import Pulp.Desk.Applet.SysTray.TrayItemView qualified as ItemView
+import Pulp.Desk.Env.PulpEnv
+import Pulp.Desk.Reactive.Entry
+import Pulp.Desk.Reactive.State
+import Pulp.Desk.UI.Commons qualified as Gtk
+import Pulp.Desk.UI.Reactive qualified as Gtk
+import Pulp.Desk.Utils.LogPrint
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
 import StatusNotifier.Host.Service qualified as HS
 import StatusNotifier.Item.Client qualified as IC
 import System.Posix.Process (getProcessID)
-import Pulp.Desk.Env.PulpEnv
-import qualified Pulp.Desk.UI.Commons as Gtk
-import qualified Pulp.Desk.Applet.SysTray.SystemTrayView as MainView
-import Pulp.Desk.Reactive.State
-import qualified Pulp.Desk.UI.Task as Gtk
-import qualified Pulp.Desk.Applet.SysTray.TrayItemView as ItemView
-import Pulp.Desk.Reactive.Entry
-import Pulp.Desk.Utils.LogPrint
 
 data SysTrayArgs = SysTrayArgs
   { trayOrientation :: !Gtk.Orientation
@@ -120,12 +120,14 @@ modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
           logS logName LevelDebug (logStrf "Deleting item ($1)" $ show serviceName)
         liftIO old.delete
         pure Nothing
-      (Insert _, old) -> old <$ do
-        liftIO . unlift $
-          logS logName LevelWarn (logStrf "Tried to insert existing item ($1)" $ show serviceName)
-      (Delete _, old) -> old <$ do
-        liftIO . unlift $
-          logS logName LevelWarn (logStrf "Tried to delete nonexistent item ($1)" $ show serviceName)
+      (Insert _, old) ->
+        old <$ do
+          liftIO . unlift $
+            logS logName LevelWarn (logStrf "Tried to insert existing item ($1)" $ show serviceName)
+      (Delete _, old) ->
+        old <$ do
+          liftIO . unlift $
+            logS logName LevelWarn (logStrf "Tried to delete nonexistent item ($1)" $ show serviceName)
 
     isThisUpdate (NormalUpdateOf _ updItem) = serviceName == updItem.itemServiceName
 

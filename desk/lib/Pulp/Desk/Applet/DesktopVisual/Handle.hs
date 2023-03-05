@@ -37,7 +37,7 @@ import Pulp.Desk.System.X11.WMStatus
 import Pulp.Desk.System.X11.XHandle
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Pixbufs qualified as Gtk
-import Pulp.Desk.UI.Task qualified as Gtk
+import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.Utils.LogPrint
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks

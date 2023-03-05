@@ -16,19 +16,19 @@ import Data.Int
 import Data.Text qualified as T
 import Data.Validation
 import GI.Gtk.Objects.Image qualified as Gtk
+import Pulp.Desk.Env.PulpEnv
+import Pulp.Desk.PulpPath
+import Pulp.Desk.Reactive.Entry
+import Pulp.Desk.System.HWStatus
+import Pulp.Desk.UI.Commons qualified as Gtk
+import Pulp.Desk.UI.ImageBar qualified as Gtk
+import Pulp.Desk.UI.Reactive qualified as Gtk
+import Pulp.Desk.UI.Styles qualified as Gtk
+import Pulp.Desk.Utils.LogPrint
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
 import Text.Printf
 import XMonad.Util.Run (safeSpawn)
-import qualified Pulp.Desk.UI.Commons as Gtk
-import Pulp.Desk.Env.PulpEnv
-import qualified Pulp.Desk.UI.Task as Gtk
-import Pulp.Desk.System.HWStatus
-import Pulp.Desk.Reactive.Entry
-import qualified Pulp.Desk.UI.ImageBar as Gtk
-import qualified Pulp.Desk.UI.Styles as Gtk
-import Pulp.Desk.Utils.LogPrint
-import Pulp.Desk.PulpPath
 
 data Temperature = T20 | T40 | T60 | T80 | T100 | T120
   deriving (Eq, Ord, Enum, Bounded)

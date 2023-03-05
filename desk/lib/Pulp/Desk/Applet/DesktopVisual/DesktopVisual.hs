@@ -20,7 +20,7 @@ import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Pulp.Desk.Applet.DesktopVisual.DesktopItemView qualified as DeskView
 import Pulp.Desk.PulpPath
 import Pulp.Desk.UI.Commons qualified as Gtk
-import Pulp.Desk.UI.Task qualified as Gtk
+import qualified Pulp.Desk.UI.Reactive as Gtk
 
 newtype View = AsView (ManagedPtr View)
 

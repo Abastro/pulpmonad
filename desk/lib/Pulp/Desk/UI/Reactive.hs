@@ -1,6 +1,8 @@
 {-# LANGUAGE GADTs #-}
 
 module Pulp.Desk.UI.Reactive (
+  uiSingleRun,
+  uiCreate,
   onSource,
   activateUI,
   liftMomentIO,
@@ -13,11 +15,28 @@ import Control.Concurrent
 import Control.Monad.Reader
 import Data.GI.Base.BasicTypes
 import Data.GI.Base.Signals
+import GI.GLib.Constants qualified as GLib
+import GI.Gdk.Functions qualified as Gdk
 import Pulp.Desk.Reactive.Entry
 import Pulp.Desk.UI.Commons
-import Pulp.Desk.UI.Task
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
+
+-- | Adds UI single-use task, which only runs once.
+uiSingleRun :: IO a -> IO ()
+uiSingleRun task = void $ Gdk.threadsAddIdle GLib.PRIORITY_DEFAULT_IDLE (False <$ task)
+
+-- | Creates using the action in UI thread and returns it through MVar.
+--
+-- Please do not put values into the MVar.
+--
+-- Should not be called from main thread in most cases.
+uiCreate :: IO a -> IO (MVar a)
+uiCreate make = do
+  -- TODO Check if / Guard against main thread?
+  res <- newEmptyMVar
+  uiSingleRun $ make >>= putMVar res
+  pure res
 
 -- MAYBE Forks a new thread on every signal handling.
 

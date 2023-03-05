@@ -20,7 +20,7 @@ import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
 import Pulp.Desk.System.X11.XHandle
 import Pulp.Desk.UI.Commons qualified as Gtk
-import Pulp.Desk.UI.Task qualified as Gtk
+import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Window qualified as Gtk
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
