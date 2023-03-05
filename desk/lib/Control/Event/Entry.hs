@@ -12,6 +12,7 @@ module Control.Event.Entry (
   sourceWaitTill,
   sourceEvent,
   sourceEventWA,
+  stepsEvent,
   stepsInited,
   stepsInitedWA,
   stepsBehavior,
@@ -99,6 +100,13 @@ sourceEventWA src = do
       unregister <- register src handler
       modifyIORef' ref (<> unregister)
       pure $ pure ()
+
+-- | Event from steps where initialization event is given.
+stepsEvent :: Event () -> Steps a -> MomentIO (Event a)
+stepsEvent eInit (MkSteps initial later) = do
+  eLater <- sourceEvent later
+  -- Later value takes priority
+  pure $ unionWith (const id) (initial <$ eInit) eLater
 
 stepsInited :: Steps a -> MomentIO (InitedEvent a)
 stepsInited (MkSteps initial later) = do

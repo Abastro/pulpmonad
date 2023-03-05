@@ -9,7 +9,7 @@ module System.Applet.DesktopVisual.Handle (
 ) where
 
 import Control.Applicative
-import Control.Concurrent.MVar
+import Control.Concurrent
 import Control.Event.Entry
 import Control.Event.State
 import Control.Monad.Except
@@ -41,7 +41,6 @@ import System.Applet.DesktopVisual.DesktopVisual qualified as MainView
 import System.Applet.DesktopVisual.WindowItemView qualified as WinView
 import System.Log.LogPrint
 import System.Pulp.PulpEnv
-import Control.Concurrent
 
 type NumWindows = Word
 
@@ -75,17 +74,20 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   let updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new DeskView.AsView [])
       updateWin = updateWindow unlift winSetup appInfoCol (Gtk.uiCreate $ Glib.new WinView.AsView []) trackWinInfo
 
-  actuated <- newEmptyMVar
+  -- For widget initialization, we assume window/desktop list starts empty,
+  -- and perform initialization "update".
+  (initSource, initialize) <- sourceSink
   -- TODO Require forkIO on network setup
-  -- TOOD Initialization event could be better approach than "inited" everywhere
   forkIO $ do
     network <- compile $ do
-      iDesktopList <- stepsInited desktopStats
-      iWindowList <- stepsInited windowsList
+      eInit <- sourceEvent initSource
+
+      eDesktopList <- stepsEvent eInit desktopStats
+      eWindowList <- stepsEvent eInit windowsList
       bActiveWindow <- stepsBehavior windowActive
 
-      (iDesktops, bDesktops) <- desktopList updateDesk iDesktopList
-      (iWindows, bWindows) <- windowMap updateWin iWindowList
+      (eDesktops, bDesktops) <- desktopList updateDesk eDesktopList
+      (eWindows, bWindows) <- windowMap updateWin eWindowList
       let bDeskViews = V.map (\desk -> desk.view) <$> bDesktops
           bWinViews = M.map (\win -> win.view) <$> bWindows
           -- Can change when window list changes, for window list change could lag behind.
@@ -93,7 +95,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
           bActiveView = (\views win -> (views M.!?) =<< win) <$> bWinViews <*> bActiveWindow
 
       -- Behavior updates at next step of eWindows, in sync with bWinView
-      bWinDeskPairs <- switchIB (asWinDeskPairs <$> iWindows)
+      bWinDeskPairs <- switchB (pure S.empty) (asWinDeskPairs <$> eWindows)
       let bWinDeskPairMap = asViewPairMap <$> bDeskViews <*> bWinViews <*> bWinDeskPairs
 
       -- Compute and apply container differences.
@@ -104,21 +106,21 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
       syncBehaviorDiff (-->) Nothing bActiveView applyActiveWindow
 
       -- Window list update changes window order in batch. We do not care of desktop changes.
-      liftIOLater $ applyWindowPriority iDesktops.initial iWindows.initial
-      reactimate $ applyWindowPriority <$> bDesktops <@> iWindows.update
+      reactimate $ applyWindowPriority <$> bDesktops <@> eWindows
 
       -- Visibility depends on both desktop state and window count.
       let deskWithWinCnt = pairDeskCnt <$> bWinDeskPairs <*> bDesktops
       syncBehavior deskWithWinCnt $ traverse_ (uncurry $ applyDesktopVisible deskSetup)
 
       -- Activations to send to X11.
-      eDesktopActivate <- switchIE (desktopActivates <$> iDesktops)
-      eWindowActivate <- switchIE (windowActivates <$> iWindows)
+      eDesktopActivate <- switchE never (desktopActivates <$> eDesktops)
+      eWindowActivate <- switchE never (windowActivates <$> eWindows)
 
       reactimate $ traverse_ reqToDesktop <$> eDesktopActivate
       reactimate $ traverse_ reqActivate <$> eWindowActivate
+
     actuate network
-  putMVar actuated ()
+    initialize ()
 
   Gtk.toWidget mainView
   where
@@ -181,13 +183,10 @@ applyPairDiff = applyImpure $ \case
 -- TODO Need a test that same ID points towards the same View. Likely require restructure.
 desktopList ::
   (Maybe DeskItem -> DesktopStat -> MomentIO DeskItem) ->
-  InitedEvent (V.Vector DesktopStat) ->
-  MomentIO (InitedEvent (V.Vector DeskItem), Behavior (V.Vector DeskItem))
-desktopList update iStat = do
-  let iUpdates = updateFn <$> iStat
-  initList <- iUpdates.initial V.empty
-  (eList, bList) <- exeAccumD initList iUpdates.update
-  pure (MkInited initList eList, bList)
+  Event (V.Vector DesktopStat) ->
+  MomentIO (Event (V.Vector DeskItem), Behavior (V.Vector DeskItem))
+desktopList update eStat = do
+  exeAccumD V.empty (updateFn <$> eStat)
   where
     updateFn stats olds = do
       news <- zipToRightM update olds stats
@@ -213,13 +212,10 @@ updateDesktop setup mkView old desktopStat = do
 
 windowMap ::
   (Maybe WinItem -> (Window, Int) -> MomentIO (Maybe WinItem)) ->
-  InitedEvent (V.Vector Window) ->
-  MomentIO (InitedEvent (M.Map Window WinItem), Behavior (M.Map Window WinItem))
-windowMap update iList = do
-  let iUpdates = updateFn . asMapWithIdx <$> iList
-  initMap <- iUpdates.initial M.empty
-  (eMap, bMap) <- exeAccumD initMap iUpdates.update
-  pure (MkInited initMap eMap, bMap)
+  Event (V.Vector Window) ->
+  MomentIO (Event (M.Map Window WinItem), Behavior (M.Map Window WinItem))
+windowMap update eList = do
+  exeAccumD M.empty (updateFn . asMapWithIdx <$> eList)
   where
     asMapWithIdx list = M.mapWithKey (,) . M.fromList $ zip (V.toList list) [0 ..]
     updateFn winIdxs olds = do
@@ -278,9 +274,9 @@ applyActiveWindow = applyImpure $ \case
   Delete window -> WinView.setActivate window False
 
 applyDesktopState :: DesktopSetup -> DeskItem -> IO ()
-applyDesktopState DesktopSetup{..} DeskItem{desktopStat = DesktopStat{..}, ..} = do
-  DeskView.setLabel view (desktopLabeling desktopName)
-  DeskView.setState view desktopState
+applyDesktopState DesktopSetup{..} DeskItem{..} = do
+  DeskView.setLabel view (desktopLabeling desktopStat.desktopName)
+  DeskView.setState view desktopStat.desktopState
 
 applyDesktopVisible :: DesktopSetup -> NumWindows -> DeskItem -> IO ()
 applyDesktopVisible DesktopSetup{..} numWin DeskItem{..} = do
