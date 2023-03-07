@@ -29,9 +29,6 @@ module Pulp.Desk.Reactive.Entry (
   reactEvent,
   reactEvent',
   loopSource,
-  taskToSource,
-  taskToBehavior,
-  taskToBehaviorWA,
   periodicSource,
   pollingBehavior,
   pollingDiscrete,
@@ -41,7 +38,6 @@ import Control.Concurrent
 import Control.Event.Handler
 import Control.Monad
 import Data.IORef
-import Pulp.Desk.Reactive.Task
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
 
@@ -230,25 +226,6 @@ loopSource :: IO a -> IO () -> Source a
 loopSource act cleanup = sourceWithUnreg $ \handler -> do
   tid <- forkIO . forever $ act >>= handler
   pure (cleanup <> killThread tid)
-
--- | Temporary solution before phasing out Task.
---
--- A task should not be shared between many sources - This need to be fixed later.
-taskToSource :: Task a -> Source a
-taskToSource task = loopSource task.emit task.stop
-
--- | Waits for first task to finish, so that we get a behavior.
-taskToBehavior :: Task a -> MomentIO (Behavior a)
-taskToBehavior task = do
-  init <- liftIO task.emit
-  eTask <- sourceEvent (taskToSource task)
-  stepper init eTask
-
-taskToBehaviorWA :: Task a -> MomentIO (Behavior a, IO ())
-taskToBehaviorWA task = do
-  init <- liftIO task.emit
-  (eTask, unreg) <- sourceEventWA (taskToSource task)
-  (,unreg) <$> stepper init eTask
 
 -- | Simple periodic source with given period (in millisecond).
 periodicSource :: Int -> Source ()

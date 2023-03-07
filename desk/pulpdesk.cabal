@@ -81,7 +81,6 @@ library
 
     Pulp.Desk.PulpPath
 
-    Pulp.Desk.Reactive.Task
     Pulp.Desk.Reactive.State
     Pulp.Desk.Reactive.Entry
 
