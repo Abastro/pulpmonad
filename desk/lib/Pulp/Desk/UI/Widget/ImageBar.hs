@@ -14,7 +14,6 @@ module Pulp.Desk.UI.Widget.ImageBar (
   setIcon,
 ) where
 
-import Control.Monad
 import Data.GI.Base qualified as GI
 import Data.GI.Base.Overloading qualified as GI
 import Data.GI.Base.ShortPrelude qualified as GI
@@ -96,7 +95,7 @@ classInit gClass = Gtk.withClassAs Gtk.WidgetClass gClass $ \widgetClass -> do
   uiFile <- Gio.fileNewForPath =<< dataPath ("ui" </> "image-bar.ui")
   Gtk.setTemplateFromGFile widgetClass uiFile
 
-  widgetClass.bindTemplateChildFull (T.pack "bar-foreground") True 0
+  widgetClass.bindTemplateChildFull (T.pack "bar_foreground") True 0
 
   -- Waiting for proper support for Enums here
   GI.gobjectInstallCIntProperty @ImageBar
@@ -196,34 +195,6 @@ classInit gClass = Gtk.withClassAs Gtk.WidgetClass gClass $ \widgetClass -> do
       , maxValue = Just 256
       }
 
-  GI.gobjectInstallCStringProperty @ImageBar
-    gClass
-    GI.CStringPropertyInfo
-      { name = T.pack "bar_icon_name"
-      , nick = T.pack "Bar Icon Name"
-      , blurb = T.pack "Name of the background icon"
-      , defaultValue = Nothing
-      , setter = \widget -> \case
-          Nothing -> Gtk.clearImageIconName =<< getImage widget
-          Just v -> flip Gtk.setImageIconName v =<< getImage widget
-      , getter = Gtk.getImageIconName <=< getImage
-      , flags = Nothing
-      }
-
-  GI.gobjectInstallCIntProperty @ImageBar
-    gClass
-    GI.CIntPropertyInfo
-      { name = T.pack "bar_icon_size"
-      , nick = T.pack "Bar Icon Size"
-      , blurb = T.pack "Size of the background icon"
-      , defaultValue = 0
-      , setter = \widget v -> flip Gtk.setImageIconSize (fromIntegral v) =<< getImage widget
-      , getter = \widget -> fromIntegral <$> (Gtk.getImageIconSize =<< getImage widget)
-      , flags = Nothing
-      , minValue = Just 0
-      , maxValue = Just 6
-      }
-
   -- Container should take care of "destroy"
   Just oldAllocate <- GI.get widgetClass #sizeAllocate
 
@@ -262,7 +233,7 @@ classInit gClass = Gtk.withClassAs Gtk.WidgetClass gClass $ \widgetClass -> do
 instanceInit :: GI.GObjectClass -> ImageBar -> IO Private
 instanceInit _gclass inst = do
   #initTemplate inst
-  barIcon <- Gtk.templateChild inst (T.pack "bar-foreground") Gtk.Image
+  barIcon <- Gtk.templateChild inst (T.pack "bar_foreground") Gtk.Image
 
   let barOrientation = Gtk.OrientationHorizontal
   let barScale = 1

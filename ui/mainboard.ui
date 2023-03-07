@@ -23,8 +23,12 @@
             <property name="bar_portion_top">8</property>
             <property name="bar_portion_width">4</property>
             <property name="bar_portion_height">16</property>
-            <property name="bar_icon_name">ram-symbolic</property>
-            <property name="bar_icon_size">3</property>
+            <child internal-child="bar_foreground">
+              <object class="GtkImage">
+                <property name="icon-name">ram-symbolic</property>
+                <property name="icon-size">3</property>
+              </object>
+            </child>
           </object>
           <packing>
             <property name="pass-through">1</property>
@@ -41,8 +45,12 @@
             <property name="bar_portion_top">25</property>
             <property name="bar_portion_width">8</property>
             <property name="bar_portion_height">14</property>
-            <property name="bar_icon_name">cpu-symbolic</property>
-            <property name="bar_icon_size">3</property>
+            <child internal-child="bar_foreground">
+              <object class="GtkImage">
+                <property name="icon-name">cpu-symbolic</property>
+                <property name="icon-size">3</property>
+              </object>
+            </child>
           </object>
           <packing>
             <property name="pass-through">1</property>

@@ -3,7 +3,7 @@
   <requires lib="gtk+" version="3.20" />
   <template class="ImageBar" parent="GtkBin">
     <child>
-      <object class="GtkImage" id="bar-foreground">
+      <object class="GtkImage" id="bar_foreground">
       </object>
     </child>
   </template>
