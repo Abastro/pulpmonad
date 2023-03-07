@@ -23,14 +23,15 @@ import Control.Monad
 import Control.Monad.Trans.Maybe
 import Data.ByteString qualified as BS
 import Data.Foldable
-import Data.GI.Base.Attributes
-import Data.GI.Base.BasicTypes
-import Data.GI.Base.Constructible
-import Data.GI.Base.GObject
-import Data.GI.Base.Overloading
+import Data.GI.Base.Attributes qualified as GI
+import Data.GI.Base.BasicTypes qualified as GI
+import Data.GI.Base.Constructible qualified as GI
+import Data.GI.Base.GObject qualified as GI
+import Data.GI.Base.Overloading qualified as GI
 import Data.Int
 import Data.Text qualified as T
 import GHC.OverloadedLabels
+import GHC.Records
 import GI.DbusmenuGtk3.Objects.Menu qualified as DMenu
 import GI.Gdk.Objects.Screen qualified as Gdk
 import GI.Gdk.Unions.Event qualified as Gdk
@@ -48,24 +49,32 @@ import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Pixbufs qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 
-newtype View = AsView (ManagedPtr View)
+newtype View = AsView (GI.ManagedPtr View)
 
-instance TypedObject View where
-  glibType :: IO GType
-  glibType = registerGType AsView
-instance GObject View
+instance GI.TypedObject View where
+  glibType :: IO GI.GType
+  glibType = GI.registerGType AsView
+instance GI.GObject View
 
-type instance ParentTypes View = Gtk.EventBox ': ParentTypes Gtk.EventBox
-instance HasParentTypes View
+type instance GI.ParentTypes View = Gtk.EventBox ': GI.ParentTypes Gtk.EventBox
+instance GI.HasParentTypes View
 
 -- Disallow box/container methods
 instance
   ( info ~ Gtk.ResolveWidgetMethod t View
-  , OverloadedMethod info View p
+  , GI.OverloadedMethod info View p
   ) =>
   IsLabel t (View -> p)
   where
-  fromLabel = overloadedMethod @info
+  fromLabel = GI.overloadedMethod @info
+instance
+  ( info ~ Gtk.ResolveWidgetMethod t View
+  , GI.OverloadedMethod info View p
+  , HasField t View p
+  ) =>
+  HasField t View p
+  where
+  getField = GI.overloadedMethod @info
 
 data TrayItemPrivate = TrayItemPrivate
   { trayIcon :: !Gtk.Image
@@ -73,7 +82,7 @@ data TrayItemPrivate = TrayItemPrivate
   , trayMenu :: Maybe Gtk.Menu
   }
 
-instance DerivedGObject View where
+instance GI.DerivedGObject View where
   -- MAYBE Inherit button and its styling
   type GObjectParentType View = Gtk.EventBox
   type GObjectPrivateData View = TrayItemPrivate
@@ -81,24 +90,24 @@ instance DerivedGObject View where
   objectTypeName :: T.Text
   objectTypeName = T.pack "TrayItemView"
 
-  objectClassInit :: GObjectClass -> IO ()
+  objectClassInit :: GI.GObjectClass -> IO ()
   objectClassInit gClass = Gtk.withClassAs Gtk.WidgetClass gClass $ \widgetClass -> do
     uiFile <- Gio.fileNewForPath =<< dataPath ("ui" </> "system-tray" </> "tray-item.ui")
     Gtk.setTemplateFromGFile widgetClass uiFile
 
-    #bindTemplateChildFull widgetClass (T.pack "tray-icon") True 0
-    #bindTemplateChildFull widgetClass (T.pack "tray-overlay") True 0
+    widgetClass.bindTemplateChildFull (T.pack "tray-icon") True 0
+    widgetClass.bindTemplateChildFull (T.pack "tray-overlay") True 0
 
-    #setCssName widgetClass (T.pack "TrayItemView")
+    widgetClass.setCssName (T.pack "TrayItemView")
 
-  objectInstanceInit :: GObjectClass -> View -> IO TrayItemPrivate
+  objectInstanceInit :: GI.GObjectClass -> View -> IO TrayItemPrivate
   objectInstanceInit _gClass inst = do
-    #initTemplate inst
+    inst.initTemplate
     trayIcon <- Gtk.templateChild inst (T.pack "tray-icon") Gtk.Image
     trayOverlay <- Gtk.templateChild inst (T.pack "tray-overlay") Gtk.Image
 
     -- Make scrollable, eventbox is not scrollable by default
-    #addEvents inst [Gtk.EventMaskScrollMask]
+    inst.addEvents [Gtk.EventMaskScrollMask]
 
     pure TrayItemPrivate{trayMenu = Nothing, ..}
 
@@ -116,12 +125,12 @@ data TrayItemIcon = TrayItemIcon
 -- | This one comes with Gdk Event for implementation reasons.
 clickSource :: View -> Source MouseClick
 clickSource view =
-  Gtk.onSource (view `asA` Gtk.Widget) #buttonPressEvent $ \handler event -> do
+  Gtk.onSource (view `GI.asA` Gtk.Widget) #buttonPressEvent $ \handler event -> do
     evUnion <- Gtk.getCurrentEvent
-    xRoot <- round <$> get event #xRoot
-    yRoot <- round <$> get event #yRoot
+    xRoot <- round <$> GI.get event #xRoot
+    yRoot <- round <$> GI.get event #yRoot
     let click = MouseClickOf evUnion xRoot yRoot
-    get event #button >>= \case
+    GI.get event #button >>= \case
       1 -> True <$ handler (click MouseLeft)
       2 -> True <$ handler (click MouseMiddle)
       3 -> True <$ handler (click MouseRight)
@@ -129,8 +138,8 @@ clickSource view =
 
 scrollSource :: View -> Source ScrollDir
 scrollSource view =
-  Gtk.onSource (view `asA` Gtk.Widget) #scrollEvent $ \handler event -> do
-    get event #direction >>= \case
+  Gtk.onSource (view `GI.asA` Gtk.Widget) #scrollEvent $ \handler event -> do
+    GI.get event #direction >>= \case
       Gtk.ScrollDirectionUp -> True <$ handler ScrollUp
       Gtk.ScrollDirectionDown -> True <$ handler ScrollDown
       Gtk.ScrollDirectionLeft -> True <$ handler ScrollLeft
@@ -139,28 +148,28 @@ scrollSource view =
 
 setIcon :: View -> Sink TrayItemIcon
 setIcon item icon = Gtk.uiSingleRun $ do
-  TrayItemPrivate{trayIcon} <- gobjectGetPrivateData item
+  TrayItemPrivate{trayIcon} <- GI.gobjectGetPrivateData item
   setTrayIcon True trayIcon icon
 
 setOverlay :: View -> Sink TrayItemIcon
 setOverlay item icon = Gtk.uiSingleRun $ do
-  TrayItemPrivate{trayOverlay} <- gobjectGetPrivateData item
+  TrayItemPrivate{trayOverlay} <- GI.gobjectGetPrivateData item
   setTrayIcon False trayOverlay icon
 
 setTooltip :: View -> Sink (Maybe T.Text)
 setTooltip view tooltip = Gtk.uiSingleRun $ do
-  #setTooltipText (view `asA` Gtk.Widget) tooltip
+  view.setTooltipText tooltip
 
 setMenu :: View -> Sink (T.Text, T.Text)
 setMenu view (bus, path) = Gtk.uiSingleRun $ do
   menu <- DMenu.menuNew bus path
-  gobjectModifyPrivateData view $ \priv -> priv{trayMenu = Just $ menu `asA` Gtk.Menu}
+  GI.gobjectModifyPrivateData view $ \priv -> priv{trayMenu = Just $ menu `GI.asA` Gtk.Menu}
 
 showPopup :: View -> Sink (Maybe Gdk.Event)
 showPopup view event = Gtk.uiSingleRun $ do
-  TrayItemPrivate{trayMenu} <- gobjectGetPrivateData view
+  TrayItemPrivate{trayMenu} <- GI.gobjectGetPrivateData view
   for_ trayMenu $ \menu -> do
-    #popupAtWidget menu view Gtk.GravitySouthWest Gtk.GravityNorthWest event
+    menu.popupAtWidget view Gtk.GravitySouthWest Gtk.GravityNorthWest event
 
 {- Internal procedures here -}
 
@@ -168,11 +177,11 @@ data IconData = ByGIcon Gio.Icon | ByPixbuf Gtk.Pixbuf
 
 setTrayIcon :: Bool -> Gtk.Image -> TrayItemIcon -> IO ()
 setTrayIcon showMissing image icon = do
-  pixelSize <- get image #pixelSize
+  pixelSize <- GI.get image #pixelSize
   itemIconAsSet pixelSize icon >>= \case
-    Just (ByGIcon gic) -> set image [#gicon := gic]
-    Just (ByPixbuf pbuf) -> set image [#pixbuf := pbuf]
-    Nothing -> when showMissing $ set image [#iconName := T.pack "image-missing"]
+    Just (ByGIcon gic) -> GI.set image [#gicon GI.:= gic]
+    Just (ByPixbuf pbuf) -> GI.set image [#pixbuf GI.:= pbuf]
+    Nothing -> when showMissing $ GI.set image [#iconName GI.:= T.pack "image-missing"]
 
 itemIconAsSet :: Int32 -> TrayItemIcon -> IO (Maybe IconData)
 itemIconAsSet pixelSize TrayItemIcon{..} =
@@ -183,12 +192,12 @@ itemIconAsSet pixelSize TrayItemIcon{..} =
 -- MaybeT due to caller
 customIconTheme :: String -> MaybeT IO Gtk.IconTheme
 customIconTheme themePath = do
-  custom <- new Gtk.IconTheme []
-  Gdk.screenGetDefault >>= traverse_ (#setScreen custom)
-  #appendSearchPath custom themePath
+  custom <- GI.new Gtk.IconTheme []
+  Gdk.screenGetDefault >>= traverse_ custom.setScreen
+  custom.appendSearchPath themePath
 
   defTheme <- Gtk.iconThemeGetDefault
-  #getSearchPath defTheme >>= traverse_ (#appendSearchPath custom)
+  defTheme.getSearchPath >>= traverse_ custom.appendSearchPath
   pure custom
 
 imgNameSet :: Int32 -> Maybe String -> T.Text -> MaybeT IO IconData
@@ -206,9 +215,9 @@ imgNameSet pixelSize mayTheme name = do
     directPath themePath name =
       ByGIcon <$> do
         themeDir <- Gio.fileNewForPath themePath
-        iconPath <- #getChild themeDir (T.unpack name)
-        fileIcon <- new Gio.FileIcon [#file := iconPath]
-        pure (fileIcon `asA` Gio.Icon)
+        iconPath <- themeDir.getChild (T.unpack name)
+        fileIcon <- GI.new Gio.FileIcon [#file GI.:= iconPath]
+        pure (fileIcon `GI.asA` Gio.Icon)
     setPixbuf theme =
       ByPixbuf <$> do
         MaybeT $ Gtk.themeLoadIcon theme panelName pixelSize loadFlags

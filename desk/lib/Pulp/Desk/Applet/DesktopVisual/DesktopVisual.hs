@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -9,11 +8,10 @@ module Pulp.Desk.Applet.DesktopVisual.DesktopVisual (
   removeDesktop,
 ) where
 
-import Data.GI.Base.BasicTypes
-import Data.GI.Base.GObject
-import Data.GI.Base.Overloading
+import Data.GI.Base.BasicTypes qualified as GI
+import Data.GI.Base.GObject qualified as GI
+import Data.GI.Base.Overloading qualified as GI
 import Data.Text qualified as T
-import GHC.OverloadedLabels
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
@@ -22,50 +20,41 @@ import Pulp.Desk.PulpPath
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 
-newtype View = AsView (ManagedPtr View)
+newtype View = AsView (GI.ManagedPtr View)
 
-instance TypedObject View where
-  glibType :: IO GType
-  glibType = registerGType AsView
-instance GObject View
+instance GI.TypedObject View where
+  glibType :: IO GI.GType
+  glibType = GI.registerGType AsView
+instance GI.GObject View
 
-type instance ParentTypes View = Gtk.Box ': ParentTypes Gtk.Box
-instance HasParentTypes View
-
--- Disallow box/container methods
-instance
-  ( info ~ Gtk.ResolveWidgetMethod t View
-  , OverloadedMethod info View p
-  ) =>
-  IsLabel t (View -> p)
-  where
-  fromLabel = overloadedMethod @info
+type instance GI.ParentTypes View = Gtk.Box ': GI.ParentTypes Gtk.Box
+instance GI.HasParentTypes View
 
 data Private = MkPrivate
 
-instance DerivedGObject View where
+instance GI.DerivedGObject View where
   type GObjectParentType View = Gtk.Box
   type GObjectPrivateData View = Private
 
   objectTypeName :: T.Text
   objectTypeName = T.pack "DesktopVisualizer"
 
-  objectClassInit :: GObjectClass -> IO ()
+  objectClassInit :: GI.GObjectClass -> IO ()
   objectClassInit gClass = Gtk.withClassAs Gtk.WidgetClass gClass $ \widgetClass -> do
     uiFile <- Gio.fileNewForPath =<< dataPath ("ui" </> "desktop-visualizer" </> "desktop-visualizer.ui")
     Gtk.setTemplateFromGFile widgetClass uiFile
 
-    #setCssName widgetClass (T.pack "desktopvisualizer")
+    widgetClass.setCssName (T.pack "desktopvisualizer")
 
-  objectInstanceInit :: GObjectClass -> View -> IO Private
+  objectInstanceInit :: GI.GObjectClass -> View -> IO Private
   objectInstanceInit _gClass inst = do
-    #initTemplate inst
+    (inst `GI.asA` Gtk.Widget).initTemplate
     pure MkPrivate
 
 insertDesktop :: View -> DeskView.View -> IO ()
 insertDesktop view desktop = Gtk.uiSingleRun $ do
-  #add (view `asA` Gtk.Box) desktop
+  (view `GI.asA` Gtk.Box).add desktop
 
 removeDesktop :: View -> DeskView.View -> IO ()
 removeDesktop view desktop = Gtk.uiSingleRun $ do
-  #remove (view `asA` Gtk.Box) desktop
+  (view `GI.asA` Gtk.Box).remove desktop

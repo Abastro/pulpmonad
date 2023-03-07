@@ -13,9 +13,9 @@ import Control.Concurrent
 import Control.Monad.Except
 import Control.Monad.IO.Unlift
 import Control.Monad.Trans.Maybe
-import Data.Bifunctor (Bifunctor (..), first)
+import Data.Bifunctor (Bifunctor (..))
 import Data.Foldable
-import Data.GI.Base.Constructible qualified as Glib
+import Data.GI.Base.Constructible qualified as GI
 import Data.IntMap.Strict qualified as IM
 import Data.Map.Strict qualified as M
 import Data.Maybe
@@ -69,10 +69,10 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
   DeskVisRcvs{..} <- unlift $ runXHook deskVisInitiate
   appInfoCol <- trackAppInfo
   -- UI thread here
-  mainView <- Glib.new MainView.AsView []
+  mainView <- GI.new MainView.AsView []
 
-  let updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ Glib.new DeskView.AsView [])
-      updateWin = updateWindow unlift winSetup appInfoCol (Gtk.uiCreate $ Glib.new WinView.AsView []) trackWinInfo
+  let updateDesk = updateDesktop deskSetup (Gtk.uiCreate $ GI.new DeskView.AsView [])
+      updateWin = updateWindow unlift winSetup appInfoCol (Gtk.uiCreate $ GI.new WinView.AsView []) trackWinInfo
 
   -- For widget initialization, we assume window/desktop list starts empty,
   -- and perform initialization "update".

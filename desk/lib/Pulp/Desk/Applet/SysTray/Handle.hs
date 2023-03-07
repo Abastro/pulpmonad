@@ -9,7 +9,7 @@ import Control.Monad.IO.Unlift
 import DBus
 import DBus.Client
 import Data.Foldable
-import Data.GI.Base.Constructible
+import Data.GI.Base.Constructible qualified as GI
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 import Pulp.Desk.Applet.SysTray.SystemTrayView qualified as MainView
@@ -22,8 +22,8 @@ import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.Utils.LogPrint
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
-import StatusNotifier.Host.Service qualified as HS
-import StatusNotifier.Item.Client qualified as IC
+import StatusNotifier.Host.Service qualified as Host
+import StatusNotifier.Item.Client qualified as SNItem
 import System.Posix.Process (getProcessID)
 
 data SysTrayArgs = SysTrayArgs
@@ -43,12 +43,12 @@ systemTray SysTrayArgs{..} = withRunInIO $ \unlift -> do
   procID <- getProcessID
   host <-
     maybe (fail "Cannot create host for system tray") pure
-      =<< HS.build
-        HS.defaultParams
-          { HS.dbusClient = Just client
-          , HS.uniqueIdentifier = "PulpSystemTray" <> show procID
+      =<< Host.build
+        Host.defaultParams
+          { Host.dbusClient = Just client
+          , Host.uniqueIdentifier = "PulpSystemTray" <> show procID
           }
-  trayView <- new MainView.AsView []
+  trayView <- GI.new MainView.AsView []
   MainView.setOrientation trayView trayOrientation
   MainView.setPackAt trayView (if trayAlignBegin then MainView.PackStart else MainView.PackEnd)
 
@@ -70,8 +70,8 @@ systemTray SysTrayArgs{..} = withRunInIO $ \unlift -> do
 
   Gtk.toWidget trayView
 
-sniSource :: HS.Host -> Source (HS.UpdateType, HS.ItemInfo)
-sniSource HS.Host{..} = sourceWithUnreg $ \handler -> do
+sniSource :: Host.Host -> Source (Host.UpdateType, Host.ItemInfo)
+sniSource Host.Host{..} = sourceWithUnreg $ \handler -> do
   handlerId <- addUpdateHandler (curry handler)
   pure $ removeUpdateHandler handlerId
 
@@ -82,16 +82,16 @@ applyItemDiffs main = applyImpure $ \case
 
 data NormalUpdateType = IconUpdate | OverlayIconUpdate | TooltipUpdate
   deriving (Show)
-data NormalUpdate = NormalUpdateOf !NormalUpdateType !HS.ItemInfo
+data NormalUpdate = NormalUpdateOf !NormalUpdateType !Host.ItemInfo
 
 -- Use ColOp because it exists
-splitUpdate :: HS.UpdateType -> HS.ItemInfo -> Maybe (Either (ColOp HS.ItemInfo) NormalUpdate)
+splitUpdate :: Host.UpdateType -> Host.ItemInfo -> Maybe (Either (ColOp Host.ItemInfo) NormalUpdate)
 splitUpdate = \case
-  HS.ItemAdded -> Just . Left . Insert
-  HS.ItemRemoved -> Just . Left . Delete
-  HS.IconUpdated -> Just . Right . NormalUpdateOf IconUpdate
-  HS.OverlayIconUpdated -> Just . Right . NormalUpdateOf OverlayIconUpdate
-  HS.ToolTipUpdated -> Just . Right . NormalUpdateOf TooltipUpdate
+  Host.ItemAdded -> Just . Left . Insert
+  Host.ItemRemoved -> Just . Left . Delete
+  Host.IconUpdated -> Just . Right . NormalUpdateOf IconUpdate
+  Host.OverlayIconUpdated -> Just . Right . NormalUpdateOf OverlayIconUpdate
+  Host.ToolTipUpdated -> Just . Right . NormalUpdateOf TooltipUpdate
   _ -> const Nothing
 
 data TrayItem = MkTrayItem
@@ -103,7 +103,7 @@ modifyItems ::
   (forall a. PulpIO a -> IO a) ->
   Client ->
   Event NormalUpdate ->
-  ColOp HS.ItemInfo ->
+  ColOp Host.ItemInfo ->
   M.Map BusName TrayItem ->
   MomentIO (M.Map BusName TrayItem)
 modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
@@ -132,13 +132,13 @@ modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
     isThisUpdate (NormalUpdateOf _ updItem) = serviceName == updItem.itemServiceName
 
     serviceName = case colOp of
-      Insert HS.ItemInfo{itemServiceName} -> itemServiceName
-      Delete HS.ItemInfo{itemServiceName} -> itemServiceName
+      Insert Host.ItemInfo{itemServiceName} -> itemServiceName
+      Delete Host.ItemInfo{itemServiceName} -> itemServiceName
 
-createTrayItem :: Client -> Event NormalUpdate -> HS.ItemInfo -> MomentIO TrayItem
-createTrayItem client eNormalUp info@HS.ItemInfo{..} = do
+createTrayItem :: Client -> Event NormalUpdate -> Host.ItemInfo -> MomentIO TrayItem
+createTrayItem client eNormalUp info@Host.ItemInfo{..} = do
   -- Needs the view right away.
-  view <- liftIO $ takeMVar =<< Gtk.uiCreate (new ItemView.AsView [])
+  view <- liftIO $ takeMVar =<< Gtk.uiCreate (GI.new ItemView.AsView [])
 
   for_ menuPath $ \path -> liftIO $ do
     ItemView.setMenu view (T.pack . formatBusName $ itemServiceName, T.pack . formatObjectPath $ path)
@@ -173,26 +173,26 @@ createTrayItem client eNormalUp info@HS.ItemInfo{..} = do
       _ -> Nothing
 
     tooltipPart = \case
-      NormalUpdateOf TooltipUpdate HS.ItemInfo{..} -> Just itemToolTip
+      NormalUpdateOf TooltipUpdate Host.ItemInfo{..} -> Just itemToolTip
       _ -> Nothing
 
-iconOf :: HS.ItemInfo -> ItemView.TrayItemIcon
-iconOf HS.ItemInfo{..} =
+iconOf :: Host.ItemInfo -> ItemView.TrayItemIcon
+iconOf Host.ItemInfo{..} =
   ItemView.TrayItemIcon
     { itemThemePath = iconThemePath
     , itemIconName = Just $ T.pack iconName
     , itemIconInfo = iconPixmaps
     }
 
-overlayOf :: HS.ItemInfo -> ItemView.TrayItemIcon
-overlayOf HS.ItemInfo{..} =
+overlayOf :: Host.ItemInfo -> ItemView.TrayItemIcon
+overlayOf Host.ItemInfo{..} =
   ItemView.TrayItemIcon
     { itemThemePath = iconThemePath
     , itemIconName = T.pack <$> overlayIconName
     , itemIconInfo = overlayIconPixmaps
     }
 
-updateTooltip :: ItemView.View -> Maybe (String, HS.ImageInfo, String, String) -> IO ()
+updateTooltip :: ItemView.View -> Maybe (String, Host.ImageInfo, String, String) -> IO ()
 updateTooltip view = \case
   Nothing -> ItemView.setTooltip view Nothing
   Just (_, _, title, full) -> ItemView.setTooltip view (Just . T.pack $ tooltipOf (title, full))
@@ -202,17 +202,17 @@ updateTooltip view = \case
       (t, "") -> t
       (t, f) -> t <> ": " <> f
 
-handleClick :: Client -> HS.ItemInfo -> ItemView.View -> ItemView.MouseClick -> IO ()
-handleClick client HS.ItemInfo{..} view (ItemView.MouseClickOf event xRoot yRoot mouse) = case mouse of
-  ItemView.MouseLeft | not itemIsMenu -> void $ IC.activate client itemServiceName itemServicePath xRoot yRoot
-  ItemView.MouseMiddle -> void $ IC.secondaryActivate client itemServiceName itemServicePath xRoot yRoot
+handleClick :: Client -> Host.ItemInfo -> ItemView.View -> ItemView.MouseClick -> IO ()
+handleClick client Host.ItemInfo{..} view (ItemView.MouseClickOf event xRoot yRoot mouse) = case mouse of
+  ItemView.MouseLeft | not itemIsMenu -> void $ SNItem.activate client itemServiceName itemServicePath xRoot yRoot
+  ItemView.MouseMiddle -> void $ SNItem.secondaryActivate client itemServiceName itemServicePath xRoot yRoot
   _ -> ItemView.showPopup view event
 
-handleScroll :: Client -> HS.ItemInfo -> ItemView.ScrollDir -> IO ()
-handleScroll client HS.ItemInfo{..} = \case
+handleScroll :: Client -> Host.ItemInfo -> ItemView.ScrollDir -> IO ()
+handleScroll client Host.ItemInfo{..} = \case
   ItemView.ScrollUp -> scrollOf (-1) "vertical"
   ItemView.ScrollDown -> scrollOf 1 "vertical"
   ItemView.ScrollLeft -> scrollOf (-1) "horizontal"
   ItemView.ScrollRight -> scrollOf 1 "horizontal"
   where
-    scrollOf move dir = void $ IC.scroll client itemServiceName itemServicePath move dir
+    scrollOf move dir = void $ SNItem.scroll client itemServiceName itemServicePath move dir

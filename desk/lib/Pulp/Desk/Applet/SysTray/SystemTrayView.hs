@@ -12,12 +12,11 @@ module Pulp.Desk.Applet.SysTray.SystemTrayView (
   removeItem,
 ) where
 
-import Data.GI.Base.Attributes
-import Data.GI.Base.BasicTypes
-import Data.GI.Base.GObject
-import Data.GI.Base.Overloading
+import Data.GI.Base.Attributes qualified as GI
+import Data.GI.Base.BasicTypes qualified as GI
+import Data.GI.Base.GObject qualified as GI
+import Data.GI.Base.Overloading qualified as GI
 import Data.Text qualified as T
-import GHC.OverloadedLabels
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gtk.Objects.Box qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
@@ -26,64 +25,56 @@ import Pulp.Desk.PulpPath
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 
-newtype View = AsView (ManagedPtr View)
+newtype View = AsView (GI.ManagedPtr View)
 
-instance TypedObject View where
-  glibType :: IO GType
-  glibType = registerGType AsView
-instance GObject View
+instance GI.TypedObject View where
+  glibType :: IO GI.GType
+  glibType = GI.registerGType AsView
+instance GI.GObject View
 
-type instance ParentTypes View = Gtk.Box ': ParentTypes Gtk.Box
-instance HasParentTypes View
-
--- Disallow box/container methods
-instance
-  ( info ~ Gtk.ResolveWidgetMethod t View
-  , OverloadedMethod info View p
-  ) =>
-  IsLabel t (View -> p)
-  where
-  fromLabel = overloadedMethod @info
+type instance GI.ParentTypes View = Gtk.Box ': GI.ParentTypes Gtk.Box
+instance GI.HasParentTypes View
 
 data PackAt = PackStart | PackEnd
 newtype TrayPrivate = TrayPrivate PackAt
 
-instance DerivedGObject View where
+instance GI.DerivedGObject View where
   type GObjectParentType View = Gtk.Box
   type GObjectPrivateData View = TrayPrivate
 
   objectTypeName :: T.Text
   objectTypeName = T.pack "SystemTrayView"
 
-  objectClassInit :: GObjectClass -> IO ()
+  objectClassInit :: GI.GObjectClass -> IO ()
   objectClassInit gClass = Gtk.withClassAs Gtk.WidgetClass gClass $ \widgetClass -> do
     uiFile <- Gio.fileNewForPath =<< dataPath ("ui" </> "system-tray" </> "system-tray.ui")
     Gtk.setTemplateFromGFile widgetClass uiFile
 
-    #setCssName widgetClass (T.pack "SystemTrayView")
+    widgetClass.setCssName (T.pack "SystemTrayView")
 
-  objectInstanceInit :: GObjectClass -> View -> IO TrayPrivate
+  objectInstanceInit :: GI.GObjectClass -> View -> IO TrayPrivate
   objectInstanceInit _gClass inst = do
-    #initTemplate inst
+    (inst `GI.asA` Gtk.Widget).initTemplate
     pure (TrayPrivate PackStart)
 
 setOrientation :: View -> Gtk.Orientation -> IO ()
 setOrientation tray orient = Gtk.uiSingleRun $ do
-  set (tray `asA` Gtk.Box) [#orientation := orient]
+  GI.set (tray `GI.asA` Gtk.Box) [#orientation GI.:= orient]
 
 setPackAt :: View -> PackAt -> IO ()
 setPackAt tray at = Gtk.uiSingleRun $ do
-  gobjectSetPrivateData tray (TrayPrivate at)
+  GI.gobjectSetPrivateData tray (TrayPrivate at)
 
 addItem :: View -> ItemView.View -> IO ()
 addItem tray item = Gtk.uiSingleRun $ do
-  TrayPrivate at <- gobjectGetPrivateData tray
+  TrayPrivate at <- GI.gobjectGetPrivateData tray
+  let trayBox = tray `GI.asA` Gtk.Box
   case at of
-    PackStart -> #packStart (tray `asA` Gtk.Box) item False False 0
-    PackEnd -> #packEnd (tray `asA` Gtk.Box) item False False 0
-  #showAll item
+    PackStart -> trayBox.packStart item False False 0
+    PackEnd -> trayBox.packEnd item False False 0
+  item.showAll
 
 removeItem :: View -> ItemView.View -> IO ()
 removeItem tray item = Gtk.uiSingleRun $ do
-  #hide item
-  #remove (tray `asA` Gtk.Box) item
+  item.hide
+  (tray `GI.asA` Gtk.Box).remove item
