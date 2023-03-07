@@ -4,7 +4,7 @@ module Pulp.Desk.Applet.Layout (LayoutArg (..), layout) where
 
 import Control.Monad.IO.Class
 import Control.Monad.IO.Unlift
-import Data.GI.Base.Attributes
+import Data.GI.Base.Attributes qualified as GI
 import Data.Text qualified as T
 import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gtk.Objects.Label qualified as Gtk
@@ -60,7 +60,7 @@ view uiFile = Gtk.buildFromFile uiFile $ do
   Just layoutWid <- Gtk.getElement (T.pack "layout") Gtk.Widget
   Just layoutLbl <- Gtk.getElement (T.pack "layout-current") Gtk.Label
 
-  let setLabel lbl = set layoutLbl [#label := lbl]
+  let setLabel lbl = GI.set layoutLbl [#label GI.:= lbl]
 
   (clicks, callClick) <- liftIO sourceSink
   Gtk.addCallbackWithEvent (T.pack "layout-action") Gdk.getEventButton (onAct callClick)
@@ -68,7 +68,7 @@ view uiFile = Gtk.buildFromFile uiFile $ do
   pure View{..}
   where
     onAct call event =
-      get event #button >>= \case
+      GI.get event #button >>= \case
         1 -> call LeftClick
         3 -> call RightClick
         _ -> pure ()

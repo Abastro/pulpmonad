@@ -6,8 +6,8 @@ import Control.Concurrent
 import Control.Exception
 import Control.Monad.IO.Unlift
 import Data.Function hiding (on)
-import Data.GI.Base.Attributes
-import Data.GI.Base.Signals
+import Data.GI.Base.Attributes qualified as GI
+import Data.GI.Base.Signals qualified as GI
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import GI.Gtk.Objects.Label qualified as Gtk
@@ -116,37 +116,37 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
   Just buildLab <- Gtk.getElement (T.pack "wmctl-build-label") Gtk.Label
   Just buildScr <- Gtk.getElement (T.pack "wmctl-build-scroll") Gtk.ScrolledWindow
 
-  set window [#transientFor := parent]
+  GI.set window [#transientFor GI.:= parent]
   Gtk.windowSetTransparent window
-  on window #deleteEvent $ \_ -> #hideOnDelete window
+  GI.on window #deleteEvent $ \_ -> #hideOnDelete window
 
-  let openWindow = #showAll window
+  let openWindow = window.showAll
 
       setTab = \case
         Main -> do
-          set buildLab [#label := T.empty]
-          set stack [#visibleChildName := T.pack "main"]
-        Building -> set stack [#visibleChildName := T.pack "build"]
+          GI.set buildLab [#label GI.:= T.empty]
+          GI.set stack [#visibleChildName GI.:= T.pack "main"]
+        Building -> GI.set stack [#visibleChildName GI.:= T.pack "build"]
 
       setBuildText txt = do
-        set buildLab [#label := txt]
+        GI.set buildLab [#label GI.:= txt]
         -- Scroll to the end.
         -- Scrolling is off, likely due to text size not being directly applied.
         -- Maybe switching to TextView would fix this.
         --
         -- On the other hand, current form is not the final go-to visual,
         -- so entire scroll could be removed.
-        adj <- get buildScr #vadjustment
-        upper <- get adj #upper
-        pageSize <- get adj #pageSize
-        set adj [#value := upper - pageSize]
+        adj <- GI.get buildScr #vadjustment
+        upper <- GI.get adj #upper
+        pageSize <- GI.get adj #pageSize
+        GI.set adj [#value GI.:= upper - pageSize]
 
   (toBuild, build) <- liftIO sourceSink
   (toRefresh, refresh) <- liftIO sourceSink
   Gtk.addCallback (T.pack "wmctl-open") openWindow
-  Gtk.addCallback (T.pack "wmctl-close") $ #close window
+  Gtk.addCallback (T.pack "wmctl-close") $ window.close
   Gtk.addCallback (T.pack "wmctl-build") $ build ()
-  Gtk.addCallback (T.pack "wmctl-refresh") $ refresh () *> #close window
+  Gtk.addCallback (T.pack "wmctl-refresh") $ refresh () *> window.close
 
   pure View{..}
 

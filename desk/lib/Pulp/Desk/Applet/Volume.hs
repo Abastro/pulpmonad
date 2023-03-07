@@ -4,7 +4,7 @@ module Pulp.Desk.Applet.Volume (volumeDisplay) where
 
 import Control.Monad
 import Control.Monad.IO.Class
-import Data.GI.Base.Attributes
+import Data.GI.Base.Attributes qualified as GI
 import Data.Ord
 import Data.Text qualified as T
 import GI.Gdk.Structs.EventButton qualified as Gdk
@@ -87,9 +87,9 @@ view uiFile = Gtk.buildFromFile uiFile $ do
   Just volWidget <- Gtk.getElement (T.pack "volume") Gtk.Widget
   Just volImage <- Gtk.getElement (T.pack "image-volume") Gtk.Image
   -- Button does not receive scrolls, so it need to be manually enabled
-  #addEvents volWidget [Gtk.EventMaskScrollMask]
+  volWidget.addEvents [Gtk.EventMaskScrollMask]
 
-  let setVolIcon icon = set volImage [#iconName := icon]
+  let setVolIcon icon = GI.set volImage [#iconName GI.:= icon]
 
   (clicks, onClick) <- liftIO sourceSink
   (scrolls, onScroll) <- liftIO sourceSink
@@ -102,13 +102,13 @@ view uiFile = Gtk.buildFromFile uiFile $ do
   where
     handleScroll :: Sink ScrollTo -> Sink Gdk.EventScroll
     handleScroll callback event =
-      get event #direction >>= \case
+      GI.get event #direction >>= \case
         Gtk.ScrollDirectionUp -> callback Upward
         Gtk.ScrollDirectionDown -> callback Downward
         _ -> pure ()
 
     handleRelease :: Sink () -> Sink Gdk.EventButton
     handleRelease callback event =
-      get event #button >>= \case
+      GI.get event #button >>= \case
         2 -> callback ()
         _ -> pure ()

@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLabels #-}
+
 -- More complicated since GTK is trying to push wayland and wayland is..meh
 module Pulp.Desk.UI.Window (
   module GI.Gtk.Objects.Window,
@@ -24,9 +26,6 @@ import GI.GLib qualified as Glib
 import GI.Gdk.Flags qualified as Gdk
 import GI.Gdk.Objects.Cursor qualified as Gdk
 import GI.Gdk.Objects.Display qualified as Gdk
-import GI.Gdk.Objects.Monitor qualified as Gdk
-import GI.Gdk.Objects.Screen qualified as Gdk
-import GI.Gdk.Objects.Seat qualified as Gdk
 import GI.Gdk.Objects.Window qualified as Gdk
 import GI.Gdk.Structs.EventAny qualified as Gdk
 import GI.Gdk.Structs.Rectangle qualified as Gdk
@@ -49,10 +48,10 @@ appWindowNew app = applicationWindowNew app >>= toWindow
 -- | Make window as transparent.
 windowSetTransparent :: MonadIO m => Window -> m ()
 windowSetTransparent window = do
-  screen <- windowGetScreen window
-  composited <- Gdk.screenIsComposited screen
+  screen <- get window #screen
+  composited <- screen.isComposited
   when composited $
-    Gdk.screenGetRgbaVisual screen >>= widgetSetVisual window
+    screen.getRgbaVisual >>= window.setVisual
 
 -- | Grab the screen on window map.
 windowGrabOnMap :: MonadIO m => Window -> m ()
@@ -61,13 +60,14 @@ windowGrabOnMap window = do
   -- Possible Workaroud:
   -- 1. Use X11
   -- 2. Delegate to WM (NOTE: Simple grab should not be done, does not redirect)
-  afterWidgetMapEvent window $
+  after window #mapEvent $
     Gdk.getEventAnyWindow >=> \case
       Nothing -> pure False
       Just win -> do
         event <- getCurrentEvent
-        seat <- Gdk.windowGetDisplay win >>= Gdk.displayGetDefaultSeat
-        Gdk.seatGrab seat win [Gdk.SeatCapabilitiesAll] True (Nothing @Gdk.Cursor) event Nothing
+        display <- win.getDisplay
+        seat <- display.getDefaultSeat
+        seat.grab win [Gdk.SeatCapabilitiesAll] True (Nothing @Gdk.Cursor) event Nothing
         pure False
   pure ()
 
@@ -113,31 +113,30 @@ data DockArg = DockArg
   }
 
 -- | Set window as a dock on the primary monitor.
+--
 -- Assumes the provided size is enough, at least on the strut side.
+--
 -- Can fail when there is no default display / primary montior.
+--
 -- NB: Input is not checked
 windowSetDock :: (MonadIO m) => Window -> DockArg -> m ()
 windowSetDock window DockArg{..} = do
-  windowSetTypeHint window WindowTypeHintDock
-  windowSetSkipPagerHint window True
-  windowSetSkipTaskbarHint window True
   -- TODO Allow not applying the strut.
-
   display <- liftIO $ maybe (fail "No default display") pure =<< Gdk.displayGetDefault
   monitor <-
     liftIO $
       maybe (fail "No primary monitor") pure =<< do
-        maybe (Gdk.displayGetPrimaryMonitor display) (Gdk.displayGetMonitor display) dockMonitor
-  screen <- Gdk.displayGetDefaultScreen display
+        maybe display.getPrimaryMonitor display.getMonitor dockMonitor
+  screen <- display.getDefaultScreen
 
-  monRect <- fromGdkRect =<< Gdk.monitorGetGeometry monitor
-  scaleFactor <- Gdk.monitorGetScaleFactor monitor
+  monRect <- fromGdkRect =<< monitor.getGeometry
+  scaleFactor <- monitor.getScaleFactor
   let (fullSize, fullSpan) = fullSizeSpan monRect dockPos
   let dockSizeRatio = sizeRatio fullSize dockSize
   let Rectangle px py width height = scaleRationalRect monRect $ dockRect dockSizeRatio dockSpan dockPos
 
-  windowSetScreen window screen
-  widgetSetSizeRequest window (fromIntegral width) (fromIntegral height)
+  set window [#typeHint := WindowTypeHintDock, #skipPagerHint := True, #skipTaskbarHint := True, #screen := screen]
+  window.setSizeRequest (fromIntegral width) (fromIntegral height)
 
   -- Strut: send over "_NET_WM_STRUT_PARTIAL" on map event
   let sizeEl = (fromEnum dockPos, scaleTo fullSize dockSizeRatio)
@@ -146,7 +145,7 @@ windowSetDock window DockArg{..} = do
   let strutVec = (scaleFactor *) <$> V.replicate 12 0 V.// [sizeEl, beginEl, endEl]
 
   -- Note: On Gtk4, getting surface is the first
-  afterWidgetMapEvent window $
+  after window #mapEvent $
     Gdk.getEventAnyWindow >=> \case
       Nothing -> pure False
       Just gdkWin -> do
@@ -163,21 +162,22 @@ windowSetDock window DockArg{..} = do
         pure False
   pure ()
   where
+    fromGdkRect :: MonadIO m => Gdk.Rectangle -> m Rectangle
     fromGdkRect rect =
       Rectangle
-        <$> Gdk.getRectangleX rect
-        <*> Gdk.getRectangleY rect
-        <*> (fromIntegral <$> Gdk.getRectangleWidth rect)
-        <*> (fromIntegral <$> Gdk.getRectangleHeight rect)
+        <$> get rect #x
+        <*> get rect #y
+        <*> (fromIntegral <$> get rect #width)
+        <*> (fromIntegral <$> get rect #height)
 
 withXDisplay :: Gdk.Display -> (X11.Display -> IO ()) -> IO ()
 withXDisplay gdkDisp act = void . runMaybeT $ do
   x11Disp <- MaybeT $ Glib.castTo GdkX11.X11Display gdkDisp
-  dispPtr <- GdkX11.x11DisplayGetXdisplay x11Disp
+  dispPtr <- x11Disp.getXdisplay
   liftIO . withManagedPtr dispPtr $ \ptr -> act (X11.Display $ castPtr ptr)
 
 withXWindow :: Gdk.Window -> (X11.Window -> IO ()) -> IO ()
 withXWindow gdkWin act = void . runMaybeT $ do
   x11Win <- MaybeT $ Glib.castTo GdkX11.X11Window gdkWin
-  winID <- GdkX11.x11WindowGetXid x11Win
+  winID <- x11Win.getXid
   liftIO $ act (fromIntegral winID)

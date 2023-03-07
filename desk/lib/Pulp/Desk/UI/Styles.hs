@@ -21,8 +21,8 @@ import GI.Gtk.Objects.StyleContext
 updateCssClass ::
   (Enum s, Bounded s, MonadIO m) => (s -> T.Text) -> [s] -> StyleContext -> m ()
 updateCssClass asClass state ctxt = do
-  traverse_ (styleContextRemoveClass ctxt) (asClass <$> [minBound .. maxBound])
-  traverse_ (styleContextAddClass ctxt) (asClass <$> state)
+  traverse_ ctxt.removeClass (asClass <$> [minBound .. maxBound])
+  traverse_ ctxt.addClass (asClass <$> state)
 
 -- | Adds style context to the default screen.
 defScreenAddStyleContext :: (MonadIO m, IsStyleProvider b) => b -> Int32 -> m ()

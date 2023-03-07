@@ -3,7 +3,7 @@
 module Pulp.Desk.Applet.Clocks (textClock) where
 
 import Control.Monad.IO.Class
-import Data.GI.Base.Attributes
+import Data.GI.Base.Attributes qualified as GI
 import Data.Text qualified as T
 import Data.Time
 import GI.Gtk.Objects.Label qualified as Gtk
@@ -45,5 +45,5 @@ view uiFile = Gtk.buildFromFile uiFile $ do
   Just clockLabel <- Gtk.getElement (T.pack "clock-label") Gtk.Label
   Just clockWidget <- Gtk.getElement (T.pack "clock") Gtk.Widget
 
-  let setClock txt = set clockLabel [#label := txt]
+  let setClock txt = GI.set clockLabel [#label GI.:= txt]
   pure View{..}

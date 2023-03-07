@@ -48,7 +48,7 @@ iconSizePx = \case
 -- Returns Nothing on failure, not leaving error messages.
 themeLoadIcon :: Gtk.IconTheme -> T.Text -> Int32 -> [Gtk.IconLookupFlags] -> IO (Maybe Pixbuf)
 themeLoadIcon (theme :: Gtk.IconTheme) iconName size flags = do
-  fromRight Nothing <$> try @GError (Gtk.iconThemeLoadIcon theme iconName size flags)
+  fromRight Nothing <$> try @GError (theme.loadIcon iconName size flags)
 
 -- | Chooses icon into a pixbuf appropriate for given pixel size, with scaling if necessary.
 --
@@ -60,7 +60,7 @@ iconsChoosePixbuf size converter icons = runMaybeT $ do
   -- TODO How to GC the pixbuf?
   pixbuf <- pixbufNewFromBytes bytes ColorspaceRgb True 8 iconWidth iconHeight (iconWidth * nSample)
   -- Copies and scales here
-  MaybeT $ pixbufScaleSimple pixbuf size size InterpTypeBilinear
+  MaybeT $ pixbuf.scaleSimple size size InterpTypeBilinear
   where
     nSample = 4
 

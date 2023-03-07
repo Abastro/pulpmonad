@@ -1,5 +1,4 @@
 {-# LANGUAGE MonoLocalBinds #-}
-{-# LANGUAGE OverloadedLabels #-}
 
 module Pulp.Desk.UI.Commons (
   module GI.Gtk.Enums,
@@ -50,8 +49,8 @@ withClassAs constr gClass act = withTransient (coerce gClass) (act . constr)
 
 setTemplateFromGFile :: WidgetClass -> Gio.File -> IO ()
 setTemplateFromGFile widgetClass file = do
-  (bytes, _) <- #loadBytes file (Nothing @Gio.Cancellable)
-  #setTemplate widgetClass bytes
+  (bytes, _) <- file.loadBytes (Nothing @Gio.Cancellable)
+  widgetClass.setTemplate bytes
 
 -- | Obtains template child, only intended for private use.
 -- CAUTION: need to be called with exact type.
@@ -59,7 +58,7 @@ templateChild :: forall p o. (IsWidget p, GObject o) => p -> T.Text -> (ManagedP
 templateChild parent name constr = do
   parentType <- glibType @p
   parentWid <- toWidget parent
-  asObj <- #getTemplateChild parentWid parentType name
+  asObj <- parentWid.getTemplateChild parentType name
   unsafeCastTo constr asObj
 
 -- | Monad with builder attached
@@ -70,13 +69,13 @@ buildFromFile uiFile act = do
   builder <- builderNewFromFile uiFile
   built <- runReaderT act builder
   -- Finalizes signal connection
-  #connectSignals builder nullPtr
+  builder.connectSignals nullPtr
   pure built
 
 -- | Adds callback to a signal.
 addCallback :: MonadIO m => T.Text -> IO () -> BuilderM m ()
 addCallback name act = ReaderT $ \builder -> do
-  #addCallbackSymbol builder name act
+  builder.addCallbackSymbol name act
 
 -- | Adds callback with event.
 --
@@ -90,5 +89,5 @@ addCallbackWithEvent name specify act = addCallback name $ void . runMaybeT $ do
 -- | Gets an element in GtkBuilder.
 getElement :: (GObject o, MonadIO m) => T.Text -> (ManagedPtr o -> o) -> BuilderM m (Maybe o)
 getElement name constr = ReaderT $ \builder -> runMaybeT $ do
-  obj <- MaybeT $ #getObject builder name
+  obj <- MaybeT $ builder.getObject name
   MaybeT . liftIO $ castTo constr obj

@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLabels #-}
+
 -- | Caches app informations to obtain the list without IO overhead.
 module Pulp.Desk.System.AppInfos (
   AppInfoData (..),
@@ -12,6 +14,8 @@ import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
+import Data.GI.Base.ManagedPtr qualified as GI
+import Data.GI.Base.Signals qualified as GI
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import GI.Gio qualified as Gio
@@ -37,7 +41,7 @@ trackAppInfo :: IO AppInfoCol
 trackAppInfo = do
   curAppInfo <- newTVarIO Nothing
   appsMonitor <- Gio.appInfoMonitorGet
-  Gio.onAppInfoMonitorChanged appsMonitor $ atomically $ writeTVar curAppInfo Nothing
+  GI.on appsMonitor #changed $ atomically $ writeTVar curAppInfo Nothing
   pure AppInfoCol{..}
 
 getAppInfos :: AppInfoCol -> IO (V.Vector AppInfoData)
@@ -48,21 +52,21 @@ getAppInfos AppInfoCol{curAppInfo} =
 
     getFromScratch = do
       appInfos <- V.fromList <$> Gio.appInfoGetAll
-      deskInfos <- V.mapMaybeM (Gio.castTo Gio.DesktopAppInfo) appInfos
+      deskInfos <- V.mapMaybeM (GI.castTo Gio.DesktopAppInfo) appInfos
       V.mapM appInfoData deskInfos
 
-    appInfoData appInfo = do
-      appId <- Gio.appInfoGetId appInfo
+    appInfoData (appInfo :: Gio.DesktopAppInfo) = do
+      appId <- appInfo.getId
       appExecName <- getExecName appInfo
       appWmClass <- getWmClass appInfo
       pure AppInfoData{..}
 
     getExecName appInfo = runMaybeT $ do
-      exec <- either (const empty) pure =<< liftIO (tryNull $ Gio.appInfoGetExecutable appInfo)
+      exec <- nullRetToMaybeT appInfo.getExecutable
       execName : _ <- pure (words exec)
       pure (T.pack execName)
 
     getWmClass appInfo = runMaybeT $ do
-      either (const empty) pure =<< liftIO (tryNull $ Gio.desktopAppInfoGetStartupWmClass appInfo)
+      nullRetToMaybeT appInfo.getStartupWmClass
 
-    tryNull = try @Gio.UnexpectedNullPointerReturn
+    nullRetToMaybeT x = either (const empty) pure =<< liftIO (try @Gio.UnexpectedNullPointerReturn x)

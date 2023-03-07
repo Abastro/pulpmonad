@@ -5,8 +5,8 @@ module Pulp.Desk.Applet.SysCtrl (sysCtrlBtn) where
 
 import Control.Monad.IO.Class
 import Control.Monad.IO.Unlift
-import Data.GI.Base.Attributes
-import Data.GI.Base.Signals
+import Data.GI.Base.Attributes qualified as GI
+import Data.GI.Base.Signals qualified as GI
 import Data.Text qualified as T
 import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gtk.Objects.Widget qualified as Gtk
@@ -35,7 +35,7 @@ sysCtrlBtn parent = withRunInIO $ \unlift -> do
     actEvent <- sourceEvent toAct
 
     -- Problem: Calling "openWindow" somehow does not grab focus correctly.
-    reactimate (Gtk.uiSingleRun (Gtk.widgetActivate ctrlButton) <$ callEvent)
+    reactimate (Gtk.uiSingleRun ctrlButton.activate <$ callEvent)
     reactimate (actOn <$> actEvent)
   actuate network
 
@@ -63,18 +63,18 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
   Just window <- Gtk.getElement (T.pack "sysctl") Gtk.Window
 
   -- Construct window at top
-  set window [#transientFor := parent]
-  #setKeepAbove window True
+  GI.set window [#transientFor GI.:= parent]
+  window.setKeepAbove True
   Gtk.windowSetTransparent window
   Gtk.windowGrabOnMap window
-  on window #deleteEvent $ \_ -> #hideOnDelete window
+  GI.on window #deleteEvent $ \_ -> window.hideOnDelete
 
-  let openWindow = #showAll window
+  let openWindow = window.showAll
 
   (toAct, act) <- liftIO sourceSink
   Gtk.addCallback (T.pack "sysctl-open") openWindow
   Gtk.addCallbackWithEvent (T.pack "sysctl-keypress") Gdk.getEventKey $ onKeyPress window
-  Gtk.addCallback (T.pack "sysctl-close") $ #close window
+  Gtk.addCallback (T.pack "sysctl-close") $ window.close
   Gtk.addCallback (T.pack "sysctl-logout") $ act Logout
   Gtk.addCallback (T.pack "sysctl-reboot") $ act Reboot
   Gtk.addCallback (T.pack "sysctl-poweroff") $ act Poweroff
@@ -83,7 +83,7 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
   where
     -- Apparently this requires GADTs extension
     onKeyPress window event =
-      get event #keyval >>= \case
+      GI.get event #keyval >>= \case
         Gtk.KEY_Escape -> #close window
         _ -> pure ()
 

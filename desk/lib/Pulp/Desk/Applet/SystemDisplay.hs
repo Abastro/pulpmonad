@@ -10,8 +10,8 @@ import Control.Monad.IO.Class
 import Control.Monad.IO.Unlift
 import Data.Bifunctor
 import Data.Foldable
-import Data.GI.Base.Attributes
-import Data.GI.Base.BasicTypes
+import Data.GI.Base.Attributes qualified as GI
+import Data.GI.Base.BasicTypes qualified as GI
 import Data.Int
 import Data.Text qualified as T
 import Data.Validation
@@ -21,9 +21,10 @@ import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
 import Pulp.Desk.System.HWStatus
 import Pulp.Desk.UI.Commons qualified as Gtk
-import Pulp.Desk.UI.ImageBar qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Styles qualified as Gtk
+import Pulp.Desk.UI.Widget.ImageBar (ImageBar (..))
+import Pulp.Desk.UI.Widget.ImageBar qualified as ImageBar
 import Pulp.Desk.Utils.LogPrint
 import Reactive.Banana.Combinators
 import Reactive.Banana.Frameworks
@@ -91,7 +92,7 @@ batView uiFile = Gtk.buildFromFile uiFile $ do
   Just batWidget <- Gtk.getElement (T.pack "battery") Gtk.Widget
   Just batIcon <- Gtk.getElement (T.pack "battery-icon") Gtk.Image
 
-  let setBatIcon icon = set batIcon [#iconName := icon]
+  let setBatIcon icon = GI.set batIcon [#iconName GI.:= icon]
   (batClicks, onClick) <- liftIO sourceSink
   Gtk.addCallback (T.pack "battery-open") $ onClick ()
   pure BatView{..}
@@ -177,16 +178,16 @@ data MainboardView = MainboardView
 
 mainboardView :: T.Text -> IO MainboardView
 mainboardView uiFile = do
-  glibType @Gtk.ImageBar -- Ensures ImageBar is registered
+  GI.glibType @ImageBar -- Ensures ImageBar is registered
   Gtk.buildFromFile uiFile $ do
     Just mainboardWidget <- Gtk.getElement (T.pack "mainboard") Gtk.Widget
-    Just memBar <- Gtk.getElement (T.pack "mainboard-mem") Gtk.ImageBar
-    Just cpuBar <- Gtk.getElement (T.pack "mainboard-cpu") Gtk.ImageBar
+    Just memBar <- Gtk.getElement (T.pack "mainboard-mem") AsImageBar
+    Just cpuBar <- Gtk.getElement (T.pack "mainboard-cpu") AsImageBar
 
-    let setMemIcon icon = Gtk.imageBarSetIcon memBar icon Gtk.IconSizeLargeToolbar
-        setCPUIcon icon = Gtk.imageBarSetIcon cpuBar icon Gtk.IconSizeLargeToolbar
-        setMemFill = Gtk.imageBarSetFill memBar
-        setCPUFill = Gtk.imageBarSetFill cpuBar
+    let setMemIcon icon = ImageBar.setIcon memBar icon Gtk.IconSizeLargeToolbar
+        setCPUIcon icon = ImageBar.setIcon cpuBar icon Gtk.IconSizeLargeToolbar
+        setMemFill = ImageBar.setFill memBar
+        setCPUFill = ImageBar.setFill cpuBar
         setCPUTemp tempV = #getStyleContext cpuBar >>= Gtk.updateCssClass tempClass [tempV]
 
     (mainClicks, onClick) <- liftIO sourceSink
