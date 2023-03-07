@@ -298,7 +298,7 @@ setFill widget fill = do
   writeIORef barFill fill
   widget.queueDraw
 
-setIcon :: ImageBar -> T.Text -> Gtk.IconSize -> IO ()
-setIcon widget iconName iconSize = do
+setIcon :: ImageBar -> T.Text -> IO ()
+setIcon widget iconName = do
   image <- getImage widget
-  Gtk.imageSetFromIconName image (Just iconName) (fromIntegral $ fromEnum iconSize)
+  GI.set image [#iconName GI.:= iconName]

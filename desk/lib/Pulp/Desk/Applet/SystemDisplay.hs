@@ -182,11 +182,11 @@ mainboardView uiFile = do
     Just memBar <- Gtk.getElement (T.pack "mainboard-mem") AsImageBar
     Just cpuBar <- Gtk.getElement (T.pack "mainboard-cpu") AsImageBar
 
-    let setMemIcon icon = ImageBar.setIcon memBar icon Gtk.IconSizeLargeToolbar
-        setCPUIcon icon = ImageBar.setIcon cpuBar icon Gtk.IconSizeLargeToolbar
+    let setMemIcon = ImageBar.setIcon memBar
         setMemFill = ImageBar.setFill memBar
+        setCPUIcon = ImageBar.setIcon cpuBar
         setCPUFill = ImageBar.setFill cpuBar
-        setCPUTemp tempV = #getStyleContext cpuBar >>= Gtk.updateCssClass tempClass [tempV]
+        setCPUTemp tempV = cpuBar.getStyleContext >>= Gtk.updateCssClass tempClass [tempV]        
 
     (mainClicks, onClick) <- liftIO sourceSink
     Gtk.addCallback (T.pack "mainboard-open") $ onClick ()
