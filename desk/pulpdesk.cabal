@@ -95,9 +95,14 @@ library
     Pulp.Desk.System.X11.XHandle
     Pulp.Desk.System.X11.WMStatus
 
+    Pulp.Desk.System.Hardware.Commons
+    Pulp.Desk.System.Hardware.CPUStatus
+    Pulp.Desk.System.Hardware.MemoryStatus
+    Pulp.Desk.System.Hardware.BatteryStatus
+    Pulp.Desk.System.Hardware.DiskStatus
+
     Pulp.Desk.System.AudioStatus
     Pulp.Desk.System.AppInfos
-    Pulp.Desk.System.HWStatus
 
     Pulp.Desk.Env.PulpEnv
 

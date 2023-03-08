@@ -19,7 +19,9 @@ import GI.Gtk.Objects.Image qualified as Gtk
 import Pulp.Desk.Env.PulpEnv
 import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
-import Pulp.Desk.System.HWStatus qualified as HW
+import Pulp.Desk.System.Hardware.BatteryStatus qualified as HW
+import Pulp.Desk.System.Hardware.CPUStatus qualified as HW
+import Pulp.Desk.System.Hardware.MemoryStatus qualified as HW
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Styles qualified as Gtk
@@ -66,11 +68,11 @@ batDisplay _iconSize = withRunInIO $ \unlift -> do
   actuate network
   pure batWidget
   where
-    getBattery = try @IOException HW.batStat
+    getBattery = try @IOException HW.batteryStat
     iconOf = \case
-      Right HW.BatStat{capacity, batStatus = HW.Charging} ->
+      Right HW.MkBatteryStat{capacity, status = HW.Charging} ->
         T.pack $ printf "battery-level-%d-charging-symbolic" (levelOf capacity)
-      Right HW.BatStat{capacity, batStatus = _} ->
+      Right HW.MkBatteryStat{capacity, status = _} ->
         T.pack $ printf "battery-level-%d-symbolic" (levelOf capacity)
       Left _ -> T.pack "battery-missing-symbolic"
     levelOf capacity = (capacity `div` 10) * 10
@@ -131,8 +133,8 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
   actuate network
   pure mainboardWidget
   where
-    getMemory = try @IOException $ HW.memStat
-    getCPUTemp = try @IOException $ HW.cpuTemp
+    getMemory = try @IOException $ HW.memoryStat
+    getCPUTemp = try @IOException $ HW.cpuTemperature
     getCPUStat = try @IOException $ fst <$> HW.cpuStat
 
     diff old new = liftA2 (-) new old
@@ -145,7 +147,7 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
           Left exc -> Failure ["<temperature> " <> show exc]
           Right t -> Success t
 
-    memFillOf = either (const 0) (HW.memUsed . HW.memRatios)
+    memFillOf = either (const 0) (HW.memoryUsed . HW.memoryRatios)
     cpuInfoOf = \case
       Right (use, temp) -> (HW.cpuUsed (HW.cpuRatios use), tempVal temp)
       Left _ -> (0, T20)
@@ -186,7 +188,7 @@ mainboardView uiFile = do
         setMemFill = ImageBar.setFill memBar
         setCPUIcon = ImageBar.setIcon cpuBar
         setCPUFill = ImageBar.setFill cpuBar
-        setCPUTemp tempV = cpuBar.getStyleContext >>= Gtk.updateCssClass tempClass [tempV]        
+        setCPUTemp tempV = cpuBar.getStyleContext >>= Gtk.updateCssClass tempClass [tempV]
 
     (mainClicks, onClick) <- liftIO sourceSink
     Gtk.addCallback (T.pack "mainboard-open") $ onClick ()

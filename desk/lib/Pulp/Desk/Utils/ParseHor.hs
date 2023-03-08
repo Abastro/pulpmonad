@@ -1,5 +1,6 @@
+-- | Module for horizontal parsing.
 module Pulp.Desk.Utils.ParseHor (
-  P.label,
+  Parse.label,
   parseFile,
   skipH,
   remainH,
@@ -29,61 +30,61 @@ import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.Void
-import Text.Megaparsec qualified as P
-import Text.Megaparsec.Char qualified as P
+import Text.Megaparsec qualified as Parse
+import Text.Megaparsec.Char qualified as Parse
 import Text.Megaparsec.Char.Lexer qualified as Lex
 import Text.Printf
 
 -- | Parses a file using a parser. Throws userError when fails.
-parseFile :: P.Parsec Void T.Text a -> FilePath -> IO a
+parseFile :: Parse.Parsec Void T.Text a -> FilePath -> IO a
 parseFile parser path = do
   txt <- T.readFile path
-  case P.parse parser path txt of
-    Left err -> fail $ P.errorBundlePretty err
+  case Parse.parse parser path txt of
+    Left err -> fail $ Parse.errorBundlePretty err
     Right result -> pure result
 
 -- | Skips horizontal spaces.
-skipH :: P.MonadParsec e T.Text m => m ()
-skipH = P.hspace
+skipH :: Parse.MonadParsec e T.Text m => m ()
+skipH = Parse.hspace
 
 -- | Parses remaining characters until a line break.
-remainH :: P.MonadParsec e T.Text m => m T.Text
-remainH = P.takeWhileP (Just "remaining") (/= '\n')
+remainH :: Parse.MonadParsec e T.Text m => m T.Text
+remainH = Parse.takeWhileP (Just "remaining") (/= '\n')
 
 -- | Space-separated identifier, which could include numbers, '_', '(' and ')'.
-identH :: P.MonadParsec e T.Text m => m T.Text
-identH = Lex.lexeme skipH (P.takeWhile1P (Just "identifier") isID)
+identH :: Parse.MonadParsec e T.Text m => m T.Text
+identH = Lex.lexeme skipH (Parse.takeWhile1P (Just "identifier") isID)
   where
     isID c = isAlphaNum c || c == '(' || c == ')' || c == '_'
 
 -- | Identifier with restricting condition.
-identCondH :: P.MonadParsec e T.Text m => (T.Text -> Bool) -> m T.Text
-identCondH cond = P.try $ identH >>= \ident -> ident <$ guard (cond ident)
+identCondH :: Parse.MonadParsec e T.Text m => (T.Text -> Bool) -> m T.Text
+identCondH cond = Parse.try $ identH >>= \ident -> ident <$ guard (cond ident)
 
 -- | Horizontal symbols.
-symbolH :: P.MonadParsec e T.Text m => T.Text -> m T.Text
+symbolH :: Parse.MonadParsec e T.Text m => T.Text -> m T.Text
 symbolH = Lex.symbol skipH
 
 -- | Horizontal decimals.
-decimalH :: (P.MonadParsec e T.Text m, Num a) => m a
+decimalH :: (Parse.MonadParsec e T.Text m, Num a) => m a
 decimalH = Lex.lexeme skipH Lex.decimal
 
 -- | Parse an end of line, or eof.
-eoH :: P.MonadParsec e T.Text m => m ()
-eoH = void P.eol <|> P.eof
+eoH :: Parse.MonadParsec e T.Text m => m ()
+eoH = void Parse.eol <|> Parse.eof
 
 -- | Parse fields with custom parser for reading the field name.
-fieldsCustom :: P.MonadParsec e T.Text m => m T.Text -> m a -> m (M.Map T.Text a)
+fieldsCustom :: Parse.MonadParsec e T.Text m => m T.Text -> m a -> m (M.Map T.Text a)
 fieldsCustom custom pval = M.fromList <$> field `sepEndBy` eoH
   where
-    field = P.label "field" $ (,) <$> custom <*> pval
+    field = Parse.label "field" $ (,) <$> custom <*> pval
 
 -- | Parse fields as a map.
-fields :: P.MonadParsec e T.Text m => m a -> m (M.Map T.Text a)
+fields :: Parse.MonadParsec e T.Text m => m a -> m (M.Map T.Text a)
 fields = fieldsCustom identH
 
 -- | Parse fields as a map, with heading ignored for each line.
-fieldsWithHead :: P.MonadParsec e T.Text m => m hd -> m a -> m (M.Map T.Text a)
+fieldsWithHead :: Parse.MonadParsec e T.Text m => m hd -> m a -> m (M.Map T.Text a)
 fieldsWithHead hd = fieldsCustom (hd *> identH)
 
 -- | Map query monad.
@@ -91,6 +92,7 @@ newtype QueryMap b a = QueryMap (ExceptT String (State (M.Map T.Text b)) a)
   deriving (Functor, Applicative, Monad)
 
 instance MonadFail (QueryMap b) where
+  fail :: String -> QueryMap b a
   fail = QueryMap . throwError
 
 -- | Execute QueryMap.
