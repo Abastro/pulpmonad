@@ -50,8 +50,8 @@ import Data.Validation
 import Data.Vector qualified as V
 import Foreign.C.Types
 import Foreign.Storable
-import Graphics.X11.Types
-import Graphics.X11.Xlib.Extras
+import Graphics.X11.Types qualified as X11
+import Graphics.X11.Xlib.Extras qualified as X11
 import Pulp.Desk.Reactive.Entry
 import Pulp.Desk.System.X11.XHandle
 import Pulp.Desk.UI.Pixbufs qualified as Gtk
@@ -81,9 +81,9 @@ class XPropRaw n => XPropType n a | a -> n where
   parseProp :: [n] -> Either T.Text a
 
 instance XPropType CLong Int where parseProp = fmap fromIntegral . asSingle
-instance XPropType CLong XID where parseProp = fmap fromIntegral . asSingle
+instance XPropType CLong X11.XID where parseProp = fmap fromIntegral . asSingle
 
-instance XPropType CLong [XID] where parseProp = Right . fmap fromIntegral
+instance XPropType CLong [X11.XID] where parseProp = Right . fmap fromIntegral
 
 instance XPropType CChar BS.ByteString where parseProp = Right . BS.pack . fmap fromIntegral
 instance XPropType CChar T.Text where parseProp = parseProp >=> asUtf8
@@ -94,15 +94,15 @@ data XQueryError = XMissingProperty String | XParseError String T.Text
   deriving (Show)
 
 -- | Format list of query errors with window. WIP.
-formatXQError :: Window -> [XQueryError] -> String
+formatXQError :: X11.Window -> [XQueryError] -> String
 formatXQError window errors = printf "Query error[%d]: %s" window (show errors)
 
 -- | X Property query applicative, which accumulates all the errors.
 -- Make sure that no exception leaks out.
-newtype XPQuery a = XPQuery (ReaderT (IORef [Atom]) XIO (Validation [XQueryError] a))
+newtype XPQuery a = XPQuery (ReaderT (IORef [X11.Atom]) XIO (Validation [XQueryError] a))
   deriving
     (Functor, Applicative, ActX11)
-    via (ReaderT (IORef [Atom]) (Compose XIO (Validation [XQueryError])))
+    via (ReaderT (IORef [X11.Atom]) (Compose XIO (Validation [XQueryError])))
 
 instance Alternative XPQuery where
   empty = XPQuery (pure empty)
@@ -115,7 +115,7 @@ queryProp name = XPQuery $ do
   prop <- xAtom name
   liftIO $ modifyIORef' tracked (prop :)
   let bits = bitSize $ Proxy @n
-  mayRaw <- liftDWIO $ \disp win -> rawGetWindowProperty @n bits disp prop win
+  mayRaw <- liftDWIO $ \disp win -> X11.rawGetWindowProperty @n bits disp prop win
   pure $ either (Failure . (: [])) Success $ handleParse mayRaw
   where
     handleParse mayRaw = do
@@ -130,7 +130,7 @@ prepareForQuery prepare getQuery = XPQuery $ do
   let XPQuery query = getQuery prepared in query
 
 -- INTERNAL for query run
-runXInternal :: XPQuery a -> XIO (Either [XQueryError] a, S.Set Atom)
+runXInternal :: XPQuery a -> XIO (Either [XQueryError] a, S.Set X11.Atom)
 runXInternal (XPQuery query) = do
   watched <- liftIO (newIORef [])
   val <- runReaderT query watched
@@ -150,18 +150,18 @@ runXQuery (XPQuery query) = do
 -- Only the first query deliver error message,
 -- and any other query which fail to produce result doesn't emit the value.
 watchXQuery ::
-  Window ->
+  X11.Window ->
   XPQuery a ->
   (a -> ExceptT [XQueryError] XIO b) ->
   XIO (Either [XQueryError] (Steps b))
 watchXQuery window query modifier = do
   (initRun, watchSet) <- xOnWindow window $ runXInternal query
   applyModify initRun >>= traverse \initial -> do
-    source <- xListenSource propertyChangeMask window (emitWith watchSet)
+    source <- xListenSource X11.propertyChangeMask window (emitWith watchSet)
     pure (MkSteps initial source)
   where
     emitWith watchSet = \case
-      PropertyEvent{ev_atom = prop}
+      X11.PropertyEvent{ev_atom = prop}
         | prop `S.member` watchSet -> failing <$> (runXQuery query >>= applyModify)
       _ -> pure Nothing
 
@@ -211,9 +211,9 @@ reqCurrentDesktop :: XIO (Sink Int)
 reqCurrentDesktop = do
   root <- xWindow
   typCurDesk <- xAtom "_NET_CURRENT_DESKTOP"
-  xSendSink structureNotifyMask root $ \event idx -> liftIO $ do
-    setEventType event clientMessage
-    setClientMessageEvent' event root typCurDesk 32 [fromIntegral idx, fromIntegral currentTime]
+  xSendSink X11.structureNotifyMask root $ \event idx -> liftIO $ do
+    X11.setEventType event X11.clientMessage
+    X11.setClientMessageEvent' event root typCurDesk 32 [fromIntegral idx, fromIntegral X11.currentTime]
 
 getDesktopLayout :: XPQuery T.Text
 getDesktopLayout = queryProp @T.Text "_XMONAD_CURRENT_LAYOUT"
@@ -228,29 +228,29 @@ reqDesktopLayout :: XIO (Sink LayoutCmd)
 reqDesktopLayout = do
   root <- xWindow
   typLayout <- xAtom "_XMONAD_CURRENT_LAYOUT"
-  xSendSink structureNotifyMask root $ \event cmd -> liftIO $ do
-    setEventType event clientMessage
-    setClientMessageEvent' event root typLayout 32 [layoutDat cmd, fromIntegral currentTime]
+  xSendSink X11.structureNotifyMask root $ \event cmd -> liftIO $ do
+    X11.setEventType event X11.clientMessage
+    X11.setClientMessageEvent' event root typLayout 32 [layoutDat cmd, fromIntegral X11.currentTime]
 
 -- | Get all windows.
-getAllWindows :: XPQuery (V.Vector Window)
-getAllWindows = V.fromList <$> queryProp @[Window] "_NET_CLIENT_LIST"
+getAllWindows :: XPQuery (V.Vector X11.Window)
+getAllWindows = V.fromList <$> queryProp @[X11.Window] "_NET_CLIENT_LIST"
 
 -- | Get an active window.
-getActiveWindow :: XPQuery (Maybe Window)
-getActiveWindow = find (> 0) <$> queryProp @[Window] "_NET_ACTIVE_WINDOW"
+getActiveWindow :: XPQuery (Maybe X11.Window)
+getActiveWindow = find (> 0) <$> queryProp @[X11.Window] "_NET_ACTIVE_WINDOW"
 
 -- | Request active window. flag should be True if you are a pager.
 -- Must be called from root window.
-reqActiveWindow :: Bool -> XIO (Sink Window)
+reqActiveWindow :: Bool -> XIO (Sink X11.Window)
 reqActiveWindow flag = do
   root <- xWindow
   typActive <- xAtom "_NET_ACTIVE_WINDOW"
-  xSendSink structureNotifyMask root $ \event target -> liftIO $ do
+  xSendSink X11.structureNotifyMask root $ \event target -> liftIO $ do
     let srcInd = if flag then 2 else 1
-    setEventType event clientMessage
+    X11.setEventType event X11.clientMessage
     -- Is this "currentTime" thing right?
-    setClientMessageEvent' event target typActive 32 [srcInd, fromIntegral currentTime]
+    X11.setClientMessageEvent' event target typActive 32 [srcInd, fromIntegral X11.currentTime]
 
 -- | Inclusive states of the window.
 data WMStateEx = WinHidden | WinDemandAttention
@@ -275,7 +275,7 @@ getWindowInfo = WindowInfo <$> wmTitle <*> wmClass <*> wmState
     wmTitle = (queryProp @T.Text "_NET_WM_NAME" <|> queryProp @T.Text "WM_NAME") <|> pure T.empty
     wmClass = V.fromList <$> queryProp @[T.Text] "WM_CLASS"
     wmState = prepareForQuery stateAtoms $ \stMap -> S.fromList . mapMaybe (stMap M.!?) <$> wmStateRaw
-    wmStateRaw = queryProp @[Atom] "_NET_WM_STATE" <|> pure [] -- State is optional
+    wmStateRaw = queryProp @[X11.Atom] "_NET_WM_STATE" <|> pure [] -- State is optional
     stateAtoms = M.fromList <$> traverse (bitraverse xAtom pure) pairs
     pairs =
       [ ("_NET_WM_STATE_HIDDEN", WinHidden)

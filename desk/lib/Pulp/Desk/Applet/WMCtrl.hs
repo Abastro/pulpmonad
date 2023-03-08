@@ -13,12 +13,12 @@ import Data.Text.IO qualified as T
 import GI.Gtk.Objects.Label qualified as Gtk
 import GI.Gtk.Objects.ScrolledWindow qualified as Gtk
 import GI.Gtk.Objects.Stack qualified as Gtk
-import Graphics.X11.Types
-import Graphics.X11.Xlib.Extras
+import Graphics.X11.Types qualified as X11
+import Graphics.X11.Xlib.Extras qualified as X11
 import Pulp.Desk.Env.PulpEnv
 import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
-import Pulp.Desk.System.X11.XHandle
+import Pulp.Desk.System.X11.XHandle qualified as X11
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Window qualified as Gtk
@@ -32,7 +32,7 @@ import XMonad.Util.Run (safeSpawn)
 -- Shows the system control dialog.
 wmCtrlBtn :: Gtk.Window -> PulpIO Gtk.Widget
 wmCtrlBtn parent = withRunInIO $ \unlift -> do
-  watch <- unlift $ runXHook wmCtrlListen
+  watch <- unlift $ X11.runXHook wmCtrlListen
   uiFile <- dataPath ("ui" </> "wmctl.ui")
   View{..} <- view (T.pack uiFile) parent
 
@@ -156,13 +156,13 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
 data WMCtrlCall = WMCtrlCall
 
-wmCtrlListen :: XIO (Source WMCtrlCall)
+wmCtrlListen :: X11.XIO (Source WMCtrlCall)
 wmCtrlListen = do
-  rootWin <- xWindow
-  ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"
-  ctrlSys <- xAtom "_XMONAD_CTRL_WM"
-  xListenSource structureNotifyMask rootWin $ \case
-    ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
+  rootWin <- X11.xWindow
+  ctrlTyp <- X11.xAtom "_XMONAD_CTRL_MSG"
+  ctrlSys <- X11.xAtom "_XMONAD_CTRL_WM"
+  X11.xListenSource X11.structureNotifyMask rootWin $ \case
+    X11.ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
       | msgTyp == ctrlTyp
       , fromIntegral subTyp == ctrlSys -> do
           pure (Just WMCtrlCall)

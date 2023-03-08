@@ -11,8 +11,8 @@ import GI.Gtk.Objects.Label qualified as Gtk
 import Pulp.Desk.Env.PulpEnv
 import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
-import Pulp.Desk.System.X11.WMStatus
-import Pulp.Desk.System.X11.XHandle
+import Pulp.Desk.System.X11.WMStatus qualified as X11
+import Pulp.Desk.System.X11.XHandle qualified as X11
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 import Reactive.Banana.Frameworks
@@ -24,7 +24,7 @@ newtype LayoutArg = LayoutArg
 -- | Applet showing current window layout.
 layout :: LayoutArg -> PulpIO Gtk.Widget
 layout LayoutArg{..} = withRunInIO $ \unlift -> do
-  LayoutComm{..} <- unlift $ runXHook layoutInitiate
+  LayoutComm{..} <- unlift $ X11.runXHook layoutInitiate
   uiFile <- dataPath ("ui" </> "layout.ui")
   View{..} <- view (T.pack uiFile)
   let onLayout layout = setLabel (layoutPrettyName layout)
@@ -40,8 +40,8 @@ layout LayoutArg{..} = withRunInIO $ \unlift -> do
   pure layoutWid
   where
     clickReq = \case
-      LeftClick -> NextLayout
-      RightClick -> ResetLayout
+      LeftClick -> X11.NextLayout
+      RightClick -> X11.ResetLayout
 
 {-------------------------------------------------------------------
                               View
@@ -79,18 +79,18 @@ view uiFile = Gtk.buildFromFile uiFile $ do
 
 data LayoutComm = LayoutComm
   { curLayout :: Steps T.Text
-  , reqToLayout :: Sink LayoutCmd
+  , reqToLayout :: Sink X11.LayoutCmd
   }
 
-layoutInitiate :: XIO LayoutComm
+layoutInitiate :: X11.XIO LayoutComm
 layoutInitiate = do
-  rootWin <- xWindow
-  curLayout <- errorAct $ watchXQuery rootWin getDesktopLayout pure
-  reqToLayout <- reqDesktopLayout
+  rootWin <- X11.xWindow
+  curLayout <- errorAct $ X11.watchXQuery rootWin X11.getDesktopLayout pure
+  reqToLayout <- X11.reqDesktopLayout
   pure LayoutComm{..}
   where
     onError window err = do
-      liftIO (fail $ formatXQError window err)
+      liftIO (fail $ X11.formatXQError window err)
     errorAct act = do
-      window <- xWindow
+      window <- X11.xWindow
       act >>= either (onError window) pure

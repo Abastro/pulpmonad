@@ -25,7 +25,7 @@ import Data.Text qualified as T
 import Data.Vector qualified as V
 import GI.Gio.Interfaces.AppInfo qualified as Gio
 import GI.Gio.Interfaces.Icon qualified as Gio
-import Graphics.X11.Types
+import Graphics.X11.Types qualified as X11
 import Pulp.Desk.Applet.DesktopVisual.DesktopItemView qualified as DeskView
 import Pulp.Desk.Applet.DesktopVisual.DesktopVisual qualified as MainView
 import Pulp.Desk.Applet.DesktopVisual.WindowItemView qualified as WinView
@@ -33,8 +33,8 @@ import Pulp.Desk.Env.PulpEnv
 import Pulp.Desk.Reactive.Entry
 import Pulp.Desk.Reactive.State
 import Pulp.Desk.System.AppInfos
-import Pulp.Desk.System.X11.WMStatus
-import Pulp.Desk.System.X11.XHandle
+import Pulp.Desk.System.X11.WMStatus qualified as X11
+import Pulp.Desk.System.X11.XHandle qualified as X11
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Pixbufs qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
@@ -51,13 +51,13 @@ type NumWindows = Word
 data DesktopSetup = DesktopSetup
   { desktopLabeling :: Maybe T.Text -> T.Text
   -- ^ Labeling rule for the desktop.
-  , showDesktop :: DesktopStat -> NumWindows -> Bool
+  , showDesktop :: X11.DesktopStat -> NumWindows -> Bool
   -- ^ Whether to show certain desktop or not.
   }
 
 -- | Window part of the setup.
 newtype WindowSetup = WindowSetup
-  { windowImgIcon :: V.Vector T.Text -> Maybe (WindowInfo -> IO Gio.Icon)
+  { windowImgIcon :: V.Vector T.Text -> Maybe (X11.WindowInfo -> IO Gio.Icon)
   -- ^ With which icon the window is going to set to.
   -- Whether to go with this one or not is only dependent on the window class.
   }
@@ -66,7 +66,7 @@ logName = T.pack "DeskVis"
 
 deskVisualizer :: DesktopSetup -> WindowSetup -> PulpIO Gtk.Widget
 deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
-  DeskVisRcvs{..} <- unlift $ runXHook deskVisInitiate
+  DeskVisRcvs{..} <- unlift $ X11.runXHook deskVisInitiate
   appInfoCol <- trackAppInfo
   -- UI thread here
   mainView <- GI.new MainView.AsView []
@@ -124,11 +124,11 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
 
   Gtk.toWidget mainView
   where
-    asWinDeskPairs :: M.Map Window WinItem -> Behavior (S.Set (Window, Int))
+    asWinDeskPairs :: M.Map X11.Window WinItem -> Behavior (S.Set (X11.Window, Int))
     asWinDeskPairs = fmap (S.fromList . M.toList) . traverse (\desk -> desk.bWindowDesktop)
 
     -- Pair with desktop counts.
-    pairDeskCnt :: S.Set (Window, Int) -> V.Vector a -> V.Vector (NumWindows, a)
+    pairDeskCnt :: S.Set (X11.Window, Int) -> V.Vector a -> V.Vector (NumWindows, a)
     pairDeskCnt pairMap = V.imap $ \i v -> (fromMaybe 0 (deskHisto IM.!? i), v)
       where
         pairToCnt (_win, desk) = (desk, 1 :: NumWindows)
@@ -136,7 +136,7 @@ deskVisualizer deskSetup winSetup = withRunInIO $ \unlift -> do
 
 data DeskItem = DeskItem
   { view :: !DeskView.View
-  , desktopStat :: !DesktopStat
+  , desktopStat :: !X11.DesktopStat
   , eDesktopClick :: !(Event ())
   , delete :: !(IO ())
   }
@@ -154,9 +154,9 @@ type ViewPair = (WinView.View, DeskView.View)
 
 asViewPairMap ::
   V.Vector DeskView.View ->
-  M.Map Window WinView.View ->
-  S.Set (Window, Int) ->
-  CacheMap (Window, Int) ViewPair
+  M.Map X11.Window WinView.View ->
+  S.Set (X11.Window, Int) ->
+  CacheMap (X11.Window, Int) ViewPair
 asViewPairMap desktops windows = AsCacheMap . M.mapMaybe pairToView . M.fromSet id
   where
     pairToView (win, desk) = (windows M.! win,) <$> (desktops V.!? desk)
@@ -167,7 +167,7 @@ desktopActivates = fold . V.imap eWithIdx
   where
     eWithIdx idx DeskItem{eDesktopClick} = [idx] <$ eDesktopClick
 
-windowActivates :: M.Map Window WinItem -> Event [Window]
+windowActivates :: M.Map X11.Window WinItem -> Event [X11.Window]
 windowActivates = M.foldMapWithKey $ \win WinItem{eWindowClick} -> [win] <$ eWindowClick
 
 applyDeskDiff :: MainView.View -> PatchOf (ColOp DeskView.View) -> IO ()
@@ -182,8 +182,8 @@ applyPairDiff = applyImpure $ \case
 
 -- TODO Need a test that same ID points towards the same View. Likely require restructure.
 desktopList ::
-  (Maybe DeskItem -> DesktopStat -> MomentIO DeskItem) ->
-  Event (V.Vector DesktopStat) ->
+  (Maybe DeskItem -> X11.DesktopStat -> MomentIO DeskItem) ->
+  Event (V.Vector X11.DesktopStat) ->
   MomentIO (Event (V.Vector DeskItem), Behavior (V.Vector DeskItem))
 desktopList update eStat = do
   exeAccumD V.empty (updateFn <$> eStat)
@@ -196,7 +196,7 @@ updateDesktop ::
   DesktopSetup ->
   IO (MVar DeskView.View) ->
   Maybe DeskItem ->
-  DesktopStat ->
+  X11.DesktopStat ->
   MomentIO DeskItem
 updateDesktop setup mkView old desktopStat = do
   desktop <- maybe createDesktop (pure . updated) old
@@ -211,9 +211,9 @@ updateDesktop setup mkView old desktopStat = do
     updated desktop = desktop{desktopStat}
 
 windowMap ::
-  (Maybe WinItem -> (Window, Int) -> MomentIO (Maybe WinItem)) ->
-  Event (V.Vector Window) ->
-  MomentIO (Event (M.Map Window WinItem), Behavior (M.Map Window WinItem))
+  (Maybe WinItem -> (X11.Window, Int) -> MomentIO (Maybe WinItem)) ->
+  Event (V.Vector X11.Window) ->
+  MomentIO (Event (M.Map X11.Window WinItem), Behavior (M.Map X11.Window WinItem))
 windowMap update eList = do
   exeAccumD M.empty (updateFn . asMapWithIdx <$> eList)
   where
@@ -227,9 +227,9 @@ updateWindow ::
   WindowSetup ->
   AppInfoCol ->
   IO (MVar WinView.View) ->
-  (Window -> IO (Maybe PerWinRcvs)) ->
+  (X11.Window -> IO (Maybe PerWinRcvs)) ->
   Maybe WinItem ->
-  (Window, Int) ->
+  (X11.Window, Int) ->
   MomentIO (Maybe WinItem)
 updateWindow unlift setup appInfoCol mkView trackInfo old (windowId, winIndex) = runMaybeT $ updated <|> createWindow
   where
@@ -282,20 +282,20 @@ applyDesktopVisible :: DesktopSetup -> NumWindows -> DeskItem -> IO ()
 applyDesktopVisible DesktopSetup{..} numWin DeskItem{..} = do
   DeskView.setVisible view (showDesktop desktopStat numWin)
 
-applyWindowState :: WinView.View -> WindowInfo -> IO ()
-applyWindowState view WindowInfo{..} = do
+applyWindowState :: WinView.View -> X11.WindowInfo -> IO ()
+applyWindowState view X11.WindowInfo{..} = do
   WinView.setTitle view windowTitle
   WinView.setStates view (S.toList windowState)
 
 -- From EWMH is the default
-data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !WindowInfo (WindowInfo -> IO Gio.Icon) | FromEWMH
+data IconSpecify = FromAppIcon !Gio.Icon | FromCustom !X11.WindowInfo (X11.WindowInfo -> IO Gio.Icon) | FromEWMH
 
 -- | Icon specifier event stream to update the icon.
 iconSpecifier ::
   (forall a. PulpIO a -> IO a) ->
   WindowSetup ->
   AppInfoCol ->
-  InitedEvent WindowInfo ->
+  InitedEvent X11.WindowInfo ->
   MomentIO (Behavior IconSpecify)
 iconSpecifier unlift setup appInfoCol iWinInfo = do
   bWinInfo <- initedBehavior iWinInfo -- Tracks old WinInfo
@@ -322,7 +322,7 @@ iconOnClassChange ::
   WindowSetup ->
   AppInfoCol ->
   V.Vector T.Text ->
-  WindowInfo ->
+  X11.WindowInfo ->
   PulpIO IconSpecify
 iconOnClassChange WindowSetup{..} appCol winClasses winInfo = withRunInIO $ \unlift -> do
   spec <-
@@ -334,7 +334,7 @@ iconOnClassChange WindowSetup{..} appCol winClasses winInfo = withRunInIO $ \unl
 
 -- | Window info change without class change.
 -- Handling depends on type, may not update.
-iconOnInfoChange :: WindowInfo -> IconSpecify -> Maybe IconSpecify
+iconOnInfoChange :: X11.WindowInfo -> IconSpecify -> Maybe IconSpecify
 iconOnInfoChange newInfo = \case
   -- App Icon is static.
   FromAppIcon _ -> Nothing
@@ -390,17 +390,17 @@ appInfoImgSetter appCol classes = do
 type GetXIcon = IO (Either String [Gtk.RawIcon])
 
 data DeskVisRcvs = DeskVisRcvs
-  { desktopStats :: Steps (V.Vector DesktopStat)
-  , windowsList :: Steps (V.Vector Window)
-  , windowActive :: Steps (Maybe Window)
-  , trackWinInfo :: Window -> IO (Maybe PerWinRcvs)
-  , reqActivate :: Window -> IO ()
+  { desktopStats :: Steps (V.Vector X11.DesktopStat)
+  , windowsList :: Steps (V.Vector X11.Window)
+  , windowActive :: Steps (Maybe X11.Window)
+  , trackWinInfo :: X11.Window -> IO (Maybe PerWinRcvs)
+  , reqActivate :: X11.Window -> IO ()
   , reqToDesktop :: Int -> IO ()
   }
 
 data PerWinRcvs = PerWinRcvs
   { winDesktop :: !(Steps Int)
-  , winInfo :: !(Steps WindowInfo)
+  , winInfo :: !(Steps X11.WindowInfo)
   , getWinIcon :: !GetXIcon
   }
 
@@ -408,30 +408,30 @@ data PerWinRcvs = PerWinRcvs
 --
 -- The widget holds one entire X event loop,
 -- so related resources will be disposed of on kill.
-deskVisInitiate :: XIO DeskVisRcvs
+deskVisInitiate :: X11.XIO DeskVisRcvs
 deskVisInitiate = do
-  rootWin <- xWindow
+  rootWin <- X11.xWindow
 
-  desktopStats <- errorAct $ watchXQuery rootWin getDesktopStat pure
-  windowsList <- errorAct $ watchXQuery rootWin getAllWindows pure
-  windowActive <- errorAct $ watchXQuery rootWin getActiveWindow pure
+  desktopStats <- errorAct $ X11.watchXQuery rootWin X11.getDesktopStat pure
+  windowsList <- errorAct $ X11.watchXQuery rootWin X11.getAllWindows pure
+  windowActive <- errorAct $ X11.watchXQuery rootWin X11.getActiveWindow pure
 
   -- MAYBE log warning when window without the info is detected?
-  trackWinInfo <- xQueryOnce $ \window -> fmap eitherMay . runExceptT $ do
-    winDesktop <- ExceptT $ watchXQuery window getWindowDesktop pure
-    winInfo <- ExceptT $ watchXQuery window getWindowInfo pure
-    queryWinIcon <- lift . xQueryOnce $ \() -> xOnWindow window (runXQuery getWindowIcon)
-    let getWinIcon = first (formatXQError window) <$> queryWinIcon ()
+  trackWinInfo <- X11.xQueryOnce $ \window -> fmap eitherMay . runExceptT $ do
+    winDesktop <- ExceptT $ X11.watchXQuery window X11.getWindowDesktop pure
+    winInfo <- ExceptT $ X11.watchXQuery window X11.getWindowInfo pure
+    queryWinIcon <- lift . X11.xQueryOnce $ \() -> X11.xOnWindow window (X11.runXQuery X11.getWindowIcon)
+    let getWinIcon = first (X11.formatXQError window) <$> queryWinIcon ()
     pure PerWinRcvs{..}
 
-  reqActivate <- reqActiveWindow True
-  reqToDesktop <- reqCurrentDesktop
+  reqActivate <- X11.reqActiveWindow True
+  reqToDesktop <- X11.reqCurrentDesktop
 
   pure DeskVisRcvs{..}
   where
     eitherMay = either (const Nothing) Just
     onError window err = do
-      liftIO (fail $ formatXQError window err)
+      liftIO (fail $ X11.formatXQError window err)
     errorAct act = do
-      window <- xWindow
+      window <- X11.xWindow
       act >>= either (onError window) pure

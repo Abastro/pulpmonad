@@ -20,6 +20,8 @@ import Data.Text qualified as T
 import Data.Vector qualified as V
 import GI.Gio qualified as Gio
 
+-- TODO Refactor needed
+
 data AppInfoData = AppInfoData
   { appId :: !T.Text
   , appExecName :: !(Maybe T.Text)
@@ -69,4 +71,4 @@ getAppInfos AppInfoCol{curAppInfo} =
     getWmClass appInfo = runMaybeT $ do
       nullRetToMaybeT appInfo.getStartupWmClass
 
-    nullRetToMaybeT x = either (const empty) pure =<< liftIO (try @Gio.UnexpectedNullPointerReturn x)
+    nullRetToMaybeT act = either (const empty) pure =<< liftIO (try @Gio.UnexpectedNullPointerReturn act)

@@ -30,7 +30,7 @@ import GI.Gtk.Objects.Image qualified as Gtk
 import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
-import Pulp.Desk.System.X11.WMStatus
+import Pulp.Desk.System.X11.WMStatus qualified as X11
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Pixbufs qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
@@ -147,13 +147,13 @@ setTitle :: View -> Sink T.Text
 setTitle view title = Gtk.uiSingleRun $ do
   GI.set view [#tooltipText GI.:= title]
 
-setStates :: View -> Sink [WMStateEx]
+setStates :: View -> Sink [X11.WMStateEx]
 setStates view states = Gtk.uiSingleRun $ do
   view.getStyleContext >>= Gtk.updateCssClass asClass states
   where
     asClass = \case
-      WinHidden -> T.pack "hidden"
-      WinDemandAttention -> T.pack "demanding"
+      X11.WinHidden -> T.pack "hidden"
+      X11.WinDemandAttention -> T.pack "demanding"
 
 clickSource :: View -> Source ()
 clickSource view =

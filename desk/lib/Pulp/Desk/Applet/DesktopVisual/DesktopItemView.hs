@@ -10,7 +10,6 @@ module Pulp.Desk.Applet.DesktopVisual.DesktopItemView (
   reflectPriority,
   setLabel,
   setVisible,
-  DesktopState (..),
   setState,
   clickSource,
 ) where
@@ -34,7 +33,7 @@ import GI.Gtk.Structs.WidgetClass qualified as Gtk
 import Pulp.Desk.Applet.DesktopVisual.WindowItemView qualified as WinView
 import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
-import Pulp.Desk.System.X11.WMStatus
+import Pulp.Desk.System.X11.WMStatus qualified as X11
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Styles qualified as Gtk
@@ -152,14 +151,14 @@ setVisible desktop =
     True -> desktop.showAll
     False -> desktop.hide
 
-setState :: View -> Sink DesktopState
+setState :: View -> Sink X11.DesktopState
 setState desktop state = Gtk.uiSingleRun $ do
   desktop.getStyleContext >>= Gtk.updateCssClass asClass [state]
   where
     asClass = \case
-      DeskActive -> T.pack "active"
-      DeskVisible -> T.pack "visible"
-      DeskHidden -> T.pack "hidden"
+      X11.DeskActive -> T.pack "active"
+      X11.DeskVisible -> T.pack "visible"
+      X11.DeskHidden -> T.pack "hidden"
 
 clickSource :: View -> Source ()
 clickSource desktop =

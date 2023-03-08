@@ -15,14 +15,14 @@ import Data.Foldable
 import Data.Map.Strict qualified as M
 import Data.Maybe
 import Data.Unique
-import Graphics.X11.Types
-import Graphics.X11.Xlib.Extras
+import Graphics.X11.Types qualified as X11
+import Graphics.X11.Xlib.Extras qualified as X11
 
-newtype XListeners = MkXListeners (M.Map Window (M.Map Unique XListen))
+newtype XListeners = MkXListeners (M.Map X11.Window (M.Map Unique XListen))
 
 data XListen = MkXListen
-  { mask :: !EventMask
-  , onEvent :: Event -> IO ()
+  { mask :: !X11.EventMask
+  , onEvent :: X11.Event -> IO ()
   -- onEvent should be @Event -> XIO ()@,
   -- but this introduces cyclic dependency between modules.
   }
@@ -30,10 +30,10 @@ data XListen = MkXListen
 newXListeners :: XListeners
 newXListeners = MkXListeners M.empty
 
-listensForWindow :: Window -> XListeners -> [XListen]
+listensForWindow :: X11.Window -> XListeners -> [XListen]
 listensForWindow window (MkXListeners listens) = maybe [] M.elems $ listens M.!? window
 
-maskFor :: Window -> XListeners -> EventMask
+maskFor :: X11.Window -> XListeners -> X11.EventMask
 maskFor window = getIor . foldMap' getMask . listensForWindow window
   where
     getMask listen = Ior (listen.mask)
@@ -44,13 +44,13 @@ nothingToEmpty = fromMaybe M.empty
 emptyToNothing :: M.Map k a -> Maybe (M.Map k a)
 emptyToNothing map = map <$ guard (M.null map)
 
-insertListen :: Window -> Unique -> XListen -> XListeners -> XListeners
+insertListen :: X11.Window -> Unique -> XListen -> XListeners -> XListeners
 insertListen window key listen (MkXListeners old) = MkXListeners new
   where
     new = M.alter updPerWin window old
     updPerWin = Just . M.insert key listen . nothingToEmpty
 
-deleteListen :: Window -> Unique -> XListeners -> XListeners
+deleteListen :: X11.Window -> Unique -> XListeners -> XListeners
 deleteListen window key (MkXListeners old) = MkXListeners new
   where
     new = M.alter updPerWin window old

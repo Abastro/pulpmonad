@@ -10,12 +10,12 @@ import Data.GI.Base.Signals qualified as GI
 import Data.Text qualified as T
 import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gtk.Objects.Widget qualified as Gtk
-import Graphics.X11.Types
-import Graphics.X11.Xlib.Extras
+import Graphics.X11.Types qualified as X11
+import Graphics.X11.Xlib.Extras qualified as X11
 import Pulp.Desk.Env.PulpEnv
 import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
-import Pulp.Desk.System.X11.XHandle
+import Pulp.Desk.System.X11.XHandle qualified as X11
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Window qualified as Gtk
@@ -26,7 +26,7 @@ import XMonad.Util.Run (safeSpawn)
 -- Shows the system control dialog.
 sysCtrlBtn :: Gtk.Window -> PulpIO Gtk.Widget
 sysCtrlBtn parent = withRunInIO $ \unlift -> do
-  watch <- unlift $ runXHook sysCtrlListen
+  watch <- unlift $ X11.runXHook sysCtrlListen
   uiFile <- dataPath ("ui" </> "sysctl.ui")
   View{..} <- view (T.pack uiFile) parent
 
@@ -93,13 +93,13 @@ view uiFile parent = Gtk.buildFromFile uiFile $ do
 
 data SysCtrlCall = SysCtrlCall
 
-sysCtrlListen :: XIO (Source SysCtrlCall)
+sysCtrlListen :: X11.XIO (Source SysCtrlCall)
 sysCtrlListen = do
-  rootWin <- xWindow
-  ctrlTyp <- xAtom "_XMONAD_CTRL_MSG"
-  ctrlSys <- xAtom "_XMONAD_CTRL_SYS"
-  xListenSource structureNotifyMask rootWin $ \case
-    ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
+  rootWin <- X11.xWindow
+  ctrlTyp <- X11.xAtom "_XMONAD_CTRL_MSG"
+  ctrlSys <- X11.xAtom "_XMONAD_CTRL_SYS"
+  X11.xListenSource X11.structureNotifyMask rootWin $ \case
+    X11.ClientMessageEvent{ev_message_type = msgTyp, ev_data = subTyp : _}
       | msgTyp == ctrlTyp
       , fromIntegral subTyp == ctrlSys -> do
           pure (Just SysCtrlCall)

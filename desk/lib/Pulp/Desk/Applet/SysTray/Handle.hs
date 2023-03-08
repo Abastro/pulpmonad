@@ -6,8 +6,8 @@ module Pulp.Desk.Applet.SysTray.Handle (
 import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.IO.Unlift
-import DBus
-import DBus.Client
+import DBus qualified
+import DBus.Client qualified as DBus
 import Data.Foldable
 import Data.GI.Base.Constructible qualified as GI
 import Data.Map.Strict qualified as M
@@ -39,7 +39,7 @@ logName = T.pack "SysTray"
 -- Throws if the host cannot be started.
 systemTray :: SysTrayArgs -> PulpIO Gtk.Widget
 systemTray SysTrayArgs{..} = withRunInIO $ \unlift -> do
-  client <- connectSession
+  client <- DBus.connectSession
   procID <- getProcessID
   host <-
     maybe (fail "Cannot create host for system tray") pure
@@ -101,11 +101,11 @@ data TrayItem = MkTrayItem
 
 modifyItems ::
   (forall a. PulpIO a -> IO a) ->
-  Client ->
+  DBus.Client ->
   Event NormalUpdate ->
   ColOp Host.ItemInfo ->
-  M.Map BusName TrayItem ->
-  MomentIO (M.Map BusName TrayItem)
+  M.Map DBus.BusName TrayItem ->
+  MomentIO (M.Map DBus.BusName TrayItem)
 modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
   where
     after old = case (colOp, old) of
@@ -135,13 +135,13 @@ modifyItems unlift client eNormalUp colOp = M.alterF after serviceName
       Insert Host.ItemInfo{itemServiceName} -> itemServiceName
       Delete Host.ItemInfo{itemServiceName} -> itemServiceName
 
-createTrayItem :: Client -> Event NormalUpdate -> Host.ItemInfo -> MomentIO TrayItem
+createTrayItem :: DBus.Client -> Event NormalUpdate -> Host.ItemInfo -> MomentIO TrayItem
 createTrayItem client eNormalUp info@Host.ItemInfo{..} = do
   -- Needs the view right away.
   view <- liftIO $ takeMVar =<< Gtk.uiCreate (GI.new ItemView.AsView [])
 
   for_ menuPath $ \path -> liftIO $ do
-    ItemView.setMenu view (T.pack . formatBusName $ itemServiceName, T.pack . formatObjectPath $ path)
+    ItemView.setMenu view (T.pack . DBus.formatBusName $ itemServiceName, T.pack . DBus.formatObjectPath $ path)
 
   (eClick, kill1) <- sourceEventWA (ItemView.clickSource view)
   (eScroll, kill2) <- sourceEventWA (ItemView.scrollSource view)
@@ -202,13 +202,13 @@ updateTooltip view = \case
       (t, "") -> t
       (t, f) -> t <> ": " <> f
 
-handleClick :: Client -> Host.ItemInfo -> ItemView.View -> ItemView.MouseClick -> IO ()
+handleClick :: DBus.Client -> Host.ItemInfo -> ItemView.View -> ItemView.MouseClick -> IO ()
 handleClick client Host.ItemInfo{..} view (ItemView.MouseClickOf event xRoot yRoot mouse) = case mouse of
   ItemView.MouseLeft | not itemIsMenu -> void $ SNItem.activate client itemServiceName itemServicePath xRoot yRoot
   ItemView.MouseMiddle -> void $ SNItem.secondaryActivate client itemServiceName itemServicePath xRoot yRoot
   _ -> ItemView.showPopup view event
 
-handleScroll :: Client -> Host.ItemInfo -> ItemView.ScrollDir -> IO ()
+handleScroll :: DBus.Client -> Host.ItemInfo -> ItemView.ScrollDir -> IO ()
 handleScroll client Host.ItemInfo{..} = \case
   ItemView.ScrollUp -> scrollOf (-1) "vertical"
   ItemView.ScrollDown -> scrollOf 1 "vertical"

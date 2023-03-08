@@ -22,21 +22,21 @@ import Data.Foldable
 import Data.Functor.Compose
 import Data.IORef
 import Data.Unique
-import Graphics.X11.Xlib
-import Graphics.X11.Xlib.Extras
+import Graphics.X11.Xlib qualified as X11
+import Graphics.X11.Xlib.Extras qualified as X11
 import Pulp.Desk.Reactive.Entry
 import Pulp.Desk.System.X11.XListen
 
 -- | Common actions for X11 monad. IO access is NOT assumed.
 class Functor m => ActX11 m where
   -- | Gets the X display.
-  xDisplay :: m Display
+  xDisplay :: m X11.Display
 
   -- | Gets current/target X window.
-  xWindow :: m Window
+  xWindow :: m X11.Window
 
   -- | Queries certain X Atom.
-  xAtom :: String -> m Atom
+  xAtom :: String -> m X11.Atom
 
 instance (ActX11 m) => ActX11 (MaybeT m) where
   xDisplay = MaybeT $ Just <$> xDisplay
@@ -54,7 +54,7 @@ instance (ActX11 m, Applicative f) => ActX11 (Compose m f) where
   xAtom name = Compose $ pure <$> xAtom name
 
 -- | Lift IO action involving display & window.
-liftDWIO :: (MonadIO m, ActX11 m) => (Display -> Window -> IO a) -> m a
+liftDWIO :: (MonadIO m, ActX11 m) => (X11.Display -> X11.Window -> IO a) -> m a
 liftDWIO io = do
   disp <- xDisplay
   win <- xWindow
@@ -65,8 +65,8 @@ liftDWIO io = do
 --------------------------------------------------------------------}
 
 data XHandle = XHandle
-  { display :: !Display
-  , window :: !Window
+  { display :: !X11.Display
+  , window :: !X11.Window
   , listeners :: !(IORef XListeners)
   , actQueue :: TQueue (IO ())
   -- ^ Queue to execute actions on next cycle.
@@ -79,14 +79,14 @@ newtype XIO a = XIO (ReaderT XHandle IO a)
 instance ActX11 XIO where
   xDisplay = XIO . asks $ \handle -> handle.display
   xWindow = XIO . asks $ \handle -> handle.window
-  xAtom name = liftDWIO $ \d _ -> liftIO $ internAtom d name False
+  xAtom name = liftDWIO $ \d _ -> liftIO $ X11.internAtom d name False
 
 -- Internal
 runXIO :: XHandle -> XIO a -> IO a
 runXIO handle (XIO act) = runReaderT act handle
 
 -- | Run on certain window. It is advised not to directly use this function.
-xOnWindow :: Window -> XIO a -> XIO a
+xOnWindow :: X11.Window -> XIO a -> XIO a
 xOnWindow newWin (XIO act) = XIO (withReaderT withNewWin act)
   where
     withNewWin handle = handle{window = newWin}
@@ -115,21 +115,21 @@ withXHook runWith = do
 
 -- | Spawns X handler thread.
 xHandlerThread :: MVar XHook -> IO ThreadId
-xHandlerThread hookVar = forkOS . bracket (openDisplay "") closeDisplay $ \display -> do
+xHandlerThread hookVar = forkOS . bracket (X11.openDisplay "") X11.closeDisplay $ \display -> do
   handle <- createHandle display
   putMVar hookVar (getXHook handle)
   xHandlerLoop handle
 
-createHandle :: Display -> IO XHandle
+createHandle :: X11.Display -> IO XHandle
 createHandle display = do
-  let screen = defaultScreen display
-  window <- rootWindow display screen
+  let screen = X11.defaultScreen display
+  window <- X11.rootWindow display screen
   listeners <- newIORef newXListeners
   actQueue <- newTQueueIO
   pure XHandle{..}
 
 xHandlerLoop :: XHandle -> IO ()
-xHandlerLoop handle = allocaXEvent $ \evPtr -> forever $ do
+xHandlerLoop handle = X11.allocaXEvent $ \evPtr -> forever $ do
   atomically (flushTQueue handle.actQueue) >>= sequenceA_
   -- .^. Before handling next X event, performs tasks in need of handling.
   listenRemaining evPtr
@@ -137,11 +137,11 @@ xHandlerLoop handle = allocaXEvent $ \evPtr -> forever $ do
   threadDelay 1000
   where
     listenRemaining evPtr = fix $ \recurse -> do
-      numQueued <- eventsQueued handle.display queuedAfterFlush
+      numQueued <- X11.eventsQueued handle.display X11.queuedAfterFlush
       when (numQueued > 0) $ do
-        nextEvent handle.display evPtr
-        event <- getEvent evPtr
-        evWindow <- get_Window evPtr
+        X11.nextEvent handle.display evPtr
+        event <- X11.getEvent evPtr
+        evWindow <- X11.get_Window evPtr
 
         listens <- listensForWindow evWindow <$> readIORef handle.listeners
         for_ listens $ \listen -> listen.onEvent event
@@ -175,9 +175,9 @@ xQueryOnce query = do
 --
 -- Thus, avoid registering many times if possible.
 xListenSource ::
-  EventMask ->
-  Window ->
-  (Event -> XIO (Maybe a)) ->
+  X11.EventMask ->
+  X11.Window ->
+  (X11.Event -> XIO (Maybe a)) ->
   XIO (Source a)
 xListenSource mask window emitWith = do
   XHook hook <- getXHook <$> XIO ask
@@ -192,7 +192,7 @@ xListenSource mask window emitWith = do
       handle <- XIO ask
       liftIO $ modifyIORef' handle.listeners modify
       mask <- maskFor window <$> liftIO (readIORef handle.listeners)
-      liftDWIO $ \disp _ -> selectInput disp window mask
+      liftDWIO $ \disp _ -> X11.selectInput disp window mask
 
     beginListen hook = do
       key <- newUnique
@@ -216,15 +216,15 @@ xListenSource mask window emitWith = do
 --
 -- This one does not support event propagation.
 xSendSink ::
-  EventMask ->
-  Window ->
-  (XEventPtr -> a -> XIO ()) ->
+  X11.EventMask ->
+  X11.Window ->
+  (X11.XEventPtr -> a -> XIO ()) ->
   XIO (Sink a)
 xSendSink mask window eventFactory = do
   XHook hook <- getXHook <$> XIO ask
   pure $ \arg -> hook $ do
     handle <- XIO ask
     -- This action is being queued for later.
-    liftIO . allocaXEvent $ \event -> runXIO handle . xOnWindow window $ do
+    liftIO . X11.allocaXEvent $ \event -> runXIO handle . xOnWindow window $ do
       eventFactory event arg
-      liftDWIO $ \d w -> sendEvent d w True mask event
+      liftDWIO $ \d w -> X11.sendEvent d w True mask event

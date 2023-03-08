@@ -19,7 +19,7 @@ import GI.Gtk.Objects.Image qualified as Gtk
 import Pulp.Desk.Env.PulpEnv
 import Pulp.Desk.PulpPath
 import Pulp.Desk.Reactive.Entry
-import Pulp.Desk.System.HWStatus
+import Pulp.Desk.System.HWStatus qualified as HW
 import Pulp.Desk.UI.Commons qualified as Gtk
 import Pulp.Desk.UI.Reactive qualified as Gtk
 import Pulp.Desk.UI.Styles qualified as Gtk
@@ -66,11 +66,11 @@ batDisplay _iconSize = withRunInIO $ \unlift -> do
   actuate network
   pure batWidget
   where
-    getBattery = try @IOException batStat
+    getBattery = try @IOException HW.batStat
     iconOf = \case
-      Right BatStat{capacity, batStatus = Charging} ->
+      Right HW.BatStat{capacity, batStatus = HW.Charging} ->
         T.pack $ printf "battery-level-%d-charging-symbolic" (levelOf capacity)
-      Right BatStat{capacity, batStatus = _} ->
+      Right HW.BatStat{capacity, batStatus = _} ->
         T.pack $ printf "battery-level-%d-symbolic" (levelOf capacity)
       Left _ -> T.pack "battery-missing-symbolic"
     levelOf capacity = (capacity `div` 10) * 10
@@ -116,7 +116,7 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
     cpuTemp <- pollingBehavior getCPUTemp cpuTicker
     (evtCPUStat, cpuStat) <- pollingDiscrete getCPUStat cpuTicker
     -- Usage is determined as time spent (difference of spot time)
-    cpuUsage <- stepper (Right cpuZero) $ liftA2 diff <$> cpuStat <@> evtCPUStat
+    cpuUsage <- stepper (Right HW.cpuZero) $ liftA2 diff <$> cpuStat <@> evtCPUStat
     let cpu = combineCPU <$> cpuUsage <*> cpuTemp
 
     syncBehavior memory (Gtk.uiSingleRun . setMemFill . memFillOf)
@@ -131,9 +131,9 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
   actuate network
   pure mainboardWidget
   where
-    getMemory = try @IOException $ memStat
-    getCPUTemp = try @IOException $ cpuTemp
-    getCPUStat = try @IOException $ fst <$> cpuStat
+    getMemory = try @IOException $ HW.memStat
+    getCPUTemp = try @IOException $ HW.cpuTemp
+    getCPUStat = try @IOException $ fst <$> HW.cpuStat
 
     diff old new = liftA2 (-) new old
     combineCPU use temp = validToEither $ (,) <$> useE <*> tempE
@@ -145,9 +145,9 @@ mainboardDisplay _iconSize _mainWidth = withRunInIO $ \unlift -> do
           Left exc -> Failure ["<temperature> " <> show exc]
           Right t -> Success t
 
-    memFillOf = either (const 0) (memUsed . memRatios)
+    memFillOf = either (const 0) (HW.memUsed . HW.memRatios)
     cpuInfoOf = \case
-      Right (use, temp) -> (cpuUsed (cpuRatios use), tempVal temp)
+      Right (use, temp) -> (HW.cpuUsed (HW.cpuRatios use), tempVal temp)
       Left _ -> (0, T20)
 
     memIconOf = \case
