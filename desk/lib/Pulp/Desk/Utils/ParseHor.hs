@@ -1,6 +1,6 @@
 -- | Module for horizontal parsing.
 module Pulp.Desk.Utils.ParseHor (
-  Parse.label,
+  labelH,
   parseFile,
   skipH,
   remainH,
@@ -11,7 +11,7 @@ module Pulp.Desk.Utils.ParseHor (
   eoH,
   fieldsCustom,
   fields,
-  fieldsWithHead,
+  fieldsIgnoring,
   exQueryMap,
   queryOpt,
   queryOptAs,
@@ -35,57 +35,65 @@ import Text.Megaparsec.Char qualified as Parse
 import Text.Megaparsec.Char.Lexer qualified as Lex
 import Text.Printf
 
+-- | Monad for horizontal parsing.
+newtype ParseHor a = AsParseHor { parsec :: Parse.Parsec Void T.Text a }
+  deriving (Functor, Applicative, Monad, Alternative, MonadFail)
+
 -- | Parses a file using a parser. Throws userError when fails.
-parseFile :: Parse.Parsec Void T.Text a -> FilePath -> IO a
+parseFile :: ParseHor a -> FilePath -> IO a
 parseFile parser path = do
   txt <- T.readFile path
-  case Parse.parse parser path txt of
+  case Parse.parse parser.parsec path txt of
     Left err -> fail $ Parse.errorBundlePretty err
     Right result -> pure result
 
 -- | Skips horizontal spaces.
-skipH :: Parse.MonadParsec e T.Text m => m ()
-skipH = Parse.hspace
+skipH :: ParseHor ()
+skipH = AsParseHor Parse.hspace
 
 -- | Parses remaining characters until a line break.
-remainH :: Parse.MonadParsec e T.Text m => m T.Text
-remainH = Parse.takeWhileP (Just "remaining") (/= '\n')
+remainH :: ParseHor T.Text
+remainH = AsParseHor $ Parse.takeWhileP (Just "remaining") (/= '\n')
 
 -- | Space-separated identifier, which could include numbers, '_', '(' and ')'.
-identH :: Parse.MonadParsec e T.Text m => m T.Text
-identH = Lex.lexeme skipH (Parse.takeWhile1P (Just "identifier") isID)
+identH :: ParseHor T.Text
+identH = AsParseHor $ Lex.lexeme skipH.parsec (Parse.takeWhile1P (Just "identifier") isID)
   where
     isID c = isAlphaNum c || c == '(' || c == ')' || c == '_'
 
 -- | Identifier with restricting condition.
-identCondH :: Parse.MonadParsec e T.Text m => (T.Text -> Bool) -> m T.Text
-identCondH cond = Parse.try $ identH >>= \ident -> ident <$ guard (cond ident)
+identCondH :: (T.Text -> Bool) -> ParseHor T.Text
+identCondH cond = AsParseHor $ Parse.try $ identH.parsec >>= \ident -> ident <$ guard (cond ident)
 
 -- | Horizontal symbols.
-symbolH :: Parse.MonadParsec e T.Text m => T.Text -> m T.Text
-symbolH = Lex.symbol skipH
+symbolH :: T.Text -> ParseHor T.Text
+symbolH = AsParseHor . Lex.symbol skipH.parsec
 
 -- | Horizontal decimals.
-decimalH :: (Parse.MonadParsec e T.Text m, Num a) => m a
-decimalH = Lex.lexeme skipH Lex.decimal
+decimalH :: Num a => ParseHor a
+decimalH = AsParseHor $ Lex.lexeme skipH.parsec Lex.decimal
 
 -- | Parse an end of line, or eof.
-eoH :: Parse.MonadParsec e T.Text m => m ()
-eoH = void Parse.eol <|> Parse.eof
+eoH :: ParseHor ()
+eoH = AsParseHor $ void Parse.eol <|> Parse.eof
+
+-- | Names expected token with the provided label when it fails without consuming input.
+labelH :: String -> ParseHor a -> ParseHor a
+labelH name parse = AsParseHor $ Parse.label name parse.parsec
 
 -- | Parse fields with custom parser for reading the field name.
-fieldsCustom :: Parse.MonadParsec e T.Text m => m T.Text -> m a -> m (M.Map T.Text a)
+fieldsCustom :: ParseHor T.Text -> ParseHor a -> ParseHor (M.Map T.Text a)
 fieldsCustom custom pval = M.fromList <$> field `sepEndBy` eoH
   where
-    field = Parse.label "field" $ (,) <$> custom <*> pval
+    field = labelH "field" $ (,) <$> custom <*> pval
 
 -- | Parse fields as a map.
-fields :: Parse.MonadParsec e T.Text m => m a -> m (M.Map T.Text a)
+fields :: ParseHor a -> ParseHor (M.Map T.Text a)
 fields = fieldsCustom identH
 
--- | Parse fields as a map, with heading ignored for each line.
-fieldsWithHead :: Parse.MonadParsec e T.Text m => m hd -> m a -> m (M.Map T.Text a)
-fieldsWithHead hd = fieldsCustom (hd *> identH)
+-- | Parse fields as a map, ignoring provided heading for each line.
+fieldsIgnoring :: ParseHor hd -> ParseHor a -> ParseHor (M.Map T.Text a)
+fieldsIgnoring hd = fieldsCustom (hd *> identH)
 
 -- | Map query monad.
 newtype QueryMap b a = QueryMap (ExceptT String (State (M.Map T.Text b)) a)

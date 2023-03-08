@@ -8,7 +8,7 @@ module Pulp.Desk.System.Hardware.BatteryStatus (
 
 import Control.Applicative
 import Data.List
-import Pulp.Desk.Utils.ParseHor
+import Pulp.Desk.Utils.ParseHor qualified as Parse
 import System.Directory
 import System.FilePath
 
@@ -48,26 +48,26 @@ batteryStat :: IO BatteryStat
 batteryStat = do
   let path = "/" </> "sys" </> "class" </> "power_supply"
   batName : _ <- filter ("BAT" `isPrefixOf`) <$> listDirectory path
-  parseFile battery (path </> batName </> "uevent")
+  Parse.parseFile battery (path </> batName </> "uevent")
   where
-    battery = fields (symbolH "=" *> decOrStr) >>= exQueryMap query
-    decOrStr = label "data" $ Right <$> decimalH <|> Left <$> remainH
+    battery = Parse.fields (Parse.symbolH "=" *> decOrStr) >>= Parse.exQueryMap query
+    decOrStr = Parse.labelH "data" $ Right <$> Parse.decimalH <|> Left <$> Parse.remainH
 
     query = do
       let asStr = either Just (const Nothing)
           asInt = either (const Nothing) Just
-      status <- queryFieldAs "POWER_SUPPLY_STATUS" (fmap statusEnum . asStr)
-      capacity <- queryFieldAs "POWER_SUPPLY_CAPACITY" asInt
-      energyFull <- queryOptAs "POWER_SUPPLY_ENERGY_FULL" asInt
-      chargeFull <- queryOptAs "POWER_SUPPLY_CHARGE_FULL" asInt
-      energyFullDesign <- queryOptAs "POWER_SUPPLY_ENERGY_FULL_DESIGN" asInt
-      chargeFullDesign <- queryOptAs "POWER_SUPPLY_CHARGE_FULL_DESIGN" asInt
-      energyNow <- queryOptAs "POWER_SUPPLY_ENERGY_NOW" asInt
-      chargeNow <- queryOptAs "POWER_SUPPLY_CHARGE_NOW" asInt
-      voltageNow <- queryOptAs "POWER_SUPPLY_VOLTAGE_NOW" asInt
-      voltageMinDesign <- queryOptAs "POWER_SUPPLY_VOLTAGE_MIN_DESIGN" asInt
-      currentNow <- queryOptAs "POWER_SUPPLY_CURRENT_NOW" asInt
-      powerNow <- queryOptAs "POWER_SUPPLY_POWER_NOW" asInt
+      status <- Parse.queryFieldAs "POWER_SUPPLY_STATUS" (fmap statusEnum . asStr)
+      capacity <- Parse.queryFieldAs "POWER_SUPPLY_CAPACITY" asInt
+      energyFull <- Parse.queryOptAs "POWER_SUPPLY_ENERGY_FULL" asInt
+      chargeFull <- Parse.queryOptAs "POWER_SUPPLY_CHARGE_FULL" asInt
+      energyFullDesign <- Parse.queryOptAs "POWER_SUPPLY_ENERGY_FULL_DESIGN" asInt
+      chargeFullDesign <- Parse.queryOptAs "POWER_SUPPLY_CHARGE_FULL_DESIGN" asInt
+      energyNow <- Parse.queryOptAs "POWER_SUPPLY_ENERGY_NOW" asInt
+      chargeNow <- Parse.queryOptAs "POWER_SUPPLY_CHARGE_NOW" asInt
+      voltageNow <- Parse.queryOptAs "POWER_SUPPLY_VOLTAGE_NOW" asInt
+      voltageMinDesign <- Parse.queryOptAs "POWER_SUPPLY_VOLTAGE_MIN_DESIGN" asInt
+      currentNow <- Parse.queryOptAs "POWER_SUPPLY_CURRENT_NOW" asInt
+      powerNow <- Parse.queryOptAs "POWER_SUPPLY_POWER_NOW" asInt
       pure MkBatteryStat{..}
     statusEnum = \case
       "Charging" -> Charging

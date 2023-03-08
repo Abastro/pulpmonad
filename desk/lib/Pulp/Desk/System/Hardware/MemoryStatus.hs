@@ -5,7 +5,7 @@ module Pulp.Desk.System.Hardware.MemoryStatus (memoryRatios, memoryUsed, memoryS
 import Control.Applicative
 import Generic.Data
 import Pulp.Desk.System.Hardware.Commons
-import Pulp.Desk.Utils.ParseHor
+import Pulp.Desk.Utils.ParseHor qualified as Parse
 import System.FilePath
 
 -- | Memory statistics. Usual unit is kB.
@@ -30,18 +30,18 @@ memoryUsed MkMemoryStat{..} = memTotal - memFree - memBuffers - memCached
 -- | Gets Memory statistics.
 -- Pulls from </proc/meminfo>.
 memoryStat :: IO (MemoryStat Int)
-memoryStat = parseFile memory ("/" </> "proc" </> "meminfo")
+memoryStat = Parse.parseFile memory ("/" </> "proc" </> "meminfo")
   where
     memory = do
-      fields (symbolH ":" *> mayKB) >>= exQueryMap query
+      Parse.fields (Parse.symbolH ":" *> mayKB) >>= Parse.exQueryMap query
 
-    mayKB = label "data" $ decimalH <* optional (symbolH "kB")
+    mayKB = Parse.labelH "data" $ Parse.decimalH <* optional (Parse.symbolH "kB")
     query = do
-      memTotal <- queryField "MemTotal"
-      memFree <- queryField "MemFree"
-      memAvailable <- queryField "MemAvailable"
-      memBuffers <- queryField "Buffers"
-      memCached <- queryField "Cached"
-      swapTotal <- queryField "SwapTotal"
-      swapFree <- queryField "SwapFree"
+      memTotal <- Parse.queryField "MemTotal"
+      memFree <- Parse.queryField "MemFree"
+      memAvailable <- Parse.queryField "MemAvailable"
+      memBuffers <- Parse.queryField "Buffers"
+      memCached <- Parse.queryField "Cached"
+      swapTotal <- Parse.queryField "SwapTotal"
+      swapFree <- Parse.queryField "SwapFree"
       pure MkMemoryStat{..}

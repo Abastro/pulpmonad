@@ -6,7 +6,7 @@ import Control.Applicative
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 import Generic.Data
-import Pulp.Desk.Utils.ParseHor
+import Pulp.Desk.Utils.ParseHor qualified as Parse
 import System.FilePath
 
 -- | Disk statistics for IO operations, i.e. Disk Read/Write.
@@ -57,10 +57,12 @@ diskOf = \case
 -- Pulls from </proc/diskstats>.
 diskStat :: IO (M.Map T.Text (DiskStat Int))
 diskStat = do
-  parseFile disks ("/" </> "proc" </> "diskstats")
+  Parse.parseFile disks ("/" </> "proc" </> "diskstats")
   where
-    disks = fieldsWithHead (skipH <* identH <* identH) (many decimalH) >>= exQueryMap query
-    query = queryAllAs (not . ("loop" `T.isPrefixOf`)) (traverse diskOf)
+    disks =
+      Parse.fieldsIgnoring (Parse.skipH <* Parse.identH <* Parse.identH) (many Parse.decimalH)
+        >>= Parse.exQueryMap query
+    query = Parse.queryAllAs (not . ("loop" `T.isPrefixOf`)) (traverse diskOf)
 
 -- Brightness: "/sys/class/backlight/?"
 -- Network Load: "/sys/class/net/{device}" , "/proc/net/dev"

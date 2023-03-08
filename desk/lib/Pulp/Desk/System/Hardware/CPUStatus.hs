@@ -15,7 +15,7 @@ import Data.Monoid
 import Data.Text qualified as T
 import Generic.Data
 import Pulp.Desk.System.Hardware.Commons
-import Pulp.Desk.Utils.ParseHor
+import Pulp.Desk.Utils.ParseHor qualified as Parse
 import System.Directory
 import System.FilePath
 
@@ -51,13 +51,13 @@ cpuUsed MkCPUStat{..} = userTime + systemTime
 -- | Gets CPU statistics in accumulated from booting. Second of the pair is for each core.
 -- Pulls from </proc/stat>.
 cpuStat :: IO (CPUStat Int, [CPUStat Int])
-cpuStat = parseFile cpus ("/" </> "proc" </> "stat")
+cpuStat = Parse.parseFile cpus ("/" </> "proc" </> "stat")
   where
-    cpus = fieldsCustom cpuFieldN (many decimalH) >>= exQueryMap query
-    cpuFieldN = identCondH ("cpu" `T.isPrefixOf`)
+    cpus = Parse.fieldsCustom cpuFieldN (many Parse.decimalH) >>= Parse.exQueryMap query
+    cpuFieldN = Parse.identCondH ("cpu" `T.isPrefixOf`)
     query = do
-      total <- queryFieldAs "cpu" cpuOf
-      cores <- queryAllAs ("cpu" `T.isPrefixOf`) (traverse cpuOf . M.elems)
+      total <- Parse.queryFieldAs "cpu" cpuOf
+      cores <- Parse.queryAllAs ("cpu" `T.isPrefixOf`) (traverse cpuOf . M.elems)
       pure (total, cores)
 
 -- | Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
@@ -73,5 +73,5 @@ cpuTemperature = do
     baseDir = "/" </> "sys" </> "class" </> "hwmon"
     withName dir =
       readSingleLine (dir </> "name") >>= \case
-        "k10temp" -> parseFile decimalH (dir </> "temp1_input")
+        "k10temp" -> Parse.parseFile Parse.decimalH (dir </> "temp1_input")
         name -> fail $ "Not relevant device: " <> show name
