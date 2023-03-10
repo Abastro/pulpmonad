@@ -1,15 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pulp.Desk.System.Hardware.CPUStatus (
+  CPUStat (..),
   cpuZero,
   cpuOf,
   cpuRatios,
   cpuUsed,
   cpuStat,
+  parseCPUStat,
   cpuTemperature,
 ) where
 
 import Control.Applicative
+import Data.Char qualified as Char
 import Data.Map.Strict qualified as M
 import Data.Monoid
 import Data.Text qualified as T
@@ -25,21 +28,18 @@ data CPUStat a = MkCPUStat
   , niceTime :: !a
   , systemTime :: !a
   , idleTime :: !a
-  , ioWait :: !a
-  , irqTime :: !a
-  , softirqTime :: !a
   }
-  deriving stock (Show, Generic1)
+  deriving stock (Show, Eq, Generic1)
   deriving (Functor, Applicative) via (Generically1 CPUStat)
 
 cpuZero :: Num a => CPUStat a
 cpuZero = MkCPUStat{..}
   where
-    userTime : niceTime : systemTime : idleTime : ioWait : irqTime : softirqTime : _ = repeat 0
+    userTime : niceTime : systemTime : idleTime : _ = repeat 0
 
 cpuOf :: [a] -> Maybe (CPUStat a)
 cpuOf = \case
-  userTime : niceTime : systemTime : idleTime : ioWait : irqTime : softirqTime : _ -> Just MkCPUStat{..}
+  userTime : niceTime : systemTime : idleTime : _ -> Just MkCPUStat{..}
   _ -> Nothing
 
 cpuRatios :: (Real a, Fractional b) => CPUStat a -> CPUStat b
@@ -51,14 +51,20 @@ cpuUsed MkCPUStat{..} = userTime + systemTime
 -- | Gets CPU statistics in accumulated from booting. Second of the pair is for each core.
 -- Pulls from </proc/stat>.
 cpuStat :: IO (CPUStat Int, [CPUStat Int])
-cpuStat = Parse.parseFile cpus ("/" </> "proc" </> "stat")
+cpuStat = Parse.parseFile parseCPUStat ("/" </> "proc" </> "stat")
+
+parseCPUStat :: Parse.ParseHor (CPUStat Int, [CPUStat Int])
+parseCPUStat = Parse.fields (many Parse.signedDecimalH) >>= Parse.exQueryMap query
   where
-    cpus = Parse.fieldsCustom cpuFieldN (many Parse.decimalH) >>= Parse.exQueryMap query
-    cpuFieldN = Parse.identCondH ("cpu" `T.isPrefixOf`)
     query = do
       total <- Parse.queryFieldAs "cpu" cpuOf
-      cores <- Parse.queryAllAs ("cpu" `T.isPrefixOf`) (traverse cpuOf . M.elems)
-      pure (total, cores)
+      -- 'M.elems' enumerates the cpus in order. - FIXME This is wrong
+      cpus <- Parse.queryAllAs isSpecificCPU (traverse cpuOf . M.elems)
+      pure (total, cpus)
+
+    isSpecificCPU name = case T.stripPrefix "cpu" name of
+      Just num | not (T.null num) && T.all Char.isDigit num -> True
+      _ -> False
 
 -- | Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
 --

@@ -69,6 +69,7 @@ batteryStat = do
       currentNow <- Parse.queryOptAs "POWER_SUPPLY_CURRENT_NOW" asInt
       powerNow <- Parse.queryOptAs "POWER_SUPPLY_POWER_NOW" asInt
       pure MkBatteryStat{..}
+
     statusEnum = \case
       "Charging" -> Charging
       "Discharging" -> Discharging

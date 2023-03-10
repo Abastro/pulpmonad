@@ -135,9 +135,11 @@ test-suite test-pulpdesk
       pulpdesk
     , QuickCheck >=2.14
     , hspec ^>=2.10
+    , hspec-megaparsec ^>=2.2
   other-modules:
     Reactive.EntrySpec
     Reactive.StateSpec
+    System.HardwareSpec
     System.HWSpec
 
   if flag(test-hardware)

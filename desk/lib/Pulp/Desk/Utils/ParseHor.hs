@@ -1,5 +1,6 @@
 -- | Module for horizontal parsing.
 module Pulp.Desk.Utils.ParseHor (
+  ParseHor (parsec),
   labelH,
   parseFile,
   skipH,
@@ -8,6 +9,7 @@ module Pulp.Desk.Utils.ParseHor (
   identCondH,
   symbolH,
   decimalH,
+  signedDecimalH,
   eoH,
   fieldsCustom,
   fields,
@@ -35,8 +37,10 @@ import Text.Megaparsec.Char qualified as Parse
 import Text.Megaparsec.Char.Lexer qualified as Lex
 import Text.Printf
 
+-- Ideally, these need to be tested. Such test is not so useful, though.
+
 -- | Monad for horizontal parsing.
-newtype ParseHor a = AsParseHor { parsec :: Parse.Parsec Void T.Text a }
+newtype ParseHor a = AsParseHor {parsec :: Parse.Parsec Void T.Text a}
   deriving (Functor, Applicative, Monad, Alternative, MonadFail)
 
 -- | Parses a file using a parser. Throws userError when fails.
@@ -52,6 +56,7 @@ skipH :: ParseHor ()
 skipH = AsParseHor Parse.hspace
 
 -- | Parses remaining characters until a line break.
+-- The line break itself is not consumed.
 remainH :: ParseHor T.Text
 remainH = AsParseHor $ Parse.takeWhileP (Just "remaining") (/= '\n')
 
@@ -63,7 +68,9 @@ identH = AsParseHor $ Lex.lexeme skipH.parsec (Parse.takeWhile1P (Just "identifi
 
 -- | Identifier with restricting condition.
 identCondH :: (T.Text -> Bool) -> ParseHor T.Text
-identCondH cond = AsParseHor $ Parse.try $ identH.parsec >>= \ident -> ident <$ guard (cond ident)
+identCondH cond = AsParseHor $ Parse.try $ do
+  ident <- identH.parsec
+  ident <$ guard (cond ident)
 
 -- | Horizontal symbols.
 symbolH :: T.Text -> ParseHor T.Text
@@ -72,6 +79,11 @@ symbolH = AsParseHor . Lex.symbol skipH.parsec
 -- | Horizontal decimals.
 decimalH :: Num a => ParseHor a
 decimalH = AsParseHor $ Lex.lexeme skipH.parsec Lex.decimal
+
+-- | Horizontal signed decimals.
+-- Since space is a separator, we do not allow 
+signedDecimalH :: Num a => ParseHor a
+signedDecimalH = AsParseHor $ Lex.lexeme skipH.parsec $ Lex.signed (pure ()) Lex.decimal
 
 -- | Parse an end of line, or eof.
 eoH :: ParseHor ()
@@ -96,35 +108,35 @@ fieldsIgnoring :: ParseHor hd -> ParseHor a -> ParseHor (M.Map T.Text a)
 fieldsIgnoring hd = fieldsCustom (hd *> identH)
 
 -- | Map query monad.
-newtype QueryMap b a = QueryMap (ExceptT String (State (M.Map T.Text b)) a)
+newtype QueryMap v a = QueryMap (ExceptT String (State (M.Map T.Text v)) a)
   deriving (Functor, Applicative, Monad)
 
-instance MonadFail (QueryMap b) where
-  fail :: String -> QueryMap b a
+instance MonadFail (QueryMap v) where
+  fail :: String -> QueryMap v a
   fail = QueryMap . throwError
 
 -- | Execute QueryMap.
-exQueryMap :: (MonadFail m, Show b) => QueryMap b a -> M.Map T.Text b -> m a
+exQueryMap :: (MonadFail m, Show v) => QueryMap v a -> M.Map T.Text v -> m a
 exQueryMap (QueryMap query) st = either (fail . errMsg) pure $ evalState (runExceptT query) st
   where
     errMsg msg = printf "Error: %s\nIll-formed map: %s\n" msg (show st)
 
 -- | Query an optional field.
-queryOpt :: T.Text -> QueryMap b (Maybe b)
+queryOpt :: T.Text -> QueryMap v (Maybe v)
 queryOpt name = QueryMap . state $ M.updateLookupWithKey (\_ _ -> Nothing) name
 
 -- | Query an optional field with a mapping function.
-queryOptAs :: T.Text -> (b -> Maybe r) -> QueryMap b (Maybe r)
+queryOptAs :: T.Text -> (v -> Maybe r) -> QueryMap v (Maybe r)
 queryOptAs name f = (>>= f) <$> queryOpt name
 
 -- | Query a field.
-queryField :: T.Text -> QueryMap b b
+queryField :: T.Text -> QueryMap v v
 queryField name = queryOpt name >>= maybe (fail notFoundErr) pure
   where
     notFoundErr = printf "Field %s not found" name
 
 -- | Query a field with a mapping function.
-queryFieldAs :: T.Text -> (b -> Maybe r) -> QueryMap b r
+queryFieldAs :: T.Text -> (v -> Maybe r) -> QueryMap v r
 queryFieldAs name f = queryField name >>= maybe (fail illFormedErr) pure . f
   where
     illFormedErr = printf "Field %s ill-formed" name
