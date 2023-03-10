@@ -13,8 +13,8 @@ data MemoryStat a = MkMemoryStat
   { memTotal :: !a
   , memFree :: !a
   , memAvailable :: !a
-  , memBuffers :: !a
-  , memCached :: !a
+  , buffers :: !a
+  , cached :: !a
   , swapTotal :: !a
   , swapFree :: !a
   }
@@ -25,7 +25,7 @@ memoryRatios :: (Real a, Fractional b) => MemoryStat a -> MemoryStat b
 memoryRatios mem = ratioTo mem.memTotal mem
 
 memoryUsed :: Num a => MemoryStat a -> a
-memoryUsed MkMemoryStat{..} = memTotal - memFree - memBuffers - memCached
+memoryUsed MkMemoryStat{..} = memTotal - memFree - buffers - cached
 
 -- | Gets Memory statistics.
 -- Pulls from </proc/meminfo>.
@@ -33,15 +33,16 @@ memoryStat :: IO (MemoryStat Int)
 memoryStat = Parse.parseFile memory ("/" </> "proc" </> "meminfo")
   where
     memory = do
-      Parse.fields (Parse.symbolH ":" *> mayKB) >>= Parse.exQueryMap query
+      Parse.fields mayKB >>= Parse.exQueryMap query
 
+    -- Each field has an unsigned integer with optional trailing 'kB'.
     mayKB = Parse.labelH "data" $ Parse.decimalH <* optional (Parse.symbolH "kB")
     query = do
-      memTotal <- Parse.queryField "MemTotal"
-      memFree <- Parse.queryField "MemFree"
-      memAvailable <- Parse.queryField "MemAvailable"
-      memBuffers <- Parse.queryField "Buffers"
-      memCached <- Parse.queryField "Cached"
-      swapTotal <- Parse.queryField "SwapTotal"
-      swapFree <- Parse.queryField "SwapFree"
+      memTotal <- Parse.queryField "MemTotal:"
+      memFree <- Parse.queryField "MemFree:"
+      memAvailable <- Parse.queryField "MemAvailable:"
+      buffers <- Parse.queryField "Buffers:"
+      cached <- Parse.queryField "Cached:"
+      swapTotal <- Parse.queryField "SwapTotal:"
+      swapFree <- Parse.queryField "SwapFree:"
       pure MkMemoryStat{..}

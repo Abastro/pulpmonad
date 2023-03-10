@@ -60,11 +60,11 @@ skipH = AsParseHor Parse.hspace
 remainH :: ParseHor T.Text
 remainH = AsParseHor $ Parse.takeWhileP (Just "remaining") (/= '\n')
 
--- | Space-separated identifier, which could include numbers, '_', '(' and ')'.
+-- | Space-separated identifier, which could include numbers, '_', ':', '(' and ')'.
 identH :: ParseHor T.Text
 identH = AsParseHor $ Lex.lexeme skipH.parsec (Parse.takeWhile1P (Just "identifier") isID)
   where
-    isID c = isAlphaNum c || c == '(' || c == ')' || c == '_'
+    isID c = isAlphaNum c || c == '(' || c == ')' || c == '_' || c == ':'
 
 -- | Identifier with restricting condition.
 identCondH :: (T.Text -> Bool) -> ParseHor T.Text
