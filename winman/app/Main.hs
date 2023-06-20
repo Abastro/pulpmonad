@@ -139,7 +139,7 @@ staticManage =
     , className =? "Gnome-control-center" --> doCenterFloat
     , className =? "term-float" --> doCenterFloat
     , className =? "Eog" --> doCenterFloat
-    , className =? "Steam" --> doF (shift game)
+    , className =? "steam" --> doF (shift game)
     , className =? "kakaotalk.exe"
         <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doHideIgnore
     ]
