@@ -12,7 +12,7 @@ module Pulp.Desk.System.Hardware.CPUStatus (
 ) where
 
 import Control.Applicative
-import Data.Char qualified as Char
+import Data.List
 import Data.Map.Strict qualified as M
 import Data.Monoid
 import Data.Text qualified as T
@@ -21,6 +21,7 @@ import Pulp.Desk.System.Hardware.Commons
 import Pulp.Desk.Utils.ParseHor qualified as Parse
 import System.Directory
 import System.FilePath
+import Text.Read
 
 -- | CPU statistics. Usual unit is USER_HZ (typically 0.01s)
 data CPUStat a = MkCPUStat
@@ -58,13 +59,17 @@ parseCPUStat = Parse.fields (many Parse.signedDecimalH) >>= Parse.exQueryMap que
   where
     query = do
       total <- Parse.queryFieldAs "cpu" cpuOf
-      -- 'M.elems' enumerates the cpus in order. - FIXME This is wrong
-      cpus <- Parse.queryAllAs isSpecificCPU (traverse cpuOf . M.elems)
+      cpus <- Parse.queryAllAs isSpecificCPU (fmap sortUsingFst . traverse formatted . M.toList)
       pure (total, cpus)
 
+    sortUsingFst = fmap @[] snd . sortOn fst
+
+    -- We assume when a field name starts with "cpu", it is about a cpu.
     isSpecificCPU name = case T.stripPrefix "cpu" name of
-      Just num | not (T.null num) && T.all Char.isDigit num -> True
-      _ -> False
+      Just num -> not (T.null num)
+      Nothing -> False
+
+    formatted (name, val) = (,) <$> readMaybe @Int (T.unpack $ T.drop 3 name) <*> cpuOf val
 
 -- | Gets CPU temperature, currently only handles k10temp. (MAYBE handle intel's coretemp)
 --
