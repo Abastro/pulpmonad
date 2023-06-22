@@ -1,10 +1,6 @@
 #!/bin/sh
 cfg="$XMONAD_CONFIG_DIR"
 
-# TODO libasound2-dev, gtk-related libraries
-
-sudo apt install light pasystray network-manager-gnome blueman synapse ssh-askpass-gnome parcellite
-
 if ! command -v status-notifier-watcher; then
   cabal install status-notifier-item
 fi

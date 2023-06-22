@@ -6,3 +6,15 @@ install: "./install.sh"
 build: "./build.sh"
 run: "./run.sh"
 buildOnStart: false
+dependencies:
+  - feh
+  - light
+  - network-manager-applet
+# Blueman is removed from these since it tries to pull pulseaudio for some reason.
+#  - blueman
+  - synapse
+  - parcellite
+  - alsa-dev
+  - gtk3-dev
+  - libgirepository
+  - libdbusmenu-gtk3

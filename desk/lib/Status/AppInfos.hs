@@ -52,7 +52,7 @@ getAppInfos AppInfoCol{curAppInfo} =
       V.mapM appInfoData deskInfos
 
     appInfoData appInfo = do
-      appId <- Gio.appInfoGetId appInfo
+      Just appId <- Gio.appInfoGetId appInfo -- Expect App ID to exist.
       appExecName <- getExecName appInfo
       appWmClass <- getWmClass appInfo
       pure AppInfoData{..}
@@ -62,7 +62,6 @@ getAppInfos AppInfoCol{curAppInfo} =
       execName : _ <- pure (words exec)
       pure (T.pack execName)
 
-    getWmClass appInfo = runMaybeT $ do
-      either (const empty) pure =<< liftIO (tryNull $ Gio.desktopAppInfoGetStartupWmClass appInfo)
+    getWmClass = Gio.desktopAppInfoGetStartupWmClass
 
     tryNull = try @Gio.UnexpectedNullPointerReturn
