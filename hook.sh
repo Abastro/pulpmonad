@@ -7,10 +7,6 @@ if [ -z "$(pgrep status-notifier)" ] ; then
   status-notifier-watcher &
 fi
 
-# if [ -z "$(pgrep pasystray)" ] ; then
-#   pasystray &
-# fi
-
 # NetworkManager applet
 if [ -z "$(pgrep nm-applet)" ] ; then
   nm-applet --sm-disable --indicator &

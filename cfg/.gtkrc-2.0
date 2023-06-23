@@ -1,4 +1,5 @@
-gtk-theme-name="Adwaita-dark"
+gtk-theme-name="Yaru-dark"
+gtk-icon-theme-name="Yaru"
 gtk-font-name="Ubuntu 9"
 gtk-cursor-theme-name="DMZ-White"
 gtk-cursor-theme-size=0

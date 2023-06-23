@@ -13,6 +13,7 @@ dependencies:
 # Blueman is removed from these since it tries to pull pulseaudio for some reason.
 #  - blueman
   - synapse
+  - gnome-screenshot
   - parcellite
   - alsa-dev
   - gtk3-dev
