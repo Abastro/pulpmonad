@@ -26,7 +26,3 @@ fi
 if [ -z "$(pgrep parcellite)" ] ; then
   parcellite -d &
 fi
-
-# SSH key
-# export SSH_ASKPASS="/usr/bin/ssh-askpass"
-# ssh-add &

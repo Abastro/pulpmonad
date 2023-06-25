@@ -7,6 +7,7 @@ build: "./build.sh"
 run: "./run.sh"
 buildOnStart: false
 dependencies:
+  - status-notifier-item
   - feh
   - light
   - network-manager-applet
