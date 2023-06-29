@@ -75,7 +75,7 @@ main = do
       [((controlMask, middleClick), \w -> runQuery isFloating w --> (focus w >> kill))]
     keysUtility xmData =
       [ ("M-S-/", safeSpawn "eog" [xmData </> "asset" </> "xmbindings.png"])
-      , ("M-d", safeSpawnProg "nautilus")
+      , ("M-d", safeSpawnProg "nemo")
       , ("M-M1-t", namedScratchpadAction scratchpads (name scTerm))
       ]
     keysBasic =
