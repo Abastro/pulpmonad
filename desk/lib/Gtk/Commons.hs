@@ -29,6 +29,7 @@ import Data.GI.Base.GObject
 import Data.GI.Base.ManagedPtr
 import Data.Text qualified as T
 import Foreign.Ptr (nullPtr)
+import GI.GObject.Objects.Object
 import GI.Gdk.Constants hiding (MAJOR_VERSION, MICRO_VERSION, MINOR_VERSION)
 import GI.Gdk.Enums hiding (AnotherWindowType, WindowType, WindowTypeToplevel)
 import GI.Gdk.Flags
@@ -51,6 +52,8 @@ setTemplateFromGFile widgetClass file = do
   (bytes, _) <- #loadBytes file (Nothing @Gio.Cancellable)
   #setTemplate widgetClass bytes
 
+-- * Somehow importing GI.GObject.Objects.Object is required
+
 -- | Obtains template child, only intended for private use.
 -- CAUTION: need to be called with exact type.
 templateChild :: forall p o. (IsWidget p, GObject o) => p -> T.Text -> (ManagedPtr o -> o) -> IO o
@@ -63,7 +66,7 @@ templateChild parent name constr = do
 -- | Monad with builder attached
 type BuilderM m = ReaderT Builder m
 
-buildFromFile :: MonadIO m => T.Text -> BuilderM m a -> m a
+buildFromFile :: (MonadIO m) => T.Text -> BuilderM m a -> m a
 buildFromFile uiFile act = do
   builder <- builderNewFromFile uiFile
   built <- runReaderT act builder
@@ -72,7 +75,7 @@ buildFromFile uiFile act = do
   pure built
 
 -- | Adds callback to a signal.
-addCallback :: MonadIO m => T.Text -> IO () -> BuilderM m ()
+addCallback :: (MonadIO m) => T.Text -> IO () -> BuilderM m ()
 addCallback name act = ReaderT $ \builder -> do
   #addCallbackSymbol builder name act
 

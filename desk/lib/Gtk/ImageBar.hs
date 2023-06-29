@@ -28,6 +28,7 @@ import GI.Gdk.Functions qualified as Gdk
 import GI.Gio.Interfaces.File qualified as Gio
 import GI.Gtk.Objects.Bin
 import GI.Gtk.Objects.Image
+import GI.Gtk.Objects.StyleContext
 import GI.Gtk.Structs.WidgetClass
 import Graphics.X11.Xlib.Types (Rectangle (..))
 import Gtk.Commons

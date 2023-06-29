@@ -13,6 +13,7 @@ dependencies:
   - network-manager-applet
 # Blueman is removed from these since it tries to pull pulseaudio for some reason.
 #  - blueman
+  - nemo
   - synapse
   - gnome-screenshot
   - parcellite
