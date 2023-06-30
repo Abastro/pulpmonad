@@ -8,6 +8,7 @@ if [ -z "$(pgrep status-notifier)" ] ; then
 fi
 
 # NetworkManager applet
+# TODO Somehow does not register correctly on first run after boot 
 if [ -z "$(pgrep nm-applet)" ] ; then
   nm-applet --sm-disable --indicator &
 fi

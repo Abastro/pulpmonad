@@ -283,9 +283,9 @@ appInfoImgSetter appCol WindowInfo{windowClasses} = do
   appInfo <- MaybeT . liftIO $ appGetIns appDat
   MaybeT $ Gio.appInfoGetIcon appInfo
   where
-    classMatch AppInfoData{..} cl = Just cl == appWmClass
+    classMatch AppInfoData{..} cl = Just (T.toLower cl) == (T.toLower <$> appWmClass)
     identMatch AppInfoData{..} cl = T.toLower cl <> T.pack ".desktop" == T.toLower appId
-    execMatch AppInfoData{..} cl = Just (T.toLower cl) == appExecName
+    execMatch AppInfoData{..} cl = Just (T.toLower cl) == (T.toLower <$> appExecName)
 
 {-------------------------------------------------------------------
                           Communication
