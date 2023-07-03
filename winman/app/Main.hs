@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Defines
+import XEvents
 import XMonad
 import XMonad.Actions.GridSelect
 import XMonad.Actions.MouseResize (mouseResize)
@@ -26,7 +27,6 @@ import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
-import XEvents
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
@@ -110,7 +110,8 @@ scTerm =
 scratchpads = [scTerm]
 
 myLayout =
-  mouseResize . avoidStruts
+  mouseResize
+    . avoidStruts
     . onWorkspaces [code, game] mTab
     $ mTall ||| mWide ||| mTab
   where
@@ -125,21 +126,25 @@ myLayout =
 staticManage =
   composeAll
     [ isDialog --> doCenterFloat
-    , isSplash --> doIgnore
+    , -- , className =? "org.gnome.Nautilus" --> doCenterFloat
+      -- , pure True --> doCenterFloat -- Nuclear option
+      isSplash --> doIgnore
     , isTooltip --> doIgnore
     , role =? "popup" <||> role =? "pop-up" --> doCenterFloat
     , className =? "Gimp" --> doF (shift pics)
     , role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink
-    , className =? "Inkscape" --> doF (shift pics)
-    -- zoom be zoom with "zoom "
-    , (className =? "zoom" <||> className =? "zoom ") <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE
+    , className =? "org.inkscape.Inkscape" --> doF (shift pics)
+    , -- zoom be zoom with "zoom "
+      (className =? "zoom" <||> className =? "zoom ") <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE
     , className =? "Soffice" <&&> isFullscreen --> doFullFloat
-    , className =? "Gnome-calculator" --> doCenterFloat
-    , className =? "Gnome-system-monitor" --> doCenterFloat
-    , className =? "Gnome-control-center" --> doCenterFloat
+    , className =? "gnome-calculator" --> doCenterFloat
+    , className =? "gnome-system-monitor" --> doCenterFloat
+    , className =? "gnome-control-center" --> doCenterFloat
     , className =? "term-float" --> doCenterFloat
-    , className =? "Eog" --> doCenterFloat
+    , className =? "eog" --> doCenterFloat
     , className =? "steam" --> doF (shift game)
-    , className =? "kakaotalk.exe"
-        <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd") --> doHideIgnore
+    , className
+        =? "kakaotalk.exe"
+        <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd")
+        --> doHideIgnore
     ]

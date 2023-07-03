@@ -7,6 +7,8 @@ cache="$XMONAD_CACHE_DIR"
 data="$XMONAD_DATA_DIR"
 xmonad_name="xmonad-$ENV_ARCH-$ENV_OS"
 
+cd "$config" || exit
+
 # Cabal installation
 cabal install "exe:$cfgid" "exe:$barid" \
   --installdir="$cache" --install-method=copy \
