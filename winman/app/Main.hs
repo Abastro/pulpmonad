@@ -80,8 +80,8 @@ main = do
       ]
     keysBasic =
       [ ("M-p", safeSpawnProg "synapse")
-      , ("<XF86MonBrightnessUp>", safeSpawn "light" ["-A", "5"])
-      , ("<XF86MonBrightnessDown>", safeSpawn "light" ["-U", "5"])
+      , ("<XF86MonBrightnessUp>", safeSpawn "brightnessctl" ["-c", "backlight", "s", "+5%"])
+      , ("<XF86MonBrightnessDown>", safeSpawn "brightnessctl" ["-c", "backlight", "s", "5%-"])
       , ("<XF86AudioRaiseVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "+5%"])
       , ("<XF86AudioLowerVolume>", safeSpawn "pactl" ["set-sink-volume", "@DEFAULT_SINK@", "-5%"])
       , ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
@@ -123,12 +123,11 @@ myLayout =
     tall = Tall 1 (3 / 100) (1 / 2)
     wide = Mirror (Tall 1 (3 / 100) (1 / 2))
 
+-- Current offender: Nautilus & Gnome-calculator
 staticManage =
   composeAll
     [ isDialog --> doCenterFloat
-    , -- , className =? "org.gnome.Nautilus" --> doCenterFloat
-      -- , pure True --> doCenterFloat -- Nuclear option
-      isSplash --> doIgnore
+    , isSplash --> doIgnore
     , isTooltip --> doIgnore
     , role =? "popup" <||> role =? "pop-up" --> doCenterFloat
     , className =? "Gimp" --> doF (shift pics)

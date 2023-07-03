@@ -9,7 +9,7 @@ buildOnStart: false
 dependencies:
   - status-notifier-item
   - feh
-  - light
+  - brightnessctl
   - network-manager-applet
 # Blueman is removed from these since it tries to pull pulseaudio for some reason.
 #  - blueman
