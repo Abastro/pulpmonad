@@ -133,15 +133,15 @@ staticManage =
     , role =? "popup" <||> role =? "pop-up" --> doCenterFloat
     , className =? "Gimp" --> doF (shift pics)
     , role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink
-    , className =? "org.inkscape.Inkscape" --> doF (shift pics)
+    , appName =? "org.inkscape.Inkscape" --> doF (shift pics)
     , -- zoom be zoom with "zoom "
       (className =? "zoom" <||> className =? "zoom ") <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE
-    , className =? "Soffice" <&&> isFullscreen --> doFullFloat
-    , className =? "gnome-calculator" --> doCenterFloat
-    , className =? "gnome-system-monitor" --> doCenterFloat
-    , className =? "gnome-control-center" --> doCenterFloat
-    , className =? "term-float" --> doCenterFloat
-    , className =? "eog" --> doCenterFloat
+    , appName =? "soffice" <&&> isFullscreen --> doFullFloat
+    , appName =? "gnome-calculator" --> doCenterFloat
+    , appName =? "gnome-system-monitor" --> doCenterFloat
+    , appName =? "gnome-control-center" --> doCenterFloat
+    , appName =? "term-float" --> doCenterFloat
+    , appName =? "eog" --> doCenterFloat
     , className =? "steam" --> doF (shift game)
     , className
         =? "kakaotalk.exe"
