@@ -11,3 +11,5 @@ if [ -d "/usr/share/slick-greeter/badges" ]; then
   sudo cp "$cfg/asset/badge/pulpmonad.svg" "/usr/share/slick-greeter/badges"
   sudo chmod a+r "/usr/share/slick-greeter/badges/pulpmonad.svg"
 fi
+
+chmod +x "$cfg/hook.sh"

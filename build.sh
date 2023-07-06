@@ -1,19 +1,18 @@
 #!/bin/sh
-cfgid="pulpmonad"
-barid="pulp-taskbar"
+PROF_ID="pulpmonad"
+BAR_ID="pulp-taskbar"
 
 config="$XMONAD_CONFIG_DIR"
-cache="$XMONAD_CACHE_DIR"
 data="$XMONAD_DATA_DIR"
-xmonad_name="xmonad-$ENV_ARCH-$ENV_OS"
+XMONAD_EXE_PATH="$XMONAD_CACHE_DIR/xmonad-$ENV_ARCH-$ENV_OS"
 
 cd "$config" || exit
 
 # Cabal installation
-cabal install "exe:$cfgid" "exe:$barid" \
-  --installdir="$cache" --install-method=copy \
+cabal install "exe:$PROF_ID" "exe:$BAR_ID" \
+  --installdir="$XMONAD_CACHE_DIR" --install-method=copy \
   --overwrite-policy=always
-ln -sf "$cache/$cfgid" "$cache/$xmonad_name"
+ln -sf "$XMONAD_CACHE_DIR/$PROF_ID" "$XMONAD_EXE_PATH"
 
 # Copy configurations
 xdgcfg="$HOME/.config"

@@ -16,7 +16,9 @@ newtype PerformOnce (t :: Type) = PerformOnce (S.Set String)
   deriving (Read, Show)
 
 instance (Typeable t) => ExtensionClass (PerformOnce t) where
+  initialValue :: Typeable t => PerformOnce t
   initialValue = PerformOnce mempty
+  extensionType :: Typeable t => PerformOnce t -> StateExtension
   extensionType = PersistentExtension
 
 -- | Perform an action only once, alike `spawnOnce`. The proxy type should be unique.

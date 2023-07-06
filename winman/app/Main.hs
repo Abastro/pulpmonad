@@ -27,6 +27,9 @@ import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
+import StartHook
+import Data.Proxy
+import System.Environment
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
@@ -45,11 +48,21 @@ main = do
   dirs <- getDirectories
   let xmData = dataDir dirs
       xmCache = cacheDir dirs
+      xmCfg = cfgDir dirs
 
       onStart = do
         setWMName "LG3D"
         gnomeRegister -- Registers xmonad with gnome
         safeSpawn "feh" ["--bg-scale", xmData </> "asset" </> "background.jpg"]
+        performOnce (Proxy @Initiate) $ do
+          safeSpawnProg (xmCfg </> "hook.sh")
+
+      setupEnvs = do
+        home <- liftIO getHomeDirectory
+        -- Workaround for libadwaita theme. TODO: Avoid this being inside UI
+        liftIO $ setEnv "GTK_THEME" "Yaru-dark"
+        liftIO $ setEnv "GTK2_RC_FILES" (home </> ".config" </> "gtk-2.0" </> ".gtkrc-2.0")
+        safeSpawn "dbus-update-activation-environment" ["GTK_THEME"]
 
       pulpBar = statusBarGeneric (xmCache </> "pulp-taskbar") mempty
 
@@ -59,7 +72,7 @@ main = do
       , normalBorderColor = "#cccccc"
       , workspaces = mySpaces
       , terminal = "gnome-terminal"
-      , startupHook = onStart <> startupHook cfg
+      , startupHook = setupEnvs <> onStart <> startupHook cfg
       , manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads
       , layoutHook = lessBorders (Combine Union Never OnlyFloat) myLayout
       , handleEventHook = handleEventHook cfg <> minimizeEventHook
