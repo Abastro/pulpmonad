@@ -29,6 +29,7 @@ import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
+import XMonad.Hooks.ManageDebug
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
@@ -79,7 +80,7 @@ main = do
       `additionalKeysP` concat [keysUtility xmData, keysBasic, keysSpecial, keysScreenshot]
       `removeKeysP` keysRemoved
   where
-    cfg = ewmh desktopConfig
+    cfg = debugManageHookOn "M-S-b" $ ewmh desktopConfig
     -- MAYBE keybindings to cfg file
     mouseMove =
       [((controlMask, middleClick), \w -> runQuery isFloating w --> (focus w >> kill))]
@@ -112,6 +113,10 @@ main = do
     gotoCfg =
       def
         { gs_bordercolor = "#404040"
+        , gs_cellwidth = 240
+        , gs_cellheight = 80
+        , gs_cellpadding = 20
+        , gs_font = "xft:Sans-10"
         }
 
 scTerm =
