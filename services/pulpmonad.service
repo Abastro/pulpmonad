@@ -1,10 +1,9 @@
 [Unit]
-Description=PulpMonad
+Description=Pulp-styled profile with UIs
+Wants=pulp-taskbar.service
 
 [Service]
 Type=simple
 StandardOutput=journal
 StandardError=journal
 ExecStart=${XMONAD_CACHE_DIR}/${XMONAD_NAME}
-
-[Install]

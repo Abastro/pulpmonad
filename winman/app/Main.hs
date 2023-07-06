@@ -17,7 +17,6 @@ import XMonad.Hooks.ManageDocks
 import XMonad.Hooks.ManageHelpers
 import XMonad.Hooks.Minimize
 import XMonad.Hooks.SetWMName (setWMName)
-import XMonad.Hooks.StatusBar
 import XMonad.Hooks.TaffybarPagerHints (pagerHints)
 import XMonad.Layout.Maximize
 import XMonad.Layout.Minimize
@@ -47,7 +46,6 @@ main :: IO ()
 main = do
   dirs <- getDirectories
   let xmData = dataDir dirs
-      xmCache = cacheDir dirs
       xmCfg = cfgDir dirs
 
   let onStart = do
@@ -65,9 +63,7 @@ main = do
         liftIO $ setEnv "GTK2_RC_FILES" (home </> ".config" </> "gtk-2.0" </> ".gtkrc-2.0")
         safeSpawn "dbus-update-activation-environment" ["GTK_THEME"]
 
-      pulpBar = statusBarGeneric (xmCache </> "pulp-taskbar") mempty
-
-  xmonad . ewmhFullscreen . pagerHints . withSB pulpBar $
+  xmonad . ewmhFullscreen . pagerHints $
     cfg
       { focusedBorderColor = "#eeaaaa"
       , normalBorderColor = "#cccccc"

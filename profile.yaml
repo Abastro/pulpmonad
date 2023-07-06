@@ -6,6 +6,9 @@ install: "./install.sh"
 build: "./build.sh"
 run: "./run.sh"
 run-service: "services/pulpmonad.service"
+other-services:
+  - "services/pulp-taskbar.service"
+  - "services/status-notifier-watcher.service"
 buildOnStart: false
 dependencies:
   - status-notifier-item

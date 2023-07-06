@@ -1,0 +1,15 @@
+[Unit]
+Description=Pulp-styled profile with UIs
+BindsTo=status-notifier-watcher.service
+After=status-notifier-watcher.service
+PartOf=pulpmonad.service
+# Restart is rate-limited
+StartLimitIntervalSec=2
+StartLimitBurst=1
+
+[Service]
+Type=simple
+StandardOutput=journal
+StandardError=journal
+ExecStart=${XMONAD_CACHE_DIR}/pulp-taskbar
+Restart=on-failure
