@@ -5,7 +5,6 @@ Description=PulpMonad
 Type=simple
 StandardOutput=journal
 StandardError=journal
-ExecStart=pulpmonad
-ExecSearchPath=${XMONAD_CACHE_DIR}
+ExecStart=${XMONAD_CACHE_DIR}/${XMONAD_NAME}
 
 [Install]

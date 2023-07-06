@@ -1,6 +1,9 @@
 module Main (main) where
 
+import Data.Proxy
 import Defines
+import StartHook
+import System.Environment
 import XEvents
 import XMonad
 import XMonad.Actions.GridSelect
@@ -27,9 +30,6 @@ import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
-import StartHook
-import Data.Proxy
-import System.Environment
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
@@ -50,7 +50,7 @@ main = do
       xmCache = cacheDir dirs
       xmCfg = cfgDir dirs
 
-      onStart = do
+  let onStart = do
         setWMName "LG3D"
         gnomeRegister -- Registers xmonad with gnome
         safeSpawn "feh" ["--bg-scale", xmData </> "asset" </> "background.jpg"]
@@ -59,7 +59,8 @@ main = do
 
       setupEnvs = do
         home <- liftIO getHomeDirectory
-        -- Workaround for libadwaita theme. TODO: Avoid this being inside UI
+        -- Workaround for libadwaita theme.
+        -- TODO: Avoid this being inside UI
         liftIO $ setEnv "GTK_THEME" "Yaru-dark"
         liftIO $ setEnv "GTK2_RC_FILES" (home </> ".config" </> "gtk-2.0" </> ".gtkrc-2.0")
         safeSpawn "dbus-update-activation-environment" ["GTK_THEME"]
