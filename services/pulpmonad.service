@@ -1,0 +1,11 @@
+[Unit]
+Description=PulpMonad
+
+[Service]
+Type=simple
+StandardOutput=journal
+StandardError=journal
+ExecStart=pulpmonad
+ExecSearchPath=${XMONAD_CACHE_DIR}
+
+[Install]

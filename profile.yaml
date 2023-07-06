@@ -5,6 +5,7 @@ details: "Pulp-styled profile with UIs"
 install: "./install.sh"
 build: "./build.sh"
 run: "./run.sh"
+run-service: "services/pulpmonad.service"
 buildOnStart: false
 dependencies:
   - status-notifier-item
