@@ -14,8 +14,6 @@ import Data.Maybe
 import Sound.ALSA.Exception qualified as Alsa
 import Sound.ALSA.Mixer
 
--- TODO Fix sound indicator occasionally going mute/0 until sound play
-
 catchWithDef def act = Alsa.catch act $ const (pure def)
 
 -- | Switch/volume capability could be either

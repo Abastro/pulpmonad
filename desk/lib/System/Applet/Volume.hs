@@ -3,10 +3,12 @@
 module System.Applet.Volume (volumeDisplay) where
 
 import Control.Event.Entry
+import Control.Monad
 import Control.Monad.IO.Class
 import Data.GI.Base.Attributes
 import Data.Ord
 import Data.Text qualified as T
+import GI.Gdk.Structs.EventButton qualified as Gdk
 import GI.Gdk.Structs.EventScroll qualified as Gdk
 import GI.Gdk.Unions.Event qualified as Gdk
 import GI.Gtk.Objects.Image qualified as Gtk
@@ -15,10 +17,8 @@ import Gtk.Task qualified as Gtk
 import Reactive.Banana.Frameworks
 import Status.AudioStatus
 import System.FilePath
-import XMonad.Util.Run
-import Control.Monad
-import qualified GI.Gdk.Structs.EventButton as Gdk
 import System.Pulp.PulpPath
+import XMonad.Util.Run
 
 data VolumeLevel = Muted | VolLow | VolMid | VolHigh
   deriving (Eq, Ord, Enum, Bounded)
