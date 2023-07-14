@@ -58,11 +58,7 @@ main = do
 
       setupEnvs = do
         home <- liftIO getHomeDirectory
-        -- Workaround for libadwaita theme.
-        -- TODO: Avoid this being inside UI
-        liftIO $ setEnv "GTK_THEME" "Yaru-dark"
         liftIO $ setEnv "GTK2_RC_FILES" (home </> ".config" </> "gtk-2.0" </> ".gtkrc-2.0")
-        safeSpawn "dbus-update-activation-environment" ["GTK_THEME"]
 
   xmonad . ewmhFullscreen . pagerHints $
     cfg
