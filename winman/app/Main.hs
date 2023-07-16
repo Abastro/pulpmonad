@@ -94,7 +94,7 @@ main = do
       , ("<XF86AudioMute>", safeSpawn "pactl" ["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
       , ("M-x", xCtrlMsg XWMCtl)
       , ("M-S-x", xCtrlMsg XSysCtl)
-      , ("M-s", goToSelected gotoCfg)
+      , ("M-<Tab>", goToSelected gotoCfg)
       ]
     keysScreenshot =
       [ ("<Print>", spawn "sleep 0.2; gnome-screenshot")
