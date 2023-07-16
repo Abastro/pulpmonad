@@ -65,7 +65,10 @@ wmCtrlBtn parent = withRunInIO $ \unlift -> do
       buildTxt <- accumB mempty (appendLine <$> gotLine)
       pure (tab, buildTxt)
 
-    onRefresh = safeSpawn "xmonad" ["--restart"]
+    onRefresh = do
+      -- Both the window manager and the taskbar needs restart.
+      safeSpawn "xmonad" ["--restart"]
+      safeSpawn "systemctl" ["--user", "restart", "pulp-taskbar.service"]
 
     appendLine line = (<> line <> T.pack "\n")
 
@@ -75,7 +78,7 @@ runBuild = do
   (srcLine, rcvLine) <- sourceSink
   (srcFin, srcLine) <$ go finish rcvLine
   where
-    -- MAYBE maybe simplify this?
+    -- ? maybe simplify this?
     go finish rcvLine = do
       forkIO . (`finally` onEnd) . handle @IOException onError $ do
         let prog = proc "xmonad-manage" ["build", "pulpmonad"]
