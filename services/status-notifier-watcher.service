@@ -5,7 +5,7 @@ Description=StatusNotifier Watcher for status bars.
 Type=exec
 StandardOutput=journal
 StandardError=journal
-ExecStart=${HOME}/.cabal/bin/status-notifier-watcher
+ExecStart=%h/.cabal/bin/status-notifier-watcher
 # Restart would be great.
 # However, I cannot decide whether it is good to restart on failure, soo...
 # (Successful exit is unlikely anyway, and it has been fairly reliable)
