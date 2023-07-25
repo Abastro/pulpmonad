@@ -42,6 +42,7 @@
                 <property name="label" translatable="yes">Close</property>
                 <property name="image">image-close</property>
                 <property name="image-position">top</property>
+                <property name="always-show-image">1</property>
                 <signal name="clicked" handler="wmctl-close" swapped="no"/>
                 <style>
                   <class name="btn-ctl"/>
@@ -53,6 +54,7 @@
                 <property name="label" translatable="yes">Build</property>
                 <property name="image">image-build</property>
                 <property name="image-position">top</property>
+                <property name="always-show-image">1</property>
                 <signal name="clicked" handler="wmctl-build" swapped="no"/>
                 <style>
                   <class name="btn-ctl"/>
@@ -67,6 +69,7 @@
                 <property name="label" translatable="yes">Refresh</property>
                 <property name="image">image-refresh</property>
                 <property name="image-position">top</property>
+                <property name="always-show-image">1</property>
                 <signal name="clicked" handler="wmctl-refresh" swapped="no"/>
                 <style>
                   <class name="btn-ctl"/>

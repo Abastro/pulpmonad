@@ -49,6 +49,7 @@
             <property name="label" translatable="yes">Close</property>
             <property name="image">image-close</property>
             <property name="image-position">top</property>
+            <property name="always-show-image">1</property>
             <signal name="clicked" handler="sysctl-close" swapped="no"/>
             <style>
               <class name="btn-sys"/>
@@ -60,6 +61,7 @@
             <property name="label" translatable="yes">Log out</property>
             <property name="image">image-logout</property>
             <property name="image-position">top</property>
+            <property name="always-show-image">1</property>
             <signal name="clicked" handler="sysctl-logout" swapped="no"/>
             <style>
               <class name="btn-logout"/>
@@ -74,6 +76,7 @@
             <property name="label" translatable="yes">Reboot</property>
             <property name="image">image-reboot</property>
             <property name="image-position">top</property>
+            <property name="always-show-image">1</property>
             <signal name="clicked" handler="sysctl-reboot" swapped="no"/>
             <style>
               <class name="btn-reboot"/>
@@ -88,6 +91,7 @@
             <property name="label" translatable="yes">Power off</property>
             <property name="image">image-poweroff</property>
             <property name="image-position">top</property>
+            <property name="always-show-image">1</property>
             <signal name="clicked" handler="sysctl-poweroff" swapped="no"/>
             <style>
               <class name="btn-poweroff"/>

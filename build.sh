@@ -13,10 +13,6 @@ cabal install "exe:$PROF_ID" "exe:$BAR_ID" \
   --overwrite-policy=always
 ln -sf "$XMONAD_CACHE_DIR/$PROF_ID" "$XMONAD_CACHE_DIR/$XMONAD_NAME"
 
-# Copy configurations
-xdgcfg="$HOME/.config"
-cp -T "$config/cfg/gtk3-settings.ini" "$xdgcfg/gtk-3.0/settings.ini"
-
 # Copy assets & styles
 cp -R "$config/asset" "$data"
 cp -R "$config/styles" "$data"
