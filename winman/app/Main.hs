@@ -13,6 +13,7 @@ import XMonad.Config.Gnome (gnomeRegister)
 import XMonad.Hooks.DebugStack
 import XMonad.Hooks.EwmhDesktops
 import XMonad.Hooks.FadeWindows
+import XMonad.Hooks.ManageDebug
 import XMonad.Hooks.ManageDocks
 import XMonad.Hooks.ManageHelpers
 import XMonad.Hooks.Minimize
@@ -29,7 +30,7 @@ import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
-import XMonad.Hooks.ManageDebug
+import XMonad.Actions.TagWindows
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
@@ -68,7 +69,7 @@ main = do
       , workspaces = mySpaces
       , terminal = "gnome-terminal"
       , startupHook = setupEnvs <> onStart <> startupHook cfg
-      , manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads
+      , manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads <> modifyManage
       , layoutHook = lessBorders (Combine Union Never OnlyFloat) myLayout
       , handleEventHook = handleEventHook cfg <> minimizeEventHook
       , modMask = mod4Mask -- Super key
@@ -159,3 +160,8 @@ staticManage =
         <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd")
         --> doHideIgnore
     ]
+modifyManage =
+  composeAll
+    [ (not <$> willFloat) --> (ask >>= liftX . addTag "tiled") *> idHook
+    , willFloat --> (ask >>= liftX . unTag) *> idHook
+   ]
