@@ -26,7 +26,6 @@ import XMonad.Layout.NoBorders
 import XMonad.Layout.PerWorkspace
 import XMonad.Layout.Renamed
 import XMonad.Layout.Tabbed
-import XMonad.StackSet (shift)
 import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
@@ -143,9 +142,9 @@ staticManage =
     , isSplash --> doIgnore
     , isTooltip --> doIgnore
     , role =? "popup" <||> role =? "pop-up" --> doCenterFloat
-    , className =? "Gimp" --> doF (shift pics)
+    , className =? "Gimp" --> doShift pics
     , role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink
-    , appName =? "org.inkscape.Inkscape" --> doF (shift pics)
+    , appName =? "org.inkscape.Inkscape" --> doShift pics
     , -- zoom be zoom with "zoom "
       (className =? "zoom" <||> className =? "zoom ") <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE
     , appName =? "soffice" <&&> isFullscreen --> doFullFloat
@@ -154,7 +153,7 @@ staticManage =
     , appName =? "gnome-control-center" --> doCenterFloat
     , appName =? "term-float" --> doCenterFloat
     , appName =? "eog" --> doCenterFloat
-    , className =? "steam" --> doF (shift game)
+    , className =? "steam" --> doShift game
     , className
         =? "kakaotalk.exe"
         <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd")
