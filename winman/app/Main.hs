@@ -8,6 +8,7 @@ import XEvents
 import XMonad
 import XMonad.Actions.GridSelect
 import XMonad.Actions.MouseResize (mouseResize)
+import XMonad.Actions.TagWindows
 import XMonad.Config.Desktop (desktopConfig)
 import XMonad.Config.Gnome (gnomeRegister)
 import XMonad.Hooks.DebugStack
@@ -30,7 +31,6 @@ import XMonad.Util.EZConfig
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (safeSpawn, safeSpawnProg)
 import XMonad.Util.Themes
-import XMonad.Actions.TagWindows
 
 role :: Query String
 role = stringProperty "WM_WINDOW_ROLE"
@@ -69,7 +69,7 @@ main = do
       , workspaces = mySpaces
       , terminal = "gnome-terminal"
       , startupHook = setupEnvs <> onStart <> startupHook cfg
-      , manageHook = manageHook cfg <> staticManage <> namedScratchpadManageHook scratchpads <> modifyManage
+      , manageHook = namedScratchpadManageHook scratchpads <> staticManage <> manageHook cfg <> modifyManage
       , layoutHook = lessBorders (Combine Union Never OnlyFloat) myLayout
       , handleEventHook = handleEventHook cfg <> minimizeEventHook
       , modMask = mod4Mask -- Super key
@@ -161,7 +161,4 @@ staticManage =
         --> doHideIgnore
     ]
 modifyManage =
-  composeAll
-    [ (not <$> willFloat) --> (ask >>= liftX . addTag "tiled") *> idHook
-    , willFloat --> (ask >>= liftX . unTag) *> idHook
-   ]
+  composeAll [(not <$> willFloat) --> (ask >>= liftX . addTag "tiled") *> idHook]
