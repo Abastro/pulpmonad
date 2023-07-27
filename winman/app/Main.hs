@@ -60,7 +60,7 @@ main = do
         home <- liftIO getHomeDirectory
         liftIO $ setEnv "GTK2_RC_FILES" (home </> ".config" </> "gtk-2.0" </> ".gtkrc-2.0")
 
-  xmonad . ewmhFullscreen . pagerHints $
+  xmonad . pagerHints $
     cfg
       { focusedBorderColor = "#eeaaaa"
       , normalBorderColor = "#cccccc"
@@ -77,7 +77,7 @@ main = do
       `additionalKeysP` concat [keysUtility xmData, keysBasic, keysSpecial, keysScreenshot]
       `removeKeysP` keysRemoved
   where
-    cfg = debugManageHookOn "M-S-b" desktopConfig
+    cfg = debugManageHookOn "M-S-b" (ewmhFullscreen desktopConfig)
     -- MAYBE keybindings to cfg file
     mouseMove =
       [((controlMask, middleClick), \w -> runQuery isFloating w --> (focus w >> kill))]
