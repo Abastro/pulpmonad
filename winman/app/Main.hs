@@ -77,7 +77,7 @@ main = do
       `additionalKeysP` concat [keysUtility xmData, keysBasic, keysSpecial, keysScreenshot]
       `removeKeysP` keysRemoved
   where
-    cfg = debugManageHookOn "M-S-b" $ ewmh desktopConfig
+    cfg = debugManageHookOn "M-S-b" desktopConfig
     -- MAYBE keybindings to cfg file
     mouseMove =
       [((controlMask, middleClick), \w -> runQuery isFloating w --> (focus w >> kill))]
