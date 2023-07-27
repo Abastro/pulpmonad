@@ -8,7 +8,6 @@ import XEvents
 import XMonad
 import XMonad.Actions.GridSelect
 import XMonad.Actions.MouseResize (mouseResize)
-import XMonad.Actions.TagWindows
 import XMonad.Config.Desktop (desktopConfig)
 import XMonad.Config.Gnome (gnomeRegister)
 import XMonad.Hooks.DebugStack
@@ -68,7 +67,7 @@ main = do
       , workspaces = mySpaces
       , terminal = "gnome-terminal"
       , startupHook = setupEnvs <> onStart <> startupHook cfg
-      , manageHook = namedScratchpadManageHook scratchpads <> staticManage <> manageHook cfg <> modifyManage
+      , manageHook = namedScratchpadManageHook scratchpads <> manageStates <> manageSend <> manageHook cfg
       , layoutHook = lessBorders (Combine Union Never OnlyFloat) myLayout
       , handleEventHook = handleEventHook cfg <> minimizeEventHook
       , modMask = mod4Mask -- Super key
@@ -136,28 +135,32 @@ myLayout =
     wide = Mirror (Tall 1 (3 / 100) (1 / 2))
 
 -- Current offender: Nautilus & Gnome-calculator
-staticManage =
-  composeAll
-    [ isDialog --> doCenterFloat
-    , isSplash --> doIgnore
-    , isTooltip --> doIgnore
-    , role =? "popup" <||> role =? "pop-up" --> doCenterFloat
-    , className =? "Gimp" --> doShift pics
-    , role =? "gimp-toolbox" <||> role =? "gimp-image-window" --> doSink
-    , appName =? "org.inkscape.Inkscape" --> doShift pics
+manageStates =
+  composeOne
+    [ isDialog -?> doCenterFloat
+    , isSplash -?> doIgnore
+    , isTooltip -?> doIgnore
+    , role =? "popup" <||> role =? "pop-up" -?> doCenterFloat
+    , role =? "gimp-toolbox" <||> role =? "gimp-image-window" -?> doSink
     , -- zoom be zoom with "zoom "
-      (className =? "zoom" <||> className =? "zoom ") <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting")) --> doSideFloat CE
-    , appName =? "soffice" <&&> isFullscreen --> doFullFloat
-    , appName =? "gnome-calculator" --> doCenterFloat
-    , appName =? "gnome-system-monitor" --> doCenterFloat
-    , appName =? "gnome-control-center" --> doCenterFloat
-    , appName =? "term-float" --> doCenterFloat
-    , appName =? "eog" --> doCenterFloat
-    , className =? "steam" --> doShift game
+      (className =? "zoom" <||> className =? "zoom ")
+        <&&> (not <$> (title =? "Zoom" <||> title =? "Zoom Meeting"))
+        -?> doSideFloat CE
+    , appName =? "soffice" <&&> isFullscreen -?> doFullFloat
+    , appName =? "gnome-calculator" -?> doCenterFloat
+    , appName =? "gnome-system-monitor" -?> doCenterFloat
+    , appName =? "gnome-control-center" -?> doCenterFloat
+    , appName =? "term-float" -?> doCenterFloat
+    , appName =? "eog" -?> doCenterFloat
     , className
         =? "kakaotalk.exe"
         <&&> (title =? "KakaoTalkEdgeWnd" <||> title =? "KakaoTalkShadowWnd")
-        --> doHideIgnore
+        -?> doHideIgnore
     ]
-modifyManage =
-  composeAll [(not <$> willFloat) --> (ask >>= liftX . addTag "tiled") *> idHook]
+
+manageSend =
+  composeOne
+    [ className =? "Gimp" -?> doShift pics
+    , appName =? "org.inkscape.Inkscape" -?> doShift pics
+    , className =? "steam" -?> doShift game
+    ]
