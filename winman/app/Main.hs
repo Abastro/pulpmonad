@@ -64,6 +64,7 @@ main = do
     cfg
       { focusedBorderColor = "#eeaaaa"
       , normalBorderColor = "#cccccc"
+      , borderWidth = 2
       , workspaces = mySpaces
       , terminal = "gnome-terminal"
       , startupHook = setupEnvs <> onStart <> startupHook cfg
