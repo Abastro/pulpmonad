@@ -34,7 +34,7 @@ data VolStat = VolStat
   , isUnmuted :: !Bool
   -- ^ Whether the flag is unmuted or muted, False = muted
   }
-  deriving (Show)
+  deriving (Show, Eq)
 
 withMixerCtrl :: String -> String -> (Control -> MaybeT IO a) -> IO (Maybe a)
 withMixerCtrl mixerName controlName act = withMixer mixerName $ \mixer -> runMaybeT $ do

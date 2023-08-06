@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE RecursiveDo #-}
 
 module System.Applet.SystemDisplay (
   batDisplay,
@@ -57,9 +58,16 @@ batDisplay _iconSize = withRunInIO $ \unlift -> do
   network <- compile $ do
     ticker <- liftIO (periodicSource 500) >>= sourceEvent
     clicks <- sourceEvent batClicks
-    battery <- pollingBehavior getBattery ticker
+
+    -- See Volume.hs for reasons
+    batterySample <- mapEventIO (const getBattery) ticker
+    initialBattery <- liftIO getBattery
+    rec
+      let batteryUpdate = filterApply ((/=) <$> battery) batterySample
+      battery <- stepper initialBattery batteryUpdate
 
     syncBehavior battery (Gtk.uiSingleRun . setBatIcon . iconOf)
+    syncBehavior battery (Gtk.uiSingleRun . setBatTooltip . textOf)
     syncBehavior battery (unlift . handleExc)
     reactimate (safeSpawn "gnome-control-center" ["power"] <$ clicks)
   actuate network
@@ -73,6 +81,12 @@ batDisplay _iconSize = withRunInIO $ \unlift -> do
         T.pack $ printf "battery-level-%d-symbolic" (levelOf capacity)
       Left _ -> T.pack "battery-missing-symbolic"
     levelOf capacity = (capacity `div` 10) * 10
+    textOf = \case
+      Right BatStat{capacity, batStatus = Charging} ->
+        T.pack $ printf "battery: %d%%, charging" capacity
+      Right BatStat{capacity, batStatus = _} ->
+        T.pack $ printf "battery: %d%%" capacity
+      Left _ -> T.pack "battery not available"
 
     handleExc = \case
       Left exc -> logS (T.pack "Battery") LevelWarn $ logStrf "Battery error : $1" (show exc)
@@ -82,6 +96,7 @@ data BatView = BatView
   { batWidget :: !Gtk.Widget
   , batClicks :: Source ()
   , setBatIcon :: Sink T.Text
+  , setBatTooltip :: Sink T.Text
   }
 
 batView :: T.Text -> IO BatView
@@ -90,6 +105,7 @@ batView uiFile = Gtk.buildFromFile uiFile $ do
   Just batIcon <- Gtk.getElement (T.pack "battery-icon") Gtk.Image
 
   let setBatIcon icon = set batIcon [#iconName := icon]
+      setBatTooltip text = set batIcon [#tooltipText := text]
   (batClicks, onClick) <- liftIO sourceSink
   Gtk.addCallback (T.pack "battery-open") $ onClick ()
   pure BatView{..}

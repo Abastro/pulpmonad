@@ -149,7 +149,7 @@ memStat = parseFile memory ("/" </> "proc" </> "meminfo")
 
 -- | Battery status, note that @NotCharging@ means "Not charging".
 data BatStatus = Charging | Discharging | NotCharging | Full | Unknown
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- |
 --  Battery statistics. Some components may or may not exist.
@@ -176,7 +176,7 @@ data BatStat = BatStat
   , currentNow :: Maybe Int
   , powerNow :: Maybe Int
   }
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- | Gets Battery statistics.
 -- Pulls from </sys/class/power_supply/BAT?/uevent>.
