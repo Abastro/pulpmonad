@@ -21,6 +21,7 @@
   </object>
   <object class="GtkButton" id="btn-sysctl">
     <signal name="clicked" handler="sysctl-open" swapped="no"/>
+    <property name="tooltip-text">Shutdown</property>
     <child>
       <object class="GtkImage" id="image-sysctl">
         <property name="icon-name">system-shutdown-symbolic</property>

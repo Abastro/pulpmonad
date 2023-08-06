@@ -15,6 +15,7 @@
   </object>
   <object class="GtkButton" id="btn-wmctl">
     <signal name="clicked" handler="wmctl-open" swapped="no"/>
+    <property name="tooltip-text">Update and Refresh</property>
     <child>
       <object class="GtkImage" id="image-wmctl">
         <property name="icon-name">system-settings-symbolic</property>

@@ -42,7 +42,7 @@ volIconName = \case
 
 volText :: Maybe VolStat -> T.Text
 volText = \case
-  Just VolStat{curVolume} -> T.pack (printf "volume: %d%%" (round @_ @Int $ 100 * curVolume))
+  Just VolStat{curVolume} -> T.pack (printf "Volume: %d%%" (round @_ @Int $ 100 * curVolume))
   Nothing -> T.pack "volume not available"
 
 -- TODO Warn when "Nothing" is received (proper logging)

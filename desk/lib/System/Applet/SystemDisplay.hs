@@ -83,10 +83,10 @@ batDisplay _iconSize = withRunInIO $ \unlift -> do
     levelOf capacity = (capacity `div` 10) * 10
     textOf = \case
       Right BatStat{capacity, batStatus = Charging} ->
-        T.pack $ printf "battery: %d%%, charging" capacity
+        T.pack $ printf "Battery: %d%%, charging" capacity
       Right BatStat{capacity, batStatus = _} ->
-        T.pack $ printf "battery: %d%%" capacity
-      Left _ -> T.pack "battery not available"
+        T.pack $ printf "Battery: %d%%" capacity
+      Left _ -> T.pack "Battery not available"
 
     handleExc = \case
       Left exc -> logS (T.pack "Battery") LevelWarn $ logStrf "Battery error : $1" (show exc)

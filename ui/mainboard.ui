@@ -3,6 +3,7 @@
   <requires lib="gtk+" version="3.20"/>
   <object class="GtkButton" id="mainboard">
     <property name="name">mainboard</property>
+    <property name="tooltip-text">CPU, RAM</property>
     <signal name="clicked" handler="mainboard-open" swapped="no"/>
     <child>
       <object class="GtkOverlay" id="mainboard-icon">

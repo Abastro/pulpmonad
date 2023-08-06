@@ -5,6 +5,7 @@ module System.Applet.Layout (LayoutArg (..), layout) where
 import Control.Concurrent.Task
 import Control.Event.Entry
 import Control.Monad.IO.Class
+import Control.Monad.IO.Unlift
 import Data.GI.Base.Attributes
 import Data.Text qualified as T
 import GI.Gdk.Unions.Event qualified as Gdk
@@ -16,7 +17,6 @@ import Status.X11.WMStatus
 import Status.X11.XHandle
 import System.FilePath
 import System.Pulp.PulpPath
-import Control.Monad.IO.Unlift
 
 newtype LayoutArg = LayoutArg
   { layoutPrettyName :: T.Text -> T.Text
@@ -40,19 +40,19 @@ layout LayoutArg{..} = withRunInIO $ \unlift -> do
   actuate network
 
   pure layoutWid
-  where
-    clickReq = \case
-      LeftClick -> NextLayout
-      RightClick -> ResetLayout
+ where
+  clickReq = \case
+    LeftClick -> NextLayout
+    RightClick -> ResetLayout
 
 {-------------------------------------------------------------------
                               View
 --------------------------------------------------------------------}
 
 data View = View
-  { layoutWid :: !Gtk.Widget
-  , setLabel :: Sink T.Text
-  , clicks :: Source Click
+  { layoutWid :: !Gtk.Widget,
+    setLabel :: Sink T.Text,
+    clicks :: Source Click
   }
 
 data Click = LeftClick | RightClick
@@ -62,26 +62,28 @@ view uiFile = Gtk.buildFromFile uiFile $ do
   Just layoutWid <- Gtk.getElement (T.pack "layout") Gtk.Widget
   Just layoutLbl <- Gtk.getElement (T.pack "layout-current") Gtk.Label
 
-  let setLabel lbl = set layoutLbl [#label := lbl]
+  let setLabel lbl = do
+        set layoutLbl [#label := lbl]
+        set layoutWid [#tooltipText := T.pack "Layout: " <> lbl]
 
   (clicks, callClick) <- liftIO sourceSink
   Gtk.addCallbackWithEvent (T.pack "layout-action") Gdk.getEventButton (onAct callClick)
 
   pure View{..}
-  where
-    onAct call event =
-      get event #button >>= \case
-        1 -> call LeftClick
-        3 -> call RightClick
-        _ -> pure ()
+ where
+  onAct call event =
+    get event #button >>= \case
+      1 -> call LeftClick
+      3 -> call RightClick
+      _ -> pure ()
 
 {-------------------------------------------------------------------
                           Communication
 --------------------------------------------------------------------}
 
 data LayoutComm = LayoutComm
-  { curLayout :: Task T.Text
-  , reqToLayout :: Sink LayoutCmd
+  { curLayout :: Task T.Text,
+    reqToLayout :: Sink LayoutCmd
   }
 
 layoutInitiate :: XIO LayoutComm
@@ -90,9 +92,9 @@ layoutInitiate = do
   curLayout <- errorAct $ watchXQuery rootWin getDesktopLayout pure
   reqToLayout <- reqDesktopLayout
   pure LayoutComm{..}
-  where
-    onError window err = do
-      liftIO (fail $ formatXQError window err)
-    errorAct act = do
-      window <- xWindow
-      act >>= either (onError window) pure
+ where
+  onError window err = do
+    liftIO (fail $ formatXQError window err)
+  errorAct act = do
+    window <- xWindow
+    act >>= either (onError window) pure
